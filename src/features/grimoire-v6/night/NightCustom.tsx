@@ -199,7 +199,7 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
       // PO review 2026-11-21 (SV-2c): after a Snake Charmer swap or a Fang Gu jump, wake each changed player and show YOU ARE,
       // their new character, then their alignment (the wiki's How to Run), through the same player-safe reveals as the new Imp.
       if ((current.effectiveRoleId === "snakecharmer" || current.effectiveRoleId === "fanggu") && !current.isDeceived) {
-        for (const woken of charactersToReveal(game, current.effectiveRoleId)) {
+        for (const woken of charactersToReveal(game, current.effectiveRoleId, current.gainedFrom ? { participantId: current.participantId } : undefined)) {
           const role = registry.get(woken.actualRole ?? "");
           const name = woken.name || `Seat ${woken.seat + 1}`;
           const alignment = woken.actualAlignment === "evil" ? "evil" : "good";

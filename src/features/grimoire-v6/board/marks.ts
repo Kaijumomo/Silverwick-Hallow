@@ -89,11 +89,12 @@ function undertakerDiedToday({ game, query }: MarkEnv, player: STPlayerRecord): 
 
 /**
  * The Town Crier's official tokens, drawn from the Day's nomination record: "Minions Not Nominated" from dawn, swapped for
- * "Minion Nominated" once a Minion has nominated. Only for a living, real Town Crier. A nomination whose nominator's
+ * "Minion Nominated" once a Minion has nominated. Only for a living, real Town Crier (or a Philosopher with its ability). A nomination whose nominator's
  * registration is the Storyteller's call (a Spy or Recluse) or a record that cannot be verified draws nothing.
  */
 function townCrierToken({ game, query }: MarkEnv, player: STPlayerRecord): "Minion Nominated" | "Minions Not Nominated" | null {
-  if (!query || !player.alive || player.actualRole !== "towncrier") return null;
+  // SV-3b: a Philosopher who gained the Town Crier's ability gets its tokens too ("use the duplicated character's reminders").
+  if (!query || !player.alive || (player.actualRole !== "towncrier" && gainedRoleOf(player) !== "towncrier")) return null;
   const moment = query.moment();
   if (!moment) return null;
   const day = moment.phase === "day" ? moment.day : moment.phase === "night" ? moment.day - 1 : 0;

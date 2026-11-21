@@ -11,7 +11,8 @@ import { useV6Ui } from "@/features/grimoire-v6/v6Store";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { participantStepKey } from "@/stores/nightProgress";
-import { useTargetPicker } from "@/features/abilities/abilityUi";
+import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/abilityUi";
+import { captureFingerprint } from "@/stores/abilityResolution";
 import { gainedRoleOf, gainedTokenShownOf } from "@/stores/gainedAbility";
 import { impair, openInStore, proofGame, proofScript } from "@/test/proofFixtures";
 import type { StorytellerLobbyRecord } from "@/stores/types";
@@ -135,4 +136,50 @@ it("the next night: no Philosopher card, and the gained Mathematician row is the
   // The board: the Philosopher's seat shows the Mathematician token with IS THE PHILOSOPHER (nobody truly held it).
   expect(screen.getByText("Is The Philosopher")).toBeInTheDocument();
   expect(screen.getByText("MATHEMATICIAN")).toBeInTheDocument();
+});
+
+/** SV-3b: the next night, on the gained `roleId` row of a Philosopher who chose it tonight. */
+function showGained(roleId: string, roles = ROLES) {
+  const g = proofGame(roles, "night", 2);
+  openInStore(g);
+  const chosen = store.getState().resolveAbility({ mode: "guided", invocationPath: "nightOrder", roleId: "philosopher", completeStep: true,
+    fingerprint: captureFingerprint(g, "p0", { day: 2, stepKey: stepKey(g) })!, inputs: { character: { kind: "character", roleIds: [roleId] } } });
+  expect(chosen).toMatchObject({ ok: true, changed: true });
+  const next = { ...game(), day: 3 };
+  openInStore(next);
+  useShellStore.getState().setNightCursor({ day: 3, stepKey: participantStepKey(next.players.p0!.participantId!, roleId) });
+  return render(<StrictMode><Guide /></StrictMode>);
+}
+
+it("SV-3b: a gained Snake Charmer is tapped on the board like the real one; choosing the Demon swaps, and YOU ARE is offered to both", () => {
+  showGained("snakecharmer");
+  expect(useTargetPicker.getState().active?.label).toBe("Choose an alive player");
+  const counter = () => screen.getByText(/^\d+ \/ \d+$/).textContent;
+  const before = counter();
+  act(() => { pickSeatIfPicking(game(), "p1"); });
+  expect(game().players.p0).toMatchObject({ actualRole: "fanggu", actualAlignment: "evil" });
+  expect(game().players.p1).toMatchObject({ actualRole: "philosopher", actualAlignment: "good" });
+  expect(store.getState().undoStack).toHaveLength(1);
+  const newDemon = screen.getByRole("group", { name: "Wake Player 0" });
+  const newPhilosopher = screen.getByRole("group", { name: "Wake Player 1" });
+  expect(within(newDemon).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Wake Player 0: You Are", "Wake Player 0: You Are Evil"]);
+  expect(within(newPhilosopher).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Wake Player 1: You Are", "Wake Player 1: You Are Good"]);
+  fireEvent.click(within(newPhilosopher).getByRole("button", { name: "Wake Player 1: You Are" }));
+  expect(useV6Ui.getState().show).toMatchObject({ kind: "char", title: "You Are", roleId: "philosopher" });
+  // The step left the list (Player 0 is the Fang Gu now): the counter keeps its place in the order.
+  expect(counter()).toBe(before);
+  act(() => { store.getState().undo(); });
+  expect(game().players.p0!.actualRole).toBe("philosopher");
+  expect(screen.queryByRole("button", { name: /^Wake Player 0: You Are/ })).toBeNull();
+});
+
+it("SV-3b: a gained Oracle is answered on the Night card like the real one, and the delivery records the Oracle performed", () => {
+  showGained("oracle", ["philosopher", "fanggu", "dreamer", "clockmaker", "witch"]);
+  // The Oracle's own Night card: the ability's text and the number shown, not the by-hand row.
+  expect(screen.getByText("Each night*, you learn how many dead players are evil.")).toBeInTheDocument();
+  expect(screen.getByText("Gained from the Philosopher.")).toBeInTheDocument();
+  // Nobody dead: the Oracle learns 0; Next records it, with the Oracle performed by the Philosopher.
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  const delivery = game().informationDeliveries.at(-1);
+  expect(delivery).toMatchObject({ actualRole: "philosopher", performedRole: "oracle", informationActionId: "oracle-other-night" });
 });

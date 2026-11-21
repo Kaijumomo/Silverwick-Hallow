@@ -11,6 +11,7 @@ import { travelerArrivalStepKey } from "@/stores/nightProgress";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import type { WorkspaceTarget } from "@/features/abilities/AbilityWorkspace";
 import { bindingOf, pathAbility, seatedParticipants, triggerAbility, useTargetPicker, type StepAbility } from "@/features/abilities/abilityUi";
+import { runsGainedAbility } from "@/abilities/characters/passiveRules";
 import { participantAllowed } from "@/features/abilities/RequirementInput";
 import { pendingMoonchildChoice } from "@/abilities/characters/moonchild";
 import { deriveNightWork, stepResolved, unfinishedNightWork, type NightWork, type TriggeredNightWork, type UnfinishedNightWork } from "@/features/nightOrder/nightWork";
@@ -102,8 +103,9 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
 
   const abilityOf = (step: NightStep): StepAbility | null => {
     if (step.kind !== "player") return null;
-    // SV-3a: an ability the player gained (the Philosopher's chosen character) is run by hand at that character's place.
-    if (step.gainedFrom) return { kind: "manual", reason: GAINED_BY_HAND };
+    // SV-3a: an ability the player gained (the Philosopher's chosen character) is run by hand at that character's place, except the
+    // ones the app runs exactly as the real character's step (SV-3b: the Snake Charmer, the Town Crier, the Oracle).
+    if (step.gainedFrom && !runsGainedAbility(step.effectiveRoleId)) return { kind: "manual", reason: GAINED_BY_HAND };
     const ordinary = pathAbility(step.effectiveRoleId, registry, semantics, "nightOrder", game);
     if (ordinary.kind === "guided") return ordinary;
     const player = game.players[step.playerId];
@@ -160,9 +162,12 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   const currentIndex = current ? steps.findIndex((step) => step.stepKey === current.stepKey) : -1;
   // PO review 2026-11-21: a step that left the list when it resolved (its player changed character on it: a Snake Charmer swap, a
   // Fang Gu jump, an Imp star pass) keeps its place on the strip and in the counter, at the row of the same character. Display only:
-  // Next and Previous still use currentIndex.
-  const positionIndex = currentIndex >= 0 || !current || current.kind !== "player" ? currentIndex
+  // Next and Previous still use currentIndex. SV-3b: a gained Snake Charmer's row has no row of the same character after the swap
+  // (the Demon becomes the Philosopher), so it keeps its place in the order: the last row at or before it.
+  const sameCharacter = currentIndex >= 0 || !current || current.kind !== "player" ? currentIndex
     : steps.findIndex((step) => step.kind === "player" && step.effectiveRoleId === current.effectiveRoleId);
+  const positionIndex = sameCharacter >= 0 || !current || current.kind !== "player" || !current.gainedFrom ? sameCharacter
+    : Math.max(0, steps.filter((step) => step.order <= current.order).length - 1);
   const resolved = current ? stepResolved(game, current) : false;
   const lateReason = "They were brought back after their turn tonight, so they act from tomorrow night";
   const skipReason: string | null = current && !resolved ? work?.late.has(current.stepKey) ? lateReason : idleReasons.get(current.stepKey) ?? null : null;

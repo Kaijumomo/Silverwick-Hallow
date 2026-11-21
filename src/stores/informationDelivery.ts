@@ -6,6 +6,7 @@ import { participantRefOf, recordedInformationValues } from "./participants";
 import { InformationValueSchema, MAX_MANUAL_DELIVERY_TEXT, MAX_RESOLUTION_ID_LENGTH } from "./schemas";
 import { currentLiveMoment } from "./lifeEvents";
 import { wakeIdentity } from "./wakeIdentity";
+import { gainedRoleOf } from "./gainedAbility";
 import type {
   InformationActionId,
   InformationDeliveryId,
@@ -243,8 +244,10 @@ export function validateInformationValues(
  *  - `performedRole`: the character procedure actually performed when it
  *    differs from the recipient's Actual Role. AUTHORIZED, never trusted: it
  *    must be the recipient's current SIMULATED wake identity (wakeIdentity --
- *    e.g. a Drunk shown as the Empath), resolvable in the active registry, and
- *    the Information Action must belong to it. A caller can never attach an
+ *    e.g. a Drunk shown as the Empath) or (SV-3b) the ability the recipient
+ *    gained (a Philosopher performing the Oracle: gainedAbility.ts),
+ *    resolvable in the active registry, and the Information Action must
+ *    belong to it. A caller can never attach an
  *    arbitrary Role. Recording it creates no Current State and never implies
  *    the recipient holds that Role.
  *  - `resolutionId`: correlation with the other records of one ability
@@ -297,8 +300,8 @@ export function planInformationDelivery(
       return { ok: false, message: "Invalid performed character." };
     }
     const wake = wakeIdentity(player, registry);
-    if (!wake || !wake.simulated || wake.shownRoleId !== request.performedRole) {
-      return { ok: false, message: "That character is not this player's simulated wake -- a delivery can only record a performed character the player is currently shown." };
+    if (!wake || !(wake.simulated ? wake.shownRoleId === request.performedRole : gainedRoleOf(player) === request.performedRole)) {
+      return { ok: false, message: "That character is not this player's simulated wake or gained ability -- a delivery can only record a performed character the player is currently shown or has gained." };
     }
     performedRole = request.performedRole;
   }
@@ -417,8 +420,9 @@ export function planManualInformationDelivery(
   if (request.performedRole !== undefined && request.performedRole !== player.actualRole) {
     if (typeof request.performedRole !== "string" || !request.performedRole) return { ok: false, message: "Invalid performed character." };
     const wake = environment.registry ? wakeIdentity(player, environment.registry) : null;
-    if (request.performedRole !== environment.workflowRole || !wake || !wake.simulated || wake.shownRoleId !== request.performedRole) {
-      return { ok: false, message: "A Manual delivery can only record the performed character of this workflow's simulated wake for this player." };
+    if (request.performedRole !== environment.workflowRole || !wake
+      || !(wake.simulated ? wake.shownRoleId === request.performedRole : gainedRoleOf(player) === request.performedRole)) {
+      return { ok: false, message: "A Manual delivery can only record the performed character of this workflow's simulated wake or gained ability for this player." };
     }
     performedRole = request.performedRole;
   }

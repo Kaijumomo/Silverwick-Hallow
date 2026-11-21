@@ -183,6 +183,15 @@ export const isNeighbourPoisoner = (roleId: RoleId): boolean => roleId === "noda
 export const drunksGainedCharacter = (roleId: RoleId): boolean => roleId === "philosopher";
 
 /**
+ * SV-3b (PO decision Q2 A, 2026-11-21): the gained abilities the app runs exactly as the real character's step, by the player who
+ * gained them. Each is a wake that reads nothing of its holder's own character: the Snake Charmer swaps the holder's actual
+ * character (so a Philosopher who chooses the Demon becomes it, and "the Demon becomes a poisoned Philosopher"), the Town Crier and
+ * the Oracle deliver information recorded with the performed character. Every other gained ability is the Storyteller's, by hand.
+ */
+const GAINED_ABILITIES_RUN = new Set<RoleId>(["snakecharmer", "towncrier", "oracle"]);
+export const runsGainedAbility = (roleId: RoleId): boolean => GAINED_ABILITIES_RUN.has(roleId);
+
+/**
  * LS-1: a "survives once" row (the Fool). The holder is genuinely alive and shown alive, so nothing is hidden: the row only says
  * "this death does not happen and the ability is spent". It applies when the ability has not been used and (if the row needs it)
  * functions; a drunk or poisoned holder dies for real. Another character's protection is checked FIRST by the caller: "If another
