@@ -29,7 +29,13 @@ export const UNDERTAKER: AbilityDescriptor = {
     if (!moment || moment.phase !== "night" || moment.day <= 1) return { kind: "notApplicable", message: "There is no previous Day execution to learn about." };
     const deaths = context.query.lifeEvents({ phase: "day", day: moment.day - 1 }, event => event.kind === "execution" && event.outcome === "died");
     if (deaths.status !== "known") return { kind: "unsupported", message: "The previous Day's execution record is incomplete. Resolve this information manually." };
-    if (!deaths.events.length) return { kind: "notApplicable", message: "Nobody died by execution during the previous Day." };
+    if (!deaths.events.length) {
+      // PO 2026-11-21: a death the Storyteller entered by hand during the Day has no execution on record, but it may have been one: the
+      // Undertaker stays a normal step for the Storyteller to judge, and is "does not wake" only when nobody died in the Day.
+      const other = context.query.lifeEvents({ phase: "day", day: moment.day - 1 }, event => event.kind === "death");
+      if (other.status !== "known" || other.events.length) return { kind: "unsupported", message: "A player died during the previous Day with no execution recorded. Decide by hand whether the Undertaker learns anything." };
+      return { kind: "notApplicable", message: "Nobody died by execution during the previous Day." };
+    }
     if (deaths.events.length !== 1) return { kind: "unsupported", message: "More than one player died by execution. The Storyteller chooses which character to show manually." };
     const event = deaths.events[0]!;
     const role = event.actualRoleAtEvent && context.query.roleOf(event.actualRoleAtEvent);
