@@ -48,6 +48,10 @@ export const RESOLVED_DEMON_DEATH_NO_SUCCESSOR = "resolvedDemonDeathNoSuccessor"
 export const KLUTZ_GOOD_TEAM_LOST = "klutzGoodTeamLost";
 export const KLUTZ_EVIL_TEAM_LOST = "klutzEvilTeamLost";
 export const KLUTZ_CHOICE_RULING = "klutzChoiceRuling";
+/** SV-2b: the Fang Gu's official ONCE token (https://wiki.bloodontheclocktower.com/Fang_Gu), as a game-rule fact with no disc (PO ruling
+ * 2026-11-12): the first Outsider a Fang Gu killed has become the Fang Gu. "This reminder stays there for the rest of the game. Don't
+ * remove it, even if the Fang Gu dies or changes character." Recorded only inside the Fang Gu's resolution. */
+export const FANG_GU_ONCE = "fangGuOnce";
 export const VICTORY_EVIDENCE_TYPES = [SAINT_EXECUTION_GOOD_TEAM_LOST, SAINT_EXECUTION_EVIL_TEAM_LOST, SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED, SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED, MAYOR_DAY_END_GOOD_TEAM_WON, MAYOR_DAY_END_EVIL_TEAM_WON, RESOLVED_DEMON_DEATH_NO_SUCCESSOR] as const;
 export const isVictoryEvidenceType = (type: string): boolean => (VICTORY_EVIDENCE_TYPES as readonly string[]).includes(type);
 export const isSaintNonqualifyingEvidenceType = (type: string): boolean => type === SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED || type === SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED;
@@ -99,6 +103,12 @@ export const GAME_RULE_FACT_REGISTRY: ReadonlyMap<GameRuleFactType, GameRuleFact
     type: KLUTZ_CHOICE_RULING, label: "The Klutz's choice is your ruling",
     description: "The Klutz publicly chose a player who may register as good or evil: the Storyteller rules whether the Klutz's team loses.",
     applicablePhases: ["day"], expiry: "none",
+  }],
+  [FANG_GU_ONCE, {
+    type: FANG_GU_ONCE, label: "ONCE",
+    description: "A Fang Gu has taken an Outsider's place; it cannot happen again this game.",
+    // Night: the jump. Day too (SV-2c): the Storyteller may place the ONCE token by hand at any time, and it records this fact.
+    applicablePhases: ["night", "day"], expiry: "none",
   }],
 ]);
 

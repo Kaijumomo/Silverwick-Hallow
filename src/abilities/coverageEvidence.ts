@@ -113,9 +113,6 @@ export const PARTIAL_SUPPORT: Readonly<Record<RoleId, readonly Piece[]>> = {
   eviltwin: [
     { path: "src/rules/setup/setupAnalyzer.ts", what: "In the setup analyzer's manual-review list: setup shows a 'Review character setup' check and the Storyteller resolves the special choices by hand." },
   ],
-  fanggu: [
-    { path: "src/rules/setup/setupPolicies.ts", what: "Setup count policy: the Outsider count may shift by the listed amounts (single-effect only)." },
-  ],
   farmer: [
     { path: "src/rules/night/nightOrder.ts", what: "Death-check wake slot: the night list shows this character after a death night with a 'check the death condition' advisory; historical triggers are not tracked." },
   ],
@@ -281,6 +278,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   dreamer: ["src/abilities/characters/informationCharacterReview.test.ts"],
   drunk: ["src/features/setup/troubleBrewingB3BaronDrunk.test.ts", "src/stores/effectLifecycle.test.ts"],
   empath: ["src/abilities/characters/informationCharacterReview.test.ts", "src/stores/roleResolution.test.ts"],
+  fanggu: ["src/abilities/characters/fanggu.test.ts", "src/features/grimoire-v6/night/port/fangGuUi.v6.test.tsx"],
   flowergirl: ["src/abilities/characters/informationCharacterReview.test.ts"],
   fortuneteller: ["src/abilities/characters/fortuneteller.test.ts", "src/abilities/characters/troubleBrewingB5aCommands.test.ts"],
   gambler: ["src/abilities/characters/gambler.test.ts", "src/features/grimoire-v6/night/nightGuide.port.test.tsx"],
@@ -309,6 +307,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   ravenkeeper: ["src/stores/troubleBrewingB5bIndependent.test.ts", "src/abilities/characters/troubleBrewingB5b.test.ts"],
   recluse: ["src/abilities/characters/troubleBrewingB1.independent.test.ts", "src/features/grimoire-v6/night/nightGuide.port.test.tsx"],
   sage: ["src/abilities/characters/sage.test.ts", "src/features/grimoire-v6/night/port/sageUi.v6.test.tsx"],
+  snakecharmer: ["src/abilities/characters/snakecharmer.test.ts", "src/features/grimoire-v6/night/port/snakeCharmerUi.v6.test.tsx"],
   saint: ["src/stores/roleResolution.test.ts", "src/stores/projections.test.ts"],
   savant: ["src/abilities/characters/informationCharacterReview.test.ts"],
   scarletwoman: ["src/stores/troubleBrewingB4Death.test.ts", "src/stores/troubleBrewingB4Independent.test.ts"],

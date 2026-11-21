@@ -51,7 +51,7 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
 
   const { pos, steps, current } = engine;
   const total = steps.length + 2;
-  const index = pos.kind === "dusk" ? 0 : pos.kind === "dawn" ? steps.length + 1 : engine.currentIndex + 1;
+  const index = pos.kind === "dusk" ? 0 : pos.kind === "dawn" ? steps.length + 1 : engine.positionIndex + 1;
 
   const items = [
     stripItem({ label: "Dusk", img: "", marker: true, markerIcon: MARKER_ICON.dusk, done: false, index: 0, cursor: index, jump: () => engine.gotoCheckpoint("dusk") }),

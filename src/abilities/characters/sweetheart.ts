@@ -2,7 +2,7 @@ import type { AbilityDescriptor, AbilityEvaluation } from "../semantics";
 import type { AbilityOperation, ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
 import type { LifeEvent } from "@/stores/types";
-import { isDeathEvent } from "@/stores/lifeEvents";
+import { isDeathEvent, mayBeDeathAs } from "@/stores/lifeEvents";
 import { nightTriggerStepKey } from "@/stores/nightProgress";
 import { nameOf, outcome, participantsOf } from "./shared";
 
@@ -34,7 +34,7 @@ export function sweetheartOpenDayDeath(query: RulesQuery, sweetheart: Participan
   const moment = query.moment();
   if (!moment || moment.phase !== "day") return null;
   const deaths = query.lifeEvents(moment, (event) => isDeathEvent(event) && event.subject.participantId === sweetheart.participantId
-    && event.actualRoleAtEvent === "sweetheart");
+    && mayBeDeathAs(event, "sweetheart"));
   if (deaths.status !== "known") return null;
   return deaths.events.find((event) => {
     const status = query.game.nightProgress[`${moment.day + 1}:${stepKeyOf(sweetheart, event.id)}`]?.status;

@@ -167,3 +167,7 @@
 @media (prefers-reduced-motion: reduce) {
   .gv-choice-prompt-text::before, .gv-choice-card { animation: none; }
 }
+
+/* PO review 2026-11-21 (SV-2c): the smaller quiet pill beside a question ("Choose again"); the invisible margin keeps a 44px touch target (30px inside the borders + 2 x 7px). */
+.gv-choice-pill.is-small { position: relative; min-height: 32px; padding: 0 12px; font-size: 13px; }
+.gv-choice-pill.is-small::after { content: ""; position: absolute; inset: -7px -2px; }

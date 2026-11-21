@@ -800,6 +800,11 @@ export type StorytellerStore = {
    * localSeq step. A refusal or true no-op changes nothing. Reminders are
    * non-authoritative notation: nothing mechanical ever reads them. */
   resolveReminders: (transaction: ReminderTransaction, actionContext?: CharacterActionContext) => ReminderCommandResult;
+  /** SV-2c (PO decision 2026-11-21): a hand-placed or hand-removed official token that records a Game Rule Fact
+   * (reminderRuleFacts.ts -- the Fang Gu's ONCE). The reminder intents and the fact intents are planned in order against
+   * one working game and committed as exactly ONE replacement: one Undo entry, one localSeq step. Outside Night or Day
+   * (Setup, an ended game) the fact cannot change, so only the reminder does. Any other refusal changes nothing. */
+  resolveRuleReminder: (transaction: { notation: ReminderTransaction; facts: GameRuleFactTransaction }, actionContext?: CharacterActionContext) => ReminderCommandResult;
   /** Compatibility adapter over one Place intent, bound to whoever occupies
    * `id` now (and, for `sourcePlayer`, the current source occupant). Place
    * semantics: returns the id when placed or when an identical Reminder
@@ -3158,6 +3163,26 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const unsafe = commitAuthoritativeState(applyReminderPlan(game, result.plan), state, authority);
         if (unsafe) return { ok: false, code: "invalid", message: unsafe };
         return { ok: true, changed: true, reminderIds: result.plan.placedReminderIds };
+      },
+
+      resolveRuleReminder: (transaction, actionContext) => {
+        const state = get();
+        const { game } = state;
+        if (!game) return { ok: false, code: "invalid", message: "No game is open." };
+        const refusal = characterActionRefusal(state, actionContext);
+        if (refusal) return { ok: false, code: "stale", message: refusal };
+        const authority = votingAuthorityToken(state.lobby)!;
+        // guard -> plan reminders -> plan the fact against that working game -> one commit.
+        const reminders = planReminderTransaction(game, transaction.notation);
+        if (!reminders.ok) return reminders;
+        const working = reminders.changed ? applyReminderPlan(game, reminders.plan) : game;
+        const facts = planGameRuleFactTransaction(working, transaction.facts);
+        if (!facts.ok && facts.code !== "notLive" && facts.code !== "ended") return { ok: false, code: "invalid", message: facts.message };
+        const planned = facts.ok && facts.changed ? applyGameRuleFactPlan(working, facts.plan) : working;
+        if (planned === game) return { ok: true, changed: false, reminderIds: [] };
+        const unsafe = commitAuthoritativeState(planned, state, authority);
+        if (unsafe) return { ok: false, code: "invalid", message: unsafe };
+        return { ok: true, changed: true, reminderIds: reminders.changed ? reminders.plan.placedReminderIds : [] };
       },
 
       addReminder: (id, reminder) => {

@@ -6,6 +6,7 @@ import { evilInformationPolicy, type NightContext } from "@/rules/night/nightRul
 import { publicTravelerRole, travelerNeedsFirstNight } from "@/stores/travelers";
 import { hasEffect } from "@/stores/effects";
 import { TOYMAKER_DEMON_SKIP_OCCURRED } from "@/stores/gameRuleFacts";
+import { FANG_GU_ONCE } from "@/stores/gameRuleFactRegistry";
 import { participantScopedStepKey, participantStepKey, stepParticipantOf, travelerArrivalStepKey } from "@/stores/nightProgress";
 
 export type NightStep =
@@ -239,6 +240,10 @@ export function computeNightOrder(
       advisory += (context.gameRuleFacts ?? []).some((fact) => fact.type === TOYMAKER_DEMON_SKIP_OCCURRED)
         ? " Toymaker: the Demon's required no-attack skip is recorded (Game rule facts)."
         : " Toymaker: the Demon's required no-attack skip is not recorded yet. Do not wake/allow a game-ending attack if the required skip has not occurred; record the skip when the Demon chooses not to attack.";
+    // SV-2b: the Fang Gu's official ONCE reminder "stays there for the rest of the game"; it is a game-rule fact with no disc, so the
+    // Fang Gu's own row says it is recorded.
+    if (roleId === "fanggu" && canonical && !isDeceived && !isFirstNight && (context.gameRuleFacts ?? []).some((fact) => fact.type === FANG_GU_ONCE))
+      advisory += " ONCE: a Fang Gu has already taken an Outsider's place. An Outsider it kills now dies.";
     steps.push({
       kind: "player", stepKey: participantStepKey(player.participantId, roleId), playerId: player.id,
       participantId: player.participantId,

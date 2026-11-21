@@ -14,10 +14,14 @@ import { CUSTOM_STEP_PREFIX, nightStepName } from "@/features/nightOrder/nightWo
 import { TokenInformationAction } from "@/features/info/TokenInformationAction";
 import type { V6Ctx } from "../ctx";
 import { useV6Ui } from "../v6Store";
-import { presentCharacter, presentCharacters, presentSetup, report } from "../info/actions";
+import { presentCharacter, presentCharacters, presentMessage, presentSetup, report } from "../info/actions";
 import { INFO_TOKENS } from "../info/tokens";
 import { guardGesture } from "./gestureGuard";
 import { newImpToWake } from "./newImp";
+import { charactersToReveal } from "./newCharacters";
+import { YouAreRow } from "./YouAreRow";
+import { ChoicePrompt, ChoiceSlot, ChoiceSwapIcon } from "../choice/ChoiceParts";
+import { iconUrlFor } from "@/data/iconUrl";
 import type { NightEngine } from "./useNightEngine";
 import { isCanonicalRole } from "@/data/canonical";
 import type { NightStep } from "@/rules/night/nightOrder";
@@ -130,6 +134,24 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
 
   if (current && !workspace) {
     const done = engine.resolved;
+    // PO review 2026-11-21 (SV-2c): one ruling about the player just tapped, in the Barber card's compact style.
+    if (engine.tapRuling && current.kind === "player") {
+      const held = engine.tapRuling;
+      const nameOf = (playerId: string) => { const p = game.players[playerId]; return p ? p.name || `Seat ${p.seat + 1}` : "This player"; };
+      const slotOf = (playerId: string) => { const p = game.players[playerId]; const role = p?.actualRole ? registry.get(p.actualRole) : undefined;
+        return <ChoiceSlot filled label={nameOf(playerId)} img={role ? iconUrlFor(role) : undefined} sub={role?.name ?? ""} />; };
+      const demon = held.kind === "demon";
+      rows.push(<div key="tap-ruling" className="gv-choice">
+        <hr className="gv-choice-divider" />
+        <ChoicePrompt text={`Does ${nameOf(held.target.playerId)} register as ${demon ? "a Demon" : "an Outsider"}?`}
+          action={<button className="gv-choice-pill is-small" type="button" onClick={() => engine.answerTapRuling(null)}>Choose again</button>} />
+        <div className="gv-choice-slots">{demon ? <>{slotOf(current.playerId)}<ChoiceSwapIcon />{slotOf(held.target.playerId)}</> : slotOf(held.target.playerId)}</div>
+        <div className="gv-choice-actions" role="group" aria-label="Your ruling">
+          <button className="gv-choice-answer" type="button" onClick={() => engine.answerTapRuling(true)}>Yes</button>
+          <button className="gv-choice-answer" type="button" onClick={() => engine.answerTapRuling(false)}>No</button>
+        </div>
+      </div>);
+    }
     // A ruling the rules need before any player is tapped, in the Grimoire's prompt style (the heading above, the answers on one row).
     if (engine.question) rows.push(<QuestionBlock key="question" heading={engine.question.heading} note={engine.question.note}
       actions={[{ label: "Yes", onClick: () => engine.answerQuestion(true) }, { label: "No", onClick: () => engine.answerQuestion(false) }]} />);
@@ -153,7 +175,7 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
       } else if (!done && engine.bureaucrat && engine.actor?.participantId) {
         rows.push(<BureaucratAction key={`${engine.actor.participantId}:${current.stepKey}`} source={{ playerId: engine.actor.id, participantId: engine.actor.participantId }}
           visible={engine.visible} completeStep={{ day: game.day, stepKey: current.stepKey }} onResolved={engine.finish} />);
-      } else if (!done && !engine.manual && !engine.canTarget) {
+      } else if (!done && !engine.manual && !engine.canTarget && !engine.tapRuling) {
         rows.push(<button key="continue" type="button" className="btn btn-gold" onClick={() => engine.openWorkspace()}>Continue action</button>);
       }
       // T30: the Godfather's first night shows the Outsiders in play on ONE screen, like the Demon's bluffs.
@@ -169,6 +191,20 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
         const imp = registry.get("imp");
         if (heir && imp) rows.push(<TokenInformationAction key={`new-imp:${heir.id}`} role={imp} label={`Wake ${heir.name || `Seat ${heir.seat + 1}`}: You Are`}
           onClick={() => report(presentCharacter("You Are", "imp"))} />);
+      }
+      // PO review 2026-11-21 (SV-2c): after a Snake Charmer swap or a Fang Gu jump, wake each changed player and show YOU ARE,
+      // their new character, then their alignment (the wiki's How to Run), through the same player-safe reveals as the new Imp.
+      if ((current.effectiveRoleId === "snakecharmer" || current.effectiveRoleId === "fanggu") && !current.isDeceived) {
+        for (const woken of charactersToReveal(game, current.effectiveRoleId)) {
+          const role = registry.get(woken.actualRole ?? "");
+          const name = woken.name || `Seat ${woken.seat + 1}`;
+          const alignment = woken.actualAlignment === "evil" ? "evil" : "good";
+          if (!role) continue;
+          // PO 2026-11-21: one row per player, the two tokens side by side; each opens the same player-safe reveal as before.
+          rows.push(<YouAreRow key={`you-are:${woken.id}`} name={name} role={role} alignment={alignment}
+            onCharacter={() => report(presentCharacter("You Are", role.id))}
+            onAlignment={() => report(presentMessage(alignment, alignment === "evil" ? "You Are Evil" : "You Are Good"))} />);
+        }
       }
       // PO review C15: no "Give information" form in the Night card; the Storyteller tells the player in person.
     } else if (!done && engine.bureaucrat && engine.actor?.participantId) {
