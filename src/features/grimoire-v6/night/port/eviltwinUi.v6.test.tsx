@@ -48,6 +48,9 @@ it("a valid pair: one Wake row per Twin, each with its one reveal token -- the E
   const toEvil = screen.getByRole("group", { name: "Wake Player 0" });
   expect(within(toEvil).getByRole("button", { name: "Wake Player 0: This Character" })).toBeInTheDocument();
   expect(within(toEvil).getByText("Chef")).toBeInTheDocument();
+  // Each row carries one token, which takes the whole row beside the name.
+  expect(toGood).toHaveClass("is-single");
+  expect(toEvil).toHaveClass("is-single");
   // Showing records nothing.
   fireEvent.click(within(toGood).getByRole("button", { name: "Wake Player 2: This Character" }));
   expect(useV6Ui.getState().show).toMatchObject({ kind: "char", title: "This Character", roleId: "eviltwin" });

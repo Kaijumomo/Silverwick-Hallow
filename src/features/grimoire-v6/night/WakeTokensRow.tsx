@@ -9,7 +9,8 @@ import type { RoleDef } from "@/stores/types";
 export type WakeToken = { heading: string; role: RoleDef; onOpen: () => void };
 
 export function WakeTokensRow({ name, first, second }: { name: string; first: WakeToken; second?: WakeToken }) {
-  return <div className="gv-you-are" role="group" aria-label={`Wake ${name}`}>
+  // A row with one token lets it take the whole space beside the name (the Evil Twin's two rows), as the page asked: no empty second well.
+  return <div className={second ? "gv-you-are" : "gv-you-are is-single"} role="group" aria-label={`Wake ${name}`}>
     <span className="gv-you-are-name"><small>Wake</small>{name}</span>
     {[first, second].flatMap((token) => token ? [token] : []).map((token, index) => <button key={index} type="button" className="gv-you-are-token" aria-label={`Wake ${name}: ${token.heading}`} onClick={token.onOpen}>
       <span className="gv-you-are-disc" aria-hidden="true"><img src={iconUrlFor(token.role)} alt="" draggable={false} /></span>

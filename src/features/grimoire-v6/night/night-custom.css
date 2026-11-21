@@ -478,6 +478,7 @@
   background: var(--gvn-field);
   animation: swRise .3s ease-out;
 }
+.gv-night-custom .gv-you-are.is-single { grid-template-columns: minmax(84px, .8fr) minmax(0, 2.5fr); }
 .gv-night-custom .gv-you-are-name {
   display: flex;
   flex-direction: column;
