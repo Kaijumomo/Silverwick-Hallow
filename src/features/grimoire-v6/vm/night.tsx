@@ -101,14 +101,14 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
     let result = "", resultHint = "";
     if (!inlineInformation) {
       if (direct && resolved) {
-        result = targetName ? `${targetName} chosen.` : celebrated ? "Resolved." : "Completed";
+        result = targetName ? `${targetName} chosen.` : "";
         resultHint = engine.needed > 1 ? roleKey === "innkeeper" ? "Tap order sets who is drunk." : ""
           : canTarget ? "Tap another player to change." : correction?.message ?? "";
       } else if (celebrated) {
-        result = "Resolved.";
         resultHint = steps.slice(engine.currentIndex + 1).some((step) => !stepResolved(game, step, engine.settled)) ? "Continuing…" : "";
-      } else if (resolved) result = "Completed";
+      }
     }
+    const statePill = resolved ? { label: "Completed", kind: "done" } : engine.skipReason ? { label: "Not waking", kind: "idle" } : undefined;
     cur = {
       isRole: true, isMarker: false,
       role: stepLabel(current), who: stepWho(current, game),
@@ -119,7 +119,9 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
         : engine.needed > 1 ? engine.picks.length ? "Choose one more player on the board" : "Tap two players on the board" : "Tap a player on the board",
       picks: engine.picks.map((pick) => ({ name: game.players[pick.playerId]?.name ?? "" })),
       hasNumber: false, numberOpts: [], hasToken: false,
-      hasResult: !!result, result, resultHint,
+      // PO 2026-11-21: one status pill beside the name (Completed / Not waking; a pending step shows none) replaces the big result box.
+      statePillOn: !!statePill, statePill: statePill?.label ?? "", statePillKind: statePill?.kind ?? "",
+      hasResult: !!(result || resultHint), result, resultHint,
       hasNote: !!note, note,
       showOn: false,
     };

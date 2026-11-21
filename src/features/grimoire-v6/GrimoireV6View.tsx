@@ -344,6 +344,9 @@ const S333: React.CSSProperties = { "marginLeft": "auto", "fontSize": "12px", "c
 const S334: React.CSSProperties = { "position": "relative", "width": "100%", "display": "flex", "flexDirection": "column", "gap": "8px", "padding": "12px 16px", "borderRadius": "16px", "background": "linear-gradient(180deg, rgba(20,21,30,.97), rgba(10,11,16,.98))", "border": "1px solid rgba(176,186,204,.22)", "boxShadow": "0 20px 50px rgba(0,0,0,.6), inset 0 2px 0 rgba(192,57,46,.55)" };
 const S335: React.CSSProperties = { "color": "rgba(222,216,204,.35)", "letterSpacing": ".1em", "fontFamily": "'Source Sans 3', sans-serif" };
 const S336: React.CSSProperties = { "alignSelf": "center", "display": "inline-flex", "alignItems": "center", "gap": "6px", "padding": "3px 10px", "borderRadius": "99px", "border": "1px solid rgba(180,140,224,.55)", "background": "rgba(120,80,170,.2)", "fontSize": "13px", "color": "rgba(222,216,204,.7)" };
+// PO 2026-11-21: the shared Night status pill (Completed / Not waking), the Drunk pill's shape in the grimoire's silver line colour.
+const NIGHT_STATE_PILL: React.CSSProperties = { "alignSelf": "center", "display": "inline-flex", "alignItems": "center", "gap": "6px", "padding": "3px 10px", "borderRadius": "99px", "border": "1px solid rgba(176,186,204,.4)", "background": "rgba(176,186,204,.1)", "fontSize": "13px", "fontWeight": "600", "color": "rgba(222,216,204,.78)" };
+const NIGHT_STATE_GLYPH: React.CSSProperties = { "width": "12px", "height": "12px", "fill": "none", "stroke": "currentColor", "strokeWidth": "2.2", "strokeLinecap": "round", "strokeLinejoin": "round" };
 const S337: React.CSSProperties = { "width": "7px", "height": "7px", "borderRadius": "50%", "background": "#b48ce0" };
 const S338: React.CSSProperties = { "fontWeight": "700", "color": "#efe6fa" };
 const S339: React.CSSProperties = { "fontSize": "17px", "lineHeight": "1.4", "color": "#ece6da", "textWrap": "pretty" };
@@ -351,7 +354,8 @@ const S340: React.CSSProperties = { "display": "flex", "alignItems": "center", "
 const S341: React.CSSProperties = { "padding": "1px 8px", "borderRadius": "3px", "border": "1px solid rgba(232,88,74,.5)", "color": "#ffb4a6" };
 const S342: React.CSSProperties = { "fontSize": "12px", "letterSpacing": ".12em", "textTransform": "uppercase", "color": "rgba(222,216,204,.55)" };
 const S343: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "10px", "fontSize": "14px", "color": "#ece6da" };
-const S344: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "2px", "padding": "10px 12px", "borderRadius": "10px", "background": "rgba(232,88,74,.08)", "border": "1px solid rgba(232,88,74,.3)", "animation": "swRise .3s ease-out" };
+// PO 2026-11-21: a real result (who was chosen, a hint) is a plain line; the boxed red block is gone.
+const NIGHT_RESULT: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "2px", "animation": "swRise .3s ease-out" };
 const S345: React.CSSProperties = { "fontSize": "13px", "color": "#e7a35b" };
 const S346: React.CSSProperties = { "alignSelf": "stretch", "display": "flex", "alignItems": "center", "gap": "12px", "minHeight": "56px", "padding": "8px 14px 8px 8px", "borderRadius": "12px", "border": "1px solid rgba(176,186,204,.2)", "background": "rgba(9,10,15,.6)", "fontFamily": "inherit", "textAlign": "left", "cursor": "pointer", "transition": "border-color .2s, background .2s", "animation": "swRise .3s ease-out" };
 const S347: React.CSSProperties = { "position": "relative", "flex": "none", "width": "40px", "height": "40px", "borderRadius": "50%", "background": "radial-gradient(circle at 38% 30%, #f1e6c9, #b09566)", "boxShadow": "0 0 0 2px #14151d, 0 0 0 3px rgba(232,88,74,.5)" };
@@ -2752,6 +2756,14 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                         </span>
                         </>
                       )}
+                      {vm.night?.cur?.statePillOn && (
+                        <span style={NIGHT_STATE_PILL} data-night-state={vm.night?.cur?.statePillKind}>
+                          <svg viewBox="0 0 24 24" aria-hidden="true" style={NIGHT_STATE_GLYPH}>
+                            <path d={vm.night?.cur?.statePillKind === "idle" ? "M6 12h12" : "m5 12.5 4.5 4.5L19 7.5"} />
+                          </svg>
+                          {T(vm.night?.cur?.statePill)}
+                        </span>
+                      )}
                     </div>
                     <div style={S339}>
                       {T(vm.night?.cur?.verb)}
@@ -2797,13 +2809,17 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                   )}
                   {vm.night?.cur?.hasResult && (
                     <>
-                    <div style={S344}>
-                      <div style={S290}>
-                        {T(vm.night?.cur?.result)}
-                      </div>
-                      <div style={S136}>
-                        {T(vm.night?.cur?.resultHint)}
-                      </div>
+                    <div style={NIGHT_RESULT}>
+                      {vm.night?.cur?.result && (
+                        <div style={S290}>
+                          {T(vm.night?.cur?.result)}
+                        </div>
+                      )}
+                      {vm.night?.cur?.resultHint && (
+                        <div style={S136}>
+                          {T(vm.night?.cur?.resultHint)}
+                        </div>
+                      )}
                     </div>
                     </>
                   )}

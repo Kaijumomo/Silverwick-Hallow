@@ -62,7 +62,8 @@ it("Imp chooses a successor on the board before one atomic self-pass and retains
   expect(store.getState().undoStack).toHaveLength(1);
   expect(game().nightProgress[`2:${key("p2")}`]?.status).toBe("skipped");
   expect(current()).toBe(key("p0"));
-  expect(screen.getByText("Resolved.")).toBeInTheDocument();
+  expect(screen.getByText("Completed")).toBeInTheDocument();
+  expect(screen.queryByText("Resolved.")).toBeNull();
 });
 
 it("an uncertain Imp succession (a Spy that may register as a Minion) is put to the Storyteller on the board", () => {
@@ -145,7 +146,11 @@ it("resolves a direct board target once and waits for Next after commit", () => 
   expect(current()).toBe(key("p0"));
   expect(useShellStore.getState().litActor?.playerId).toBe("p0");
   expect(useTargetPicker.getState().active).not.toBeNull();
+  // A pending step carries no status pill.
+  expect(screen.queryByText("Completed")).toBeNull();
+  expect(screen.queryByText("Not waking")).toBeNull();
   tap("p4");
+  expect(screen.getByText("Completed")).toBeInTheDocument();
   expect(game().players.p4!.effects).toEqual([expect.objectContaining({ type: "poisoned" })]);
   expect(game().nightProgress[`2:${key("p0")}`]?.status).toBe("done");
   expect(store.getState().undoStack).toHaveLength(1);
@@ -495,6 +500,7 @@ it("WP-7: Next and Previous pass over steps that do not wake tonight, which stay
   for (const button of screen.getAllByRole("button", { name: /Undertaker/ })) { fireEvent.click(button); if (current() === undertaker.stepKey) break; }
   expect(current()).toBe(undertaker.stepKey);
   expect(screen.getByText(/This character does not wake/)).toBeInTheDocument();
+  expect(screen.getByText("Not waking")).toBeInTheDocument();
   expect(stripLabels().length).toBeGreaterThan(0);
 });
 

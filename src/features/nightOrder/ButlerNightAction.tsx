@@ -38,7 +38,8 @@ export function ButlerNightAction({ game, script, source, visible, resolved, onR
   const master = resolved ? seatedParticipants(game).find(player => player.reminders.some(reminder =>
     butlerReminderOrigin(reminder)?.participantId === source.participantId && reminder.sourceParticipant?.playerId === source.playerId)) : undefined;
   return <div className="night-information">
-    <p className={resolved ? "modern-night-result" : "modern-night-pick"}>{resolved ? master ? `Master: ${master.name || `Seat ${master.seat + 1}`}` : "Completed" : "Tap another player to choose a Master."}</p>
+    {/* The step's Completed state is the pill in the Night card header; only the real result stays here. */}
+    {resolved ? master && <p className="modern-night-result">{`Master: ${master.name || `Seat ${master.seat + 1}`}`}</p> : <p className="modern-night-pick">Tap another player to choose a Master.</p>}
     {error && <p role="alert">{error}</p>}
   </div>;
 }
