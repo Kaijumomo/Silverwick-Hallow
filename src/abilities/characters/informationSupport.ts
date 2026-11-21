@@ -2,6 +2,8 @@ import type { AbilityEvaluation, AbilityEvaluationContext } from "../semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import { isCanonicalRole } from "@/data/canonical";
 import type { RulesQuery } from "@/stores/rulesQuery";
+import type { Alignment, RoleId, RoleType } from "@/stores/types";
+import { passiveRegistrationOptions } from "./passiveRules";
 
 /** R1: a healthy canonical Recluse supplies an optional, per-interaction
  * information choice. Unknown impairment or an explicit registration Effect
@@ -44,4 +46,52 @@ export function informationAbilityRefusal(context: AbilityEvaluationContext): Ab
     if (!applies.known) return { kind: "unsupported", message: applies.reason };
     if (applies.value) return { kind: "notApplicable", message: "This player has lost their ability." };
   }
+}
+
+/**
+ * SV-5 (PO Q2, 2026-11-21: "follow the pages"): the forms a participant may take for ONE observer's information, read through the
+ * shared registration query. A known registration is one form. A healthy canonical Spy or Recluse whose registration the query
+ * leaves to the Storyteller has every form its page allows (its actual one plus the optional ones). Anything else unknown (a
+ * "registers falsely" Effect, a modifier, an unverified character) has no list: the caller sends the whole action by hand.
+ * Possible forms only: nothing is chosen or saved here.
+ */
+export type RegistrationForms<T> = { known: true; forms: readonly T[]; optional: boolean } | { known: false; reason: string };
+
+export function possibleTypes(query: RulesQuery, binding: ParticipantBinding, observer: RoleId): RegistrationForms<RoleType> {
+  const player = query.participant(binding);
+  if (!player) return { known: false, reason: "That participant is no longer in this seat." };
+  const character = query.registration(binding, observer).character;
+  if (character.known) {
+    const type = query.roleOf(character.value)?.type;
+    return type ? { known: true, forms: [type], optional: false } : { known: false, reason: "This character's type is not known: the Storyteller decides." };
+  }
+  const options = passiveRegistrationOptions(player.actualRole);
+  const actual = query.roleOf(player.actualRole)?.type;
+  if (!options || !actual || !optionalRegistrationChoice(query, binding, player.actualRole as "spy" | "recluse")) return { known: false, reason: character.reason };
+  return { known: true, forms: [...new Set([actual, ...options.types])], optional: true };
+}
+
+export function possibleAlignments(query: RulesQuery, binding: ParticipantBinding, observer: RoleId): RegistrationForms<Alignment> {
+  const player = query.participant(binding);
+  if (!player) return { known: false, reason: "That participant is no longer in this seat." };
+  const alignment = query.registration(binding, observer).alignment;
+  if (alignment.known) return { known: true, forms: [alignment.value], optional: false };
+  const options = passiveRegistrationOptions(player.actualRole);
+  if (!options || !player.actualAlignment || !optionalRegistrationChoice(query, binding, player.actualRole as "spy" | "recluse")) return { known: false, reason: alignment.reason };
+  return { known: true, forms: [...new Set<Alignment>([player.actualAlignment, options.alignment])], optional: true };
+}
+
+/** Every answer the allowed registrations could give: the answers under each combination of forms (an empty list, such as "no
+ * Minion could be counted", gives none), without duplicates, in first-seen order. */
+export function possibleAnswers<F, A>(choices: readonly (readonly F[])[], answer: (forms: readonly F[]) => readonly A[]): A[] {
+  const answers: A[] = [];
+  const walk = (index: number, picked: F[]) => {
+    if (index === choices.length) {
+      for (const value of answer(picked)) if (!answers.includes(value)) answers.push(value);
+      return;
+    }
+    for (const form of choices[index]!) walk(index + 1, [...picked, form]);
+  };
+  walk(0, []);
+  return answers;
 }

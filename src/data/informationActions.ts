@@ -186,6 +186,18 @@ export const INFORMATION_ACTIONS: Record<RoleId, InformationAction[]> = {
     },
   ],
 
+  // "You start knowing how many steps from the Demon to its nearest Minion." (SV-5a) -- Number, first night only.
+  clockmaker: [
+    {
+      id: "clockmaker-first-night",
+      timing: { kind: "firstNight" },
+      instruction: "Give a finger signal for the number of steps from the Demon to its nearest Minion.",
+      requirements: [
+        { id: "steps", kind: "number", label: "Steps from the Demon to its nearest Minion" },
+      ],
+    },
+  ],
+
   // "If the Demon kills you, you learn that it is 1 of 2 players." (SV-1a) -- two players, one of them the Demon that killed the Sage.
   sage: [
     {
