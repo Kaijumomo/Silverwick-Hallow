@@ -4,6 +4,7 @@ import { CULT_LEADER } from "./cultleader";
 import { DEVILS_ADVOCATE } from "./devilsadvocate";
 import { CHEF } from "./chef";
 import { CLOCKMAKER } from "./clockmaker";
+import { DREAMER } from "./dreamer";
 import { EMPATH } from "./empath";
 import { FORTUNE_TELLER } from "./fortuneteller";
 import { GAMBLER } from "./gambler";
@@ -42,4 +43,4 @@ import { VIGORMORTIS } from "./vigormortis";
  * production Ability Semantics Registry (semantics.ts); it is only ever
  * consulted through the canonical ownership gate (resolveAbilitySemantics).
  */
-export const VERIFIED_DESCRIPTORS: readonly AbilityDescriptor[] = [POISONER, MONK, CHEF, EMPATH, FORTUNE_TELLER, SLAYER, CULT_LEADER, HARLOT, AL_HADIKHIA, IMP, RAVENKEEPER, UNDERTAKER, PIT_HAG, INNKEEPER, NO_DASHII, VIGORMORTIS, GAMBLER, SHABALOTH, WITCH, GODFATHER, MOONCHILD, TOWN_CRIER, ORACLE, PROFESSOR, DEVILS_ADVOCATE, SAGE, SWEETHEART, KLUTZ, BARBER, SNAKE_CHARMER, FANG_GU, PHILOSOPHER, CERENOVUS, EVIL_TWIN, CLOCKMAKER, SEAMSTRESS];
+export const VERIFIED_DESCRIPTORS: readonly AbilityDescriptor[] = [POISONER, MONK, CHEF, EMPATH, FORTUNE_TELLER, SLAYER, CULT_LEADER, HARLOT, AL_HADIKHIA, IMP, RAVENKEEPER, UNDERTAKER, PIT_HAG, INNKEEPER, NO_DASHII, VIGORMORTIS, GAMBLER, SHABALOTH, WITCH, GODFATHER, MOONCHILD, TOWN_CRIER, ORACLE, PROFESSOR, DEVILS_ADVOCATE, SAGE, SWEETHEART, KLUTZ, BARBER, SNAKE_CHARMER, FANG_GU, PHILOSOPHER, CERENOVUS, EVIL_TWIN, CLOCKMAKER, SEAMSTRESS, DREAMER];

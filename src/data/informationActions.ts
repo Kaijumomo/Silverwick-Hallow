@@ -221,6 +221,31 @@ export const INFORMATION_ACTIONS: Record<RoleId, InformationAction[]> = {
     },
   ],
 
+  // "Each night, choose a player (not yourself or Travellers): you learn 1 good & 1 evil character, 1 of which is correct." (SV-5c)
+  // Player + two Roles (good first, evil second: PO Q4), both nights.
+  dreamer: [
+    {
+      id: "dreamer-first-night",
+      timing: { kind: "firstNight" },
+      instruction: "The Dreamer points to a player. Show 1 good & 1 evil character token, 1 of which is their character.",
+      requirements: [
+        { id: "player", kind: "player", cardinality: { kind: "exactly", count: 1 }, label: "The player the Dreamer chose" },
+        { id: "goodCharacter", kind: "role", label: "The good character shown" },
+        { id: "evilCharacter", kind: "role", label: "The evil character shown" },
+      ],
+    },
+    {
+      id: "dreamer-other-night",
+      timing: { kind: "otherNight" },
+      instruction: "The Dreamer points to a player. Show 1 good & 1 evil character token, 1 of which is their character.",
+      requirements: [
+        { id: "player", kind: "player", cardinality: { kind: "exactly", count: 1 }, label: "The player the Dreamer chose" },
+        { id: "goodCharacter", kind: "role", label: "The good character shown" },
+        { id: "evilCharacter", kind: "role", label: "The evil character shown" },
+      ],
+    },
+  ],
+
   // "If the Demon kills you, you learn that it is 1 of 2 players." (SV-1a) -- two players, one of them the Demon that killed the Sage.
   sage: [
     {

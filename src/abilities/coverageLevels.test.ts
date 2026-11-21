@@ -50,7 +50,8 @@ describe("coverage level and evidence (Stage 5A-1)", () => {
     // SV-4a moved the Cerenovus from generic to guided (a wake: a player and a character, one sourced MAD Effect).
     // SV-5a moved the Clockmaker from reviewed to guided (a first-night wake: the counted steps, Spy/Recluse as one question).
     // SV-5b moved the Seamstress from reviewed to guided (a wake until used: two players, YES / NO, the use and NO ABILITY in one resolution).
-    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 36, reviewed: 26, partial: 59, generic: 60 });
+    // SV-5c moved the Dreamer from reviewed to guided (a wake: a player tapped, the false token picked, two tokens in one delivery).
+    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 37, reviewed: 25, partial: 59, generic: 60 });
   });
 
   it("level follows the facts the gates read", () => {

@@ -60,7 +60,8 @@ export function automationEligibility({ query, descriptor, actor, roleId, simula
   // A token shown as information does not introduce that character's ability
   // into play. The delivery planner still validates the selected token against
   // the registry; actual represented characters retain the coverage gate above.
-  const tokenOnlyInformation = roleId === "undertaker" || roleId === "ravenkeeper";
+  // SV-5c: the Dreamer's two tokens are shown, not put in play (the false one may be any character of the other team).
+  const tokenOnlyInformation = roleId === "undertaker" || roleId === "ravenkeeper" || roleId === "dreamer";
   for (const value of Object.values(inputs)) if (!tokenOnlyInformation && value.kind === "character" && value.roleIds.some(id => !REVIEWED_INTERACTION_ROLES.has(id))) return manual("The chosen character has interactions outside verified coverage.");
   const functions = query.abilityFunctions(actor);
   if (!simulated && !functions.known) return manual(functions.reason);

@@ -1,5 +1,6 @@
 import { BarberNightAction } from "@/features/nightOrder/BarberNightAction";
 import { PhilosopherNightAction } from "./PhilosopherNightAction";
+import { DreamerNightAction } from "./DreamerNightAction";
 import { CerenovusResult } from "./CerenovusResult";
 import { EvilTwinNightAction } from "./EvilTwinNightAction";
 import { Fragment, useRef, useState, type ReactNode, type RefObject } from "react";
@@ -174,6 +175,9 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
           visible={engine.visible} onResolved={engine.finish} onManual={engine.requireManual} />);
       } else if (engine.philosopherTurn && engine.ability?.kind === "guided") {
         rows.push(<PhilosopherNightAction key={current.stepKey} game={game} script={script} step={current} ability={engine.ability}
+          visible={engine.visible} resolved={done} onResolved={engine.finish} onManual={engine.requireManual} />);
+      } else if (engine.dreamerTurn && engine.ability?.kind === "guided") {
+        rows.push(<DreamerNightAction key={current.stepKey} game={game} script={script} step={current}
           visible={engine.visible} resolved={done} onResolved={engine.finish} onManual={engine.requireManual} />);
       } else if (engine.twinTurn) {
         rows.push(<EvilTwinNightAction key={current.stepKey} game={game} registry={registry} step={current} visible={engine.visible} resolved={done} onResolved={engine.finish} />);
