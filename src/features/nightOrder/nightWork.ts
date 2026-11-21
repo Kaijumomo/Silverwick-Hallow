@@ -88,7 +88,7 @@ export function deriveNightWork(game: StorytellerLobbyRecord, environment: Night
   // same explicit trigger, including its completed row after recovery.
   if (script && game.day === 1) {
     const extra = computeNightOrder(game.players, game.seatOrder, script, false, game).filter(step => {
-      if (step.kind !== "player" || step.isDeceived || steps.some(existing => existing.stepKey === step.stepKey)) return false;
+      if (step.kind !== "player" || step.isDeceived || step.gainedFrom || steps.some(existing => existing.stepKey === step.stepKey)) return false;
       const ability = triggerAbility(step.effectiveRoleId, registry, semantics, query, bindingOf(game.players[step.playerId]!));
       return ability?.kind === "guided" && !!ability.trigger;
     });
@@ -99,7 +99,8 @@ export function deriveNightWork(game: StorytellerLobbyRecord, environment: Night
   // event's completed row. Retain the latest completed event row for Next and
   // reload display after the open trigger disappears.
   steps = steps.flatMap((step): NightStep[] => {
-    if (step.kind !== "player" || step.isDeceived) return [step];
+    // SV-3a: a gained ability's row (the Philosopher's) is the Storyteller's; its own character's trigger evidence is not the gainer's.
+    if (step.kind !== "player" || step.isDeceived || step.gainedFrom) return [step];
     const open = triggered.find(item => item.player.participantId === step.participantId && item.roleId === step.effectiveRoleId);
     if (open) return [{ ...step, stepKey: open.stepKey }];
     const ability = triggerAbility(step.effectiveRoleId, registry, semantics, query, bindingOf(game.players[step.playerId]!));

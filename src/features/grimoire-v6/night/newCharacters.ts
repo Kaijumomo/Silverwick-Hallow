@@ -11,7 +11,7 @@ import type { StorytellerLobbyRecord, STPlayerRecord } from "@/stores/types";
  *  - every other character change of that same resolution (the Snake Charmer who became the Demon).
  * A player is listed only while alive and still holding the character they were given.
  */
-export function charactersToReveal(game: StorytellerLobbyRecord, roleId: "snakecharmer" | "fanggu"): STPlayerRecord[] {
+export function charactersToReveal(game: StorytellerLobbyRecord, roleId: "snakecharmer" | "fanggu", gainer?: { participantId: string }): STPlayerRecord[] {
   if (game.phase !== "night") return [];
   type RoleRecord = { participantId: string; to?: string; resolutionId?: string };
   const tonight: RoleRecord[] = [];
@@ -23,8 +23,11 @@ export function charactersToReveal(game: StorytellerLobbyRecord, roleId: "snakec
   }
   const toRole = (record: RoleRecord) => record.to;
   const participantOf = (record: RoleRecord) => record.participantId;
-  const converted = tonight.filter((record) => toRole(record) === roleId
-    && game.nightProgress?.[`${game.day}:${participantStepKey(participantOf(record), roleId)}`]?.status === "skipped");
+  // SV-3b: on the row of a gained Snake Charmer, the swap is the gainer's own change of character tonight (the old Demon is given the
+  // Philosopher, not the Snake Charmer).
+  const converted = gainer ? tonight.filter((record) => participantOf(record) === gainer.participantId && !!record.resolutionId)
+    : tonight.filter((record) => toRole(record) === roleId
+      && game.nightProgress?.[`${game.day}:${participantStepKey(participantOf(record), roleId)}`]?.status === "skipped");
   const resolutions = new Set(converted.map((record) => record.resolutionId).filter((id): id is string => !!id));
   const records = [...converted, ...tonight.filter((record) => !converted.includes(record) && !!record.resolutionId && resolutions.has(record.resolutionId))];
   const out: STPlayerRecord[] = [];

@@ -1,4 +1,5 @@
 import { BarberNightAction } from "@/features/nightOrder/BarberNightAction";
+import { PhilosopherNightAction } from "./PhilosopherNightAction";
 import { Fragment, useRef, useState, type ReactNode, type RefObject } from "react";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 import { AbilityWorkspace } from "@/features/abilities/AbilityWorkspace";
@@ -169,6 +170,9 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
       } else if (engine.barberTurn && engine.ability?.kind === "guided") {
         if (!done) rows.push(<BarberNightAction key={current.stepKey} game={game} script={script} step={current} ability={engine.ability}
           visible={engine.visible} onResolved={engine.finish} onManual={engine.requireManual} />);
+      } else if (engine.philosopherTurn && engine.ability?.kind === "guided") {
+        rows.push(<PhilosopherNightAction key={current.stepKey} game={game} script={script} step={current} ability={engine.ability}
+          visible={engine.visible} resolved={done} onResolved={engine.finish} onManual={engine.requireManual} />);
       } else if (!done && !engine.skipReason && (current.effectiveRoleId === "undertaker" || current.effectiveRoleId === "ravenkeeper")) {
         const row = manualReveal(game, script, registry, current);
         if (row) rows.push(<Fragment key="manual-reveal">{row}</Fragment>);
@@ -195,7 +199,7 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
       // PO review 2026-11-21 (SV-2c): after a Snake Charmer swap or a Fang Gu jump, wake each changed player and show YOU ARE,
       // their new character, then their alignment (the wiki's How to Run), through the same player-safe reveals as the new Imp.
       if ((current.effectiveRoleId === "snakecharmer" || current.effectiveRoleId === "fanggu") && !current.isDeceived) {
-        for (const woken of charactersToReveal(game, current.effectiveRoleId)) {
+        for (const woken of charactersToReveal(game, current.effectiveRoleId, current.gainedFrom ? { participantId: current.participantId } : undefined)) {
           const role = registry.get(woken.actualRole ?? "");
           const name = woken.name || `Seat ${woken.seat + 1}`;
           const alignment = woken.actualAlignment === "evil" ? "evil" : "good";

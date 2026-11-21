@@ -27,6 +27,8 @@ import { applyRolePlan, defaultRoleIds, planRoleTransaction, type RoleIdSource, 
 import { boundParticipant, createRulesQuery, effectSemanticsOf } from "./rulesQuery";
 import { MAX_RESOLUTION_ID_LENGTH, StorytellerGamePersistedSchema } from "./schemas";
 import { wakeIdentity } from "./wakeIdentity";
+import { gainedRoleOf } from "./gainedAbility";
+import { runsGainedAbility } from "@/abilities/characters/passiveRules";
 import type { MutationContext } from "./history";
 import type {
   ExecutionOutcome,
@@ -427,6 +429,8 @@ type ComposeOptions = {
   consumeTrigger?: { day: number; stepKey: string; status: "done" };
   /** A simulated wake has no ability: only bookkeeping may result. */
   simulated?: { performedRole: RoleId };
+  /** SV-3b: the actor performs an ability they gained (the Philosopher's): their own deliveries record it as the performed Role. */
+  gained?: { performedRole: RoleId };
   /** Phase 10G: a MANUAL resolution's workflow (its Role and actor) -- the
    * only context a Manual delivery's performed Role may come from. Absent for
    * a guided resolution, which never records a Manual delivery. */
@@ -555,7 +559,8 @@ export function composeAbilityOutcome(
         if (!boundParticipant(working, operation.recipient)) return refuse("stale", "The information recipient is no longer in that seat.", { operationIndex });
         const values = translateInformationValues(working, operation.values);
         if ("ok" in values) return { ...values, operationIndex };
-        const performedRole = options.simulated?.performedRole ?? operation.performedRole;
+        const ownDelivery = operation.recipient.participantId === options.automaticAction?.actor.participantId;
+        const performedRole = options.simulated?.performedRole ?? (ownDelivery ? options.gained?.performedRole : undefined) ?? operation.performedRole;
         const result = planInformationDelivery(working, {
           recipientPlayerId: operation.recipient.playerId,
           informationActionId: operation.informationActionId,
@@ -912,11 +917,12 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   if (semantics.kind === "unsupported") return refuse("unsupported", "Silverwick has no verified rules for this ability yet -- resolve it manually.");
   const { descriptor } = semantics;
 
-  // The performed Role must be the actor's own ability or their simulated wake.
+  // The performed Role must be the actor's own ability, an ability they gained that the app runs (SV-3b), or their simulated wake.
   const wake = wakeIdentity(actor, environment.registry);
   const performsActual = request.roleId === actor.actualRole && !(wake?.simulated && wake.shownRoleId !== actor.actualRole);
-  const simulated = !performsActual && wake?.simulated === true && wake.shownRoleId === request.roleId;
-  if (!performsActual && !simulated) return refuse("invalid", "That is not this player's ability.");
+  const performsGained = !performsActual && !!wake && !wake.simulated && gainedRoleOf(actor) === request.roleId && runsGainedAbility(request.roleId);
+  const simulated = !performsActual && !performsGained && wake?.simulated === true && wake.shownRoleId === request.roleId;
+  if (!performsActual && !performsGained && !simulated) return refuse("invalid", "That is not this player's ability.");
 
   // SOL-10F-L3-R1: the SAME timing + invocation contract the entry points use;
   // a crafted request cannot reach an ability its path may not invoke.
@@ -1082,6 +1088,7 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
     ...(completeStep ? { completeStep } : {}),
     ...(consumeTrigger ? { consumeTrigger } : {}),
     ...(simulated ? { simulated: { performedRole: request.roleId } } : {}),
+    ...(performsGained ? { gained: { performedRole: request.roleId } } : {}),
   });
   // A modeled choice must not create an unresolved dependency cycle. Check
   // newly produced sourced effects against the tentative authoritative state

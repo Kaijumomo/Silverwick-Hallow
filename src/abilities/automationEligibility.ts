@@ -1,9 +1,10 @@
 import { isCanonicalRole } from "@/data/canonical";
-import { REVIEWED_INTERACTION_ROLES } from "./characters/passiveRules";
+import { REVIEWED_INTERACTION_ROLES, gainedAbilityReviewed } from "./characters/passiveRules";
 import type { AbilityDescriptor, AbilityInputs, InformationConstraint } from "./semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
 import { effectSemanticsOf } from "@/stores/rulesQuery";
+import { gainedRoleOf } from "@/stores/gainedAbility";
 import { incompleteSuccessionReason } from "./completeActionSafety";
 import { fortuneTellerSetupRefusal } from "./characters/fortuneTellerSetupFact";
 
@@ -28,6 +29,13 @@ export function interactionCoverageEligibility(query: RulesQuery, additionalRevi
       return { kind: "manual", reason: "A character in play has interactions outside verified coverage." };
     }
     if (represented.effects.some(effect => effect.state === "active" && !effectSemanticsOf(effect.type))) return { kind: "manual", reason: "An effect in play has unverified interactions." };
+    // SV-3a: a gained ability is in play as much as a character is (the Philosopher's chosen character).
+    const gained = gainedRoleOf(represented);
+    const gainedDefinition = gained ? query.roleOf(gained) : undefined;
+    if (gained && (!gainedDefinition || !isCanonicalRole(gainedDefinition) || !gainedAbilityReviewed(gained)
+      || (!REVIEWED_INTERACTION_ROLES.has(gained) && !additionalReviewedRoles.includes(gained)))) {
+      return { kind: "manual", reason: "A gained ability in play has interactions outside verified coverage." };
+    }
   }
   return { kind: "automated" };
 }
