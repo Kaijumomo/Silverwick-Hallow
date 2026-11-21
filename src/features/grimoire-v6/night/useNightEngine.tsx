@@ -43,6 +43,16 @@ const boardTarget = (descriptor: AbilityDescriptor) => {
 const pickCount = (descriptor: AbilityDescriptor) => descriptor.inputs[0]?.count ?? 1;
 
 export type NightWorkspace = { target: WorkspaceTarget; ability: StepAbility; inputs?: Record<string, AbilityInputValue>; key: number };
+/**
+ * PO review 2026-11-21 (SV-2c): a tap that needs one Storyteller ruling about the chosen player -- does the Recluse register as a
+ * Demon (Snake Charmer), does a Recluse or Spy register as an Outsider (Fang Gu) -- is asked on the Night card itself, in the
+ * Barber card's compact style, never in the ability workspace. The tap is held; the answer commits (one Undo).
+ */
+const TAP_RULINGS = [
+  { prefix: "snakecharmer:registersAsDemon:", kind: "demon" as const },
+  { prefix: "fanggu:registersAsOutsider:", kind: "outsider" as const },
+];
+export type TapRuling = { game: StorytellerLobbyRecord; stepKey: string; inputs: Record<string, AbilityInputValue>; id: string; kind: "demon" | "outsider"; target: ParticipantBinding };
 export type SuccessorChoice = { game: StorytellerLobbyRecord; stepKey: string; inputs: Record<string, AbilityInputValue>; id: string; eligible: Set<string> };
 type Success = { key: string; game: StorytellerLobbyRecord; step: NightStep };
 
@@ -76,6 +86,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   const [success, setSuccess] = useScoped<Success | null>(scope, null);
   const [manualAction, setManualAction] = useScoped<string | null>(scope, null);
   const [successorChoice, setSuccessorChoice] = useScoped<SuccessorChoice | null>(scope, null);
+  const [tapRuling, setTapRuling] = useScoped<TapRuling | null>(scope, null);
   // Players tapped so far for a step that takes several (Innkeeper, Shabaloth), and the player the Gambler chose
   // while the guess is being picked.
   const [picks, setPicks] = useScoped<ParticipantBinding[]>(scope, EMPTY_PICKS);
@@ -145,6 +156,11 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   });
   const current = pos.kind === "step" ? pos.step : undefined;
   const currentIndex = current ? steps.findIndex((step) => step.stepKey === current.stepKey) : -1;
+  // PO review 2026-11-21: a step that left the list when it resolved (its player changed character on it: a Snake Charmer swap, a
+  // Fang Gu jump, an Imp star pass) keeps its place on the strip and in the counter, at the row of the same character. Display only:
+  // Next and Previous still use currentIndex.
+  const positionIndex = currentIndex >= 0 || !current || current.kind !== "player" ? currentIndex
+    : steps.findIndex((step) => step.kind === "player" && step.effectiveRoleId === current.effectiveRoleId);
   const resolved = current ? stepResolved(game, current) : false;
   const lateReason = "They were brought back after their turn tonight, so they act from tomorrow night";
   const skipReason: string | null = current && !resolved ? work?.late.has(current.stepKey) ? lateReason : idleReasons.get(current.stepKey) ?? null : null;
@@ -166,7 +182,8 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   const needed = ability?.kind === "guided" ? pickCount(ability.descriptor) : 1;
   const correction = current && resolved ? getNightActionCorrection(game, game.day, current.stepKey) : null;
   const question = current && !resolved ? probed.questions.get(current.stepKey) ?? null : null;
-  const canTarget = !!direct && !question && (!resolved || needed === 1 && !!correction?.canCorrect);
+  const pendingRuling = tapRuling && tapRuling.game === game && tapRuling.stepKey === current?.stepKey ? tapRuling : null;
+  const canTarget = !!direct && !question && !pendingRuling && (!resolved || needed === 1 && !!correction?.canCorrect);
   const answerQuestion = (yes: boolean) => {
     if (!current || !question) return;
     setRulings({ ...rulings, [rulingKey(current.stepKey)]: { ...rulings[rulingKey(current.stepKey)], [question.id]: { kind: "boolean", value: yes } } });
@@ -188,7 +205,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
 
   // ── navigation ────────────────────────────────────────────────────────────
   const settle = () => {
-    setSuccessorChoice(null); setPicks(EMPTY_PICKS); closeGuess(); setGuessFor(null);
+    setSuccessorChoice(null); setTapRuling(null); setPicks(EMPTY_PICKS); closeGuess(); setGuessFor(null);
     useTargetPicker.getState().cancel();
     setWorkspace(null); setSuccess(null); setError(null); setPaused(false);
     setManualAction(null);
@@ -215,7 +232,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   };
   const requireManual = (reason?: string) => stopAutomation(reason);
   const finish = (committed: StorytellerLobbyRecord) => {
-    setSuccessorChoice(null);
+    setSuccessorChoice(null); setTapRuling(null);
     if (!current || !stepResolved(committed, current)) return;
     useShellStore.getState().setNightCursor({ day: game.day, stepKey: current.stepKey });
     useNightPos.getState().go(game.day, null, null);
@@ -287,8 +304,36 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
         setSuccessorChoice({ game, stepKey: current.stepKey, inputs, id: requirement.id, eligible: eligibleSuccessors });
         setPaused(false); return;
       }
+      const ruling = plan.requirements?.length === 1 ? plan.requirements[0] : undefined;
+      const tap = ruling && ruling.kind === "boolean" && ruling.source === "storyteller" && !successorChoice
+        ? TAP_RULINGS.find((item) => ruling.id.startsWith(item.prefix)) : undefined;
+      if (tap && ruling) {
+        useTargetPicker.getState().cancel(); setError(null);
+        setTapRuling({ game, stepKey: current.stepKey, inputs, id: ruling.id, kind: tap.kind, target });
+        return;
+      }
       openWorkspace(inputs); return;
     }
+    if (!plan.ok) { setError(plan.message); return; }
+    const result = useStorytellerStore.getState().resolveAbility(request, semantics, actionContext);
+    if (!result.ok) { setError(result.message); return; }
+    finish(useStorytellerStore.getState().game!);
+  };
+
+  /** The Storyteller's Yes or No on the held tap: the answer commits the step (one Undo); "Choose again" drops the tap. */
+  const answerTapRuling = (value: boolean | null) => {
+    const held = pendingRuling;
+    if (!held || !current || current.kind !== "player" || !script || game !== useStorytellerStore.getState().game
+      || !live.current.visible || usePrivacyStore.getState().enabled) return;
+    setTapRuling(null); setError(null);
+    if (value === null) return;
+    const fingerprint = captureFingerprint(game, current.playerId, { day: game.day, stepKey: current.stepKey });
+    if (!fingerprint) { setError("This player is no longer seated."); return; }
+    const inputs = { ...held.inputs, [held.id]: { kind: "boolean" as const, value } };
+    const request = { mode: "guided" as const, invocationPath: "nightOrder" as const, fingerprint, roleId: current.effectiveRoleId, inputs, completeStep: true };
+    const plan = planAbilityResolution(game, request, { script, registry, semantics });
+    if (!plan.ok && plan.code === "unsupported") { stopAutomation(plan.message); return; }
+    if (!plan.ok && plan.code === "needsInput") { openWorkspace(inputs); return; }
     if (!plan.ok) { setError(plan.message); return; }
     const result = useStorytellerStore.getState().resolveAbility(request, semantics, actionContext);
     if (!result.ok) { setError(result.message); return; }
@@ -417,13 +462,14 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   }, [direct, inlineInformation, success, visible, current?.stepKey, game]);
   useEffect(() => {
     if (successorChoice && (successorChoice.game !== game || successorChoice.stepKey !== current?.stepKey)) setSuccessorChoice(null);
+    if (tapRuling && (tapRuling.game !== game || tapRuling.stepKey !== current?.stepKey)) setTapRuling(null);
     // Undo and external corrections invalidate the displayed result as well as
     // its timer; the restored step must immediately be actionable again.
     if (success && (success.game !== game || success.key !== current?.stepKey)) {
       setSuccess(null); setPaused(false);
     }
     if (workspace && workspace.target.step?.stepKey !== current?.stepKey && !isTriggerWorkspace(workspace, work)) setWorkspace(null);
-  }, [game, current?.stepKey, success, workspace, successorChoice]);
+  }, [game, current?.stepKey, success, workspace, successorChoice, tapRuling]);
   // Manual procedures retain their original controls, but a completed procedure
   // participates in the same delayed advance as a guided ability.
   const previousStatus = useRef({ key: current?.stepKey, resolved });
@@ -497,9 +543,9 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   };
 
   return {
-    active, visible, work, steps, unfinished, pos, current, currentIndex, resolved, actor, role, ability, query,
+    active, visible, work, steps, unfinished, pos, current, currentIndex, positionIndex, resolved, actor, role, ability, query,
     eligible, direct, canTarget, question, answerQuestion, skipReason, settled, moonchildChoice, regurgitation, needed, picks, guessFor, inlineInformation, preparedInformation, butlerTurn, barberTurn, bureaucrat, manual, manualRavenkeeper, correction,
-    workspace, setWorkspace, setPaused, error, setError, success, successorChoice, picker, refused, owner, actionContext,
+    workspace, setWorkspace, setPaused, error, setError, success, successorChoice, tapRuling: pendingRuling, answerTapRuling, picker, refused, owner, actionContext,
     navigate, gotoCheckpoint, prev, next, beginDay, openWorkspace, openTrigger, requireManual, finish,
   };
 }

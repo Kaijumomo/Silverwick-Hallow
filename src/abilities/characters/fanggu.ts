@@ -30,10 +30,9 @@ import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nameOf, n
  * A player who might register as an Outsider or not (a Recluse, a Spy) is the Storyteller's ruling, asked once per player, only while
  * ONCE is not recorded. By hand (Manual): a Traveller or a concealed identity in the jump, an unofficial character, an unrecorded
  * alignment, or a Fang Gu who cannot die tonight while its jump would happen (the pages do not say what then).
- * ONCE done by hand: a jump the Storyteller resolved by hand (any Manual case above) records no ONCE. So while ONCE is not recorded
- * and a Fang Gu has already died this game (a dead player who is a Fang Gu, or a death recorded as a Fang Gu's), a jump first asks
- * the Storyteller whether a Fang Gu has already taken an Outsider's place. Yes: the Outsider dies as normal and ONCE is recorded in
- * the same commit. No: the jump goes ahead.
+ * ONCE on the board (PO 2026-11-21): the jump also places the official ONCE reminder beside the new Fang Gu (one commit, one Undo).
+ * The reminder is notation; the game-rule fact stays the only truth (Reminders are never mechanics input). A jump resolved by hand
+ * records no fact by itself.
  * Drunk or poisoned: the choice is made and nothing happens; ONCE is not recorded. A Scarlet Woman in play keeps the action by hand
  * (the official jinx is the Storyteller's judgment, plan 5A-3). The +1 Outsider is the setup count policy (setupPolicies.ts).
  */
@@ -41,17 +40,8 @@ export const FANG_GU_TARGET = "target";
 /** The Storyteller's ruling whether this chosen player registers as an Outsider to the Fang Gu (a Recluse, a Spy). */
 export const fangGuRegistersAsOutsiderId = (participantId: string) => `fanggu:registersAsOutsider:${JSON.stringify(participantId)}`;
 
-/** The Storyteller's ruling whether a Fang Gu has already taken an Outsider's place this game (ONCE done by hand, or before SV-2). */
-export const FANG_GU_ONCE_BY_HAND = "fanggu:onceByHand";
-
-/** Evidence that a jump may already have happened by hand: a Fang Gu has died this game (never the actor). */
-function earlierFangGuDeath(context: AbilityEvaluationContext): boolean {
-  const { game } = context.query;
-  const me = context.actor.player.participantId;
-  if (Object.values(game.players).some((p) => !p.alive && p.actualRole === "fanggu" && p.participantId !== me)) return true;
-  return (game.lifeEventWindow?.events ?? []).some((event) => (event.kind === "death" || event.kind === "execution")
-    && event.actualRoleAtEvent === "fanggu" && event.subject?.participantId !== me);
-}
+/** The official ONCE reminder (roles.json: Fang Gu "Once"). */
+export const FANG_GU_ONCE_LABEL = "Once";
 
 const concealed = (p: STPlayerRecord) => p.shownRole !== p.actualRole || needsShownIdentity(p.actualRole) || CONCEALED_MODES.includes(p.behaviorMode);
 
@@ -87,11 +77,10 @@ export const FANG_GU: AbilityDescriptor = {
     if (death.kind === "ask") return ask(death.message, death.requirement);
     // "If the Fang Gu attacks an Outsider but that Outsider does not die, that Outsider does not become an evil Fang Gu."
     if (death.kind === "survives") return survivedOutcome(death);
-    const kill = (recordOnce = false): AbilityEvaluation => {
+    const kill = (): AbilityEvaluation => {
       const succession = scarletWomanSuccession(query, target);
       if (succession.kind !== "none") return { kind: "unsupported", message: succession.kind === "manual" ? succession.reason : "A Scarlet Woman succession for this Demon is not modeled -- resolve manually." };
-      if (!recordOnce) return tokenOutcome(context, "fanggu", [lifeOperation([{ kind: "death", target }])]);
-      return tokenOutcome(context, "fanggu", [lifeOperation([{ kind: "death", target }]), { domain: "gameRuleFact", intents: [{ kind: "apply", type: FANG_GU_ONCE }] }], true);
+      return tokenOutcome(context, "fanggu", [lifeOperation([{ kind: "death", target }])]);
     };
     const once = query.gameRuleFact(FANG_GU_ONCE);
     if (!once.known) return { kind: "unsupported", message: once.reason };
@@ -100,15 +89,6 @@ export const FANG_GU: AbilityDescriptor = {
     const jump = outsiderJump(context, victim);
     if (typeof jump !== "boolean") return jump;
     if (!jump) return kill();
-    // ONCE may already have happened by hand: the Storyteller says so before a second jump.
-    if (earlierFangGuDeath(context)) {
-      const ruling = answerOf(context.inputs, FANG_GU_ONCE_BY_HAND, "boolean");
-      if (!ruling) {
-        return ask("A Fang Gu has died this game, but ONCE is not recorded.",
-          { id: FANG_GU_ONCE_BY_HAND, kind: "boolean", source: "storyteller", label: "A Fang Gu already took an Outsider's place this game" });
-      }
-      if (ruling.value) return kill(true);
-    }
 
     // The 1st Outsider this kills becomes an evil Fang Gu & the Fang Gu dies instead.
     if (victim.isTraveler) return { kind: "unsupported", message: "A Traveller is involved: resolve the Fang Gu's jump by hand." };
@@ -132,6 +112,7 @@ export const FANG_GU: AbilityDescriptor = {
     if (victim.actualAlignment !== "evil") operations.push({ domain: "alignment", intents: [changeAlignmentIntent(victim, "evil")] });
     operations.push(
       { domain: "gameRuleFact", intents: [{ kind: "apply", type: FANG_GU_ONCE }] },
+      { domain: "reminder", intents: [{ kind: "place", target, reminder: { label: FANG_GU_ONCE_LABEL, sourceCharacter: "fanggu", source: context.actor.binding } }] },
       { domain: "nightStep", day: query.game.day, stepKey: participantStepKey(victim.participantId!, "fanggu"), status: "skipped" },
     );
     return tokenOutcome(context, "fanggu", operations, true);

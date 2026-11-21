@@ -8,7 +8,7 @@ Four facts carry many rows:
 
 - **The reviewed-list gate.** Three characters of the script are still not on the reviewed list: the Philosopher, Evil Twin and Cerenovus. While any of them is in play, both SV-2 steps are the Storyteller's (Manual). Tested for all 6 pairs in one scenario; the other 17 characters leave both steps guided (one scenario).
 - **The shared impairment query.** A drunk or poisoned Snake Charmer or Fang Gu (from the Sweetheart, the No Dashii, the Snake Charmer's own poison, or a hand-placed Effect) makes the choice and nothing happens.
-- **ONCE done by hand.** A Fang Gu jump resolved by hand (any Manual case) records no ONCE. While ONCE is not recorded and a Fang Gu has died this game, a jump first asks the Storyteller whether a Fang Gu has already taken an Outsider's place; Yes kills the Outsider and records ONCE in the same commit (test, fanggu.test.ts).
+- **ONCE on the board (PO 2026-11-21).** A jump places the official ONCE reminder beside the new Fang Gu, in the same commit. The reminder is a note; the game-rule fact is the truth. A jump resolved by hand records no fact by itself, and a ONCE placed by hand is a note only (how a hand-placed ONCE should count is an open PO decision). With the fact recorded, an Outsider the Fang Gu kills dies as normal, and nothing is asked (test, fanggu.test.ts).
 - **Information stays with the Storyteller.** The information characters of the script are answered by hand today. A swap or a jump changes who is the Demon and who is evil; those answers stay the Storyteller's, who sees the recorded characters and alignments.
 
 | # | Pair | Assessment | What the app does | Evidence |

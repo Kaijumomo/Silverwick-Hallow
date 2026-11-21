@@ -1,5 +1,6 @@
-// SV-2a -- the Snake Charmer's Night step in the existing Night panel: tapped on the board like the Imp's; a Recluse's registration
-// falls back to the existing ability workspace, whose final answer is the action (strict gameplay: no second dialog; Undo reverts).
+// SV-2a/SV-2c -- the Snake Charmer's Night step in the existing Night panel: tapped on the board like the Imp's. A Recluse's
+// registration is asked on the Night card in the Barber card's compact style (PO review 2026-11-21); the answer is the action (one
+// Undo). After a swap the card offers YOU ARE for both players, and the counter stays on the Snake Charmer's row.
 import { StrictMode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
@@ -46,14 +47,41 @@ it("choosing a player who is not the Demon closes the step and changes nothing",
   expect(game().nightProgress[`2:${participantStepKey(game().players.p0!.participantId!, "snakecharmer")}`]?.status).toBe("done");
 });
 
-it("a Recluse: the Storyteller rules in the existing workspace; nothing changes before the answer, and Yes swaps in one commit", () => {
-  show(patchPlayer(proofGame(ROLES), "p4", { actualRole: "recluse", shownRole: "recluse", actualAlignment: "good" }));
+it("a Recluse: a compact Yes or No on the Night card (no workspace); nothing changes before the answer, Yes swaps in one commit, No changes nothing, Choose again drops the tap", () => {
+  const recluse = patchPlayer(proofGame(ROLES), "p4", { actualRole: "recluse", shownRole: "recluse", actualAlignment: "good" });
+  show(recluse);
   tap("p4");
   expect(game().players.p0!.actualRole).toBe("snakecharmer");
-  // The workspace's "Further choices" row carries the question; nothing is recorded before the answer.
-  expect(screen.getByText("Player 4 registers as a Demon")).toBeInTheDocument();
-  fireEvent.click(within(screen.getByRole("radiogroup", { name: "Player 4 registers as a Demon" })).getByRole("radio", { name: "Yes" }));
+  expect(screen.getByText("Does Player 4 register as a Demon?")).toBeInTheDocument();
+  expect(screen.queryByText("On Table")).toBeNull();
+  expect(screen.queryByRole("radiogroup")).toBeNull();
+  expect(useTargetPicker.getState().active).toBeNull();
+  // Choose again: the tap is dropped and the board asks again.
+  fireEvent.click(screen.getByRole("button", { name: "Choose again" }));
+  expect(screen.queryByText("Does Player 4 register as a Demon?")).toBeNull();
+  expect(useTargetPicker.getState().active?.label).toBe("Choose an alive player");
+  tap("p4");
+  fireEvent.click(within(screen.getByRole("group", { name: "Your ruling" })).getByRole("button", { name: "No" }));
+  expect(game().players.p0!.actualRole).toBe("snakecharmer");
+  expect(game().nightProgress[`2:${participantStepKey(game().players.p0!.participantId!, "snakecharmer")}`]?.status).toBe("done");
+  act(() => { store.getState().undo(); });
+  tap("p4");
+  fireEvent.click(within(screen.getByRole("group", { name: "Your ruling" })).getByRole("button", { name: "Yes" }));
   expect(game().players.p0).toMatchObject({ actualRole: "recluse", actualAlignment: "good" });
   expect(game().players.p4).toMatchObject({ actualRole: "snakecharmer", actualAlignment: "good" });
   expect(store.getState().undoStack).toHaveLength(1);
+});
+
+it("after a swap: YOU ARE for the new Demon and the new Snake Charmer, each with their alignment; the counter stays on the Snake Charmer's row; Undo removes the rows", () => {
+  show();
+  const counter = () => screen.getByText(/^\d+ \/ \d+$/).textContent;
+  const before = counter();
+  tap("p1");
+  expect(screen.getByRole("button", { name: "Wake Player 0: You Are" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Wake Player 1: You Are" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "You Are Evil" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "You Are Good" })).toBeInTheDocument();
+  expect(counter()).toBe(before);
+  act(() => { store.getState().undo(); });
+  expect(screen.queryByRole("button", { name: /^Wake Player 0: You Are/ })).toBeNull();
 });
