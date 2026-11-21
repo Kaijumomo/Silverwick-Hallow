@@ -32,6 +32,7 @@ import { answerOf, ask, firstParticipant, nameOf, nothing, outcome, requireLivin
  * With two Demons alive, the one chosen swaps. By hand (Manual): a Traveller or a concealed identity on either side, a character
  * that is not a verified official one, or an alignment that is not recorded.
  * Drunk or poisoned (or a Drunk shown the Snake Charmer): the choice is made and nothing happens.
+ * A Philosopher who gained this ability runs this same step (SV-3b): its own character, the Philosopher, is what the Demon gets.
  * Not built here: what the new Demon learns on the first night (the pages say only YOU ARE and the token; the Storyteller decides).
  */
 export const SNAKE_CHARMER_TARGET = "target";
@@ -97,7 +98,9 @@ export const SNAKE_CHARMER: AbilityDescriptor = {
     // 4. Tonight's steps: the new Snake Charmer does not choose again; a character whose place tonight has passed does not wake.
     const firstNight = query.game.day === 1;
     const at = canonicalOrder("snakecharmer", firstNight) ?? 0;
-    operations.push({ domain: "nightStep", day: query.game.day, stepKey: participantStepKey(picked.participantId!, "snakecharmer"), status: "skipped" });
+    // SV-3b: a Philosopher with the Snake Charmer's ability gives the Demon the Philosopher ("the Demon becomes a poisoned Philosopher"),
+    // so the step skipped is that of the character the old Demon is given.
+    operations.push({ domain: "nightStep", day: query.game.day, stepKey: participantStepKey(picked.participantId!, mine.id), status: "skipped" });
     if ((canonicalOrder(theirs.id, firstNight) ?? Infinity) < at) {
       operations.push({ domain: "nightStep", day: query.game.day, stepKey: participantStepKey(me.participantId!, theirs.id), status: "skipped" });
     }

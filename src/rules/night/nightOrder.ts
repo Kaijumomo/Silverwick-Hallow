@@ -1,4 +1,4 @@
-import type { PlayerId, RoleId, RoleType, STPlayerRecord, Script } from "@/stores/types";
+import type { PlayerId, RoleId, RoleType, STPlayerRecord, Script, StorytellerLobbyRecord } from "@/stores/types";
 import { buildRegistry } from "@/data/roleRegistry";
 import { canonicalOrder, canonicalRoles, isCanonicalRole, roleAuthority } from "@/data/canonical";
 import { wakeIdentity } from "@/stores/wakeIdentity";
@@ -8,6 +8,8 @@ import { hasEffect } from "@/stores/effects";
 import { TOYMAKER_DEMON_SKIP_OCCURRED } from "@/stores/gameRuleFacts";
 import { FANG_GU_ONCE } from "@/stores/gameRuleFactRegistry";
 import { participantScopedStepKey, participantStepKey, stepParticipantOf, travelerArrivalStepKey } from "@/stores/nightProgress";
+import { gainedRecordOf, gainedRoleOf } from "@/stores/gainedAbility";
+import { isDeathEvent, lifeEventsAt } from "@/stores/lifeEvents";
 
 export type NightStep =
   | {
@@ -45,6 +47,9 @@ export type NightStep =
       actualRoleId: RoleId;
       actualRoleName: string;
       shownRoleId: RoleId;
+      /** SV-3a: this row is an ability the player GAINED (the Philosopher's chosen character), named by the character that gained
+       * it. `effectiveRoleId` is the gained character; the player's own character is `actualRoleId`. */
+      gainedFrom?: RoleId;
     };
 
 
@@ -54,7 +59,10 @@ type GlobalStep = Extract<NightStep, { kind: "global" }>;
 const FIRST_NIGHT_ADMIN = new Set(["king", "marionette", "snitch", "magician", "poppygrower"]);
 const DEATH_CHECKS = new Set(["ravenkeeper", "sage", "barber", "sweetheart", "moonchild",
   "grandmother", "banshee", "choirboy", "godfather", "gossip", "tinker", "hatter", "plaguedoctor", "farmer"]);
-const COMPLEX_ABILITIES = new Set(["alchemist", "philosopher", "cannibal", "amnesiac", "boffin", "apprentice"]);
+const COMPLEX_ABILITIES = new Set(["alchemist", "cannibal", "amnesiac", "boffin", "apprentice"]);
+/** SV-3a: a once-per-game wake that stops waking once used (the Philosopher wakes "each night" until they choose). The night it is
+ * used, its row stays (done). */
+const WAKES_UNTIL_USED = new Set(["philosopher"]);
 
 export function computeNightOrder(
   players: Record<PlayerId, STPlayerRecord>,
@@ -194,6 +202,8 @@ export function computeNightOrder(
       continue;
     }
     if (!isFirstNight && roleId === "poppygrower" && !isDeceived) continue;
+    if (WAKES_UNTIL_USED.has(roleId) && canonical && player.abilityUsed
+      && !context.nightProgress?.[`${context.day}:${participantStepKey(player.participantId, roleId)}`]) continue;
     // SV-1 (https://wiki.bloodontheclocktower.com/Juggler): "On your 1st day, publicly guess ... That night, you learn how many you got
     // correct." The Juggler wakes once: on the night after the first Day as the Juggler -- Night 2 from the deal, or the night after a
     // change (a Barber swap, the Pit-Hag, by hand; becoming the Juggler again is a fresh start). Where that is not known (a game saved
@@ -254,8 +264,73 @@ export function computeNightOrder(
       actualRoleName: registry.get(player.actualRole)?.name ?? player.actualRole, shownRoleId: roleId,
     });
   }
+  // The gained rows; the used flag is copied here, in the one reviewed snapshot unit (lifeAbilityUse guard).
+  steps.push(...gainedSteps(seated, registry, isFirstNight, context).map(({ player, step }) => ({ ...step, abilityUsed: player.abilityUsed })));
   return steps.sort((a, b) => a.order - b.order ||
     (a.kind === "player" && b.kind === "player" ? a.seat - b.seat : a.kind === b.kind ? 0 : a.kind === "global" ? -1 : 1));
+}
+
+/**
+ * SV-3a (https://wiki.bloodontheclocktower.com/Philosopher): "If the Philosopher gains an ability that works at night, they wake when
+ * that character would wake. If this ability is used on the first night only, they use it tonight." One row per gained ability, at the
+ * gained character's place, with its own instruction, keyed by the player and the gained character. The night it was gained, a place
+ * that has already passed waits for the next night, and a first-night-only ability is listed right after the gainer's own step. A
+ * Juggler's ability works on the night after the gainer's first Day with it. A gained ability that only acts after its holder dies
+ * (Sage, Barber, Sweetheart...) is listed only when the gainer died during the Day just ended or tonight (or that is unknown).
+ * Derived from the gained record on every call, so Undo and reload need nothing.
+ */
+type GainedStep = { player: STPlayerRecord; step: Omit<Extract<NightStep, { kind: "player" }>, "abilityUsed"> };
+function gainedSteps(seated: (STPlayerRecord & { participantId: string })[], registry: ReturnType<typeof buildRegistry>, isFirstNight: boolean, context: NightContext): GainedStep[] {
+  const out: GainedStep[] = [];
+  for (const player of seated) {
+    const record = gainedRecordOf(player);
+    const gained = gainedRoleOf(player);
+    if (!record || !gained || player.isTraveler) continue;
+    const wake = wakeIdentity(player, registry);
+    const role = registry.get(gained);
+    const own = registry.get(player.actualRole);
+    if (!wake || wake.simulated || !role || !own) continue;
+    const day = context.day;
+    const tonight = day !== undefined && record.appliedAt?.phase === "night" && record.appliedAt.day === day;
+    const firstOnly = !!role.firstNight && !role.otherNight;
+    const ownOrder = (isFirstNight ? own.firstNight : own.otherNight) ?? 0;
+    let order: number | undefined;
+    let firstPass = isFirstNight;
+    if (isFirstNight) order = role.firstNight;
+    else if (firstOnly) { order = tonight ? ownOrder + 0.01 : undefined; firstPass = true; }
+    else order = role.otherNight;
+    if (order === undefined || order === 0 || !Number.isFinite(order) || order < 0) continue;
+    if (tonight && order < ownOrder) continue;
+    if (!isFirstNight && gained === "juggler" && (day === undefined || record.appliedAt?.day === undefined || day !== record.appliedAt.day + 1)) continue;
+    const afterDeath = DEATH_CHECKS.has(gained);
+    if (afterDeath && (player.alive || !diedTodayOrTonight(player, context))) continue;
+    if (!player.alive && !afterDeath) continue;
+    const prompt = firstPass ? (role.firstNightPrompt ?? role.firstNightReminder ?? role.ability ?? "") : (role.otherNightPrompt ?? role.otherNightReminder ?? role.ability ?? "");
+    if (!prompt.trim()) continue;
+    let advisory = `Gained from the ${own.name}.`;
+    if (afterDeath) advisory += " Check the ability's death/event condition tonight; historical triggers are not tracked.";
+    if (hasEffect(player, "poisoned") || hasEffect(player, "drunk") || player.behaviorMode === "poisoned")
+      advisory += " Impaired: simulate the procedure as appropriate; do not apply a functioning ability or assume truthful information.";
+    out.push({ player, step: {
+      kind: "player", stepKey: participantStepKey(player.participantId, gained), playerId: player.id, participantId: player.participantId,
+      playerName: player.name, seat: player.seat, alive: player.alive,
+      effectiveRoleId: gained, effectiveRoleName: role.name, roleType: role.type, prompt, reminder: role.ability ?? "", order, advisory,
+      isDeceived: false, actualRoleId: player.actualRole, actualRoleName: own.name, shownRoleId: gained, gainedFrom: player.actualRole,
+    } });
+  }
+  return out;
+}
+
+/** Whether this player died during the Day just ended or tonight; unknown coverage counts as yes (the Storyteller checks). */
+function diedTodayOrTonight(player: STPlayerRecord, context: NightContext): boolean {
+  const game = context as NightContext & Partial<Pick<StorytellerLobbyRecord, "phase" | "lifeEventWindow">>;
+  if (!game.lifeEventWindow || game.phase === undefined || context.day === undefined) return true;
+  const windows = [{ phase: "night" as const, day: context.day }, ...(context.day > 1 ? [{ phase: "day" as const, day: context.day - 1 }] : [])];
+  return windows.some((moment) => {
+    const deaths = lifeEventsAt({ phase: game.phase!, day: context.day!, lifeEventWindow: game.lifeEventWindow! }, moment,
+      (event) => isDeathEvent(event) && event.subject.participantId === player.participantId);
+    return deaths.status !== "known" || deaths.events.length > 0;
+  });
 }
 
 /** The Day number of this player's first Day with their current character, or null when that is not known. */

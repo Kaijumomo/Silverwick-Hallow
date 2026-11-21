@@ -1,5 +1,5 @@
 // @vitest-environment node
-// F-20: the Gambler's guess picker shows character tokens only; every other "show" picker keeps the holders and bluff marks.
+// F-20: the Gambler's guess picker (and SV-3, the Philosopher's choice) shows character tokens only; every other "show" picker keeps the holders and bluff marks.
 import { beforeEach, describe, expect, it } from "vitest";
 import { buildPicker, type PickerEnv } from "./picker";
 import { useV6Ui } from "../v6Store";
@@ -20,6 +20,13 @@ describe("show picker (F-20)", () => {
     const tiles = tilesOf(open({ tokensOnly: true }));
     expect(tiles.length).toBeGreaterThan(20);
     expect(tiles.filter((t) => t.hasTag)).toEqual([]);
+  });
+
+  it("tokensOnly with a type limit (the Philosopher's picker): no names, and the other types stay locked", () => {
+    const tiles = tilesOf(open({ tokensOnly: true, title: "Choose a good character", types: ["townsfolk", "outsider"] })) as Array<Tile & { opacity: number }>;
+    expect(tiles.filter((t) => t.hasTag)).toEqual([]);
+    expect(tiles.find((t) => t.name === "Imp")?.opacity).toBe(0.4);
+    expect(tiles.find((t) => t.name === "Chef")?.opacity).toBe(1);
   });
 
   it("the ordinary show picker still names who holds a character", () => {

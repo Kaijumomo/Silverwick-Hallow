@@ -1,11 +1,12 @@
 import { isCanonicalRole } from "@/data/canonical";
-import { causeBypassesEffectProtection, isNeighbourPoisoner, lifeRuleReadsSeating, observerRegistrationDecision, passiveProtection, passiveInformationModifiers, passiveRegistrationOptions, survivesFirstDeath, type LifeRuleCause } from "@/abilities/characters/passiveRules";
+import { causeBypassesEffectProtection, drunksGainedCharacter, isNeighbourPoisoner, lifeRuleReadsSeating, observerRegistrationDecision, passiveProtection, passiveInformationModifiers, passiveRegistrationOptions, survivesFirstDeath, type LifeRuleCause } from "@/abilities/characters/passiveRules";
 import { isInnkeeperSelfEffect, isPoisonerSelfEffect } from "@/abilities/characters/poisonerRules";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { activeModifiers, gateEvaluation, type HookScope, type ModifierDefinition, type ModifierGate } from "@/abilities/modifiers";
 import { resolveAbilitySemantics, type AbilitySemanticsRegistry } from "@/abilities/semantics";
 import { currentLiveMoment, lifeEventsAt, type LifeEventQueryResult } from "./lifeEvents";
 import { gameRuleFactActive, gameRuleFactDefinition } from "./gameRuleFacts";
+import { gainedRoleOf } from "./gainedAbility";
 import type { ParticipantBinding } from "./abilityResolution";
 import type { Alignment, EffectRecord, LifeEvent, LiveGameMoment, RoleDef, RoleId, RoleType, STPlayerRecord, Script, StorytellerLobbyRecord } from "./types";
 
@@ -54,9 +55,12 @@ const unknown = <T,>(reason: string): QueryAnswer<T> => ({ known: false, reason 
  *    matrix Section 7). It applies exactly while active, with NO dependence on
  *    any source functioning; only the evaluator that owns the fact decides
  *    when it matters. It is never a Reminder.
+ *  - gainedAbility (SV-3a): the bearer has gained another character's
+ *    ability (stores/gainedAbility.ts). It applies while the bearer is still
+ *    the character that gained it; it is never an impairment or a protection.
  */
 export type DeathOutcomeAnswer = { kind: "dies" } | { kind: "survives"; spends: boolean };
-export type EffectSemantics = "impairment" | "noAbility" | "demonProtection" | "deathImmunity" | "executionProtection" | "genericProtection" | "judgment" | "storytellerFact" | "curse" | "retainedAbility";
+export type EffectSemantics = "impairment" | "noAbility" | "demonProtection" | "deathImmunity" | "executionProtection" | "genericProtection" | "judgment" | "storytellerFact" | "curse" | "retainedAbility" | "gainedAbility";
 export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>> = {
   drunk: "impairment",
   poisoned: "impairment",
@@ -89,6 +93,8 @@ export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>
   survivesExecution: "executionProtection",
   /** LS-2c: the Devil's Advocate's choice, remembered (no source; the chooser is a parameter) so it cannot repeat the next night. */
   devilsAdvocateChoice: "storytellerFact",
+  /** SV-3a: the Philosopher's chosen character, gained as an ability (the official IS THE PHILOSOPHER token when the token was swapped). */
+  gainedAbility: "gainedAbility",
 };
 export const effectSemanticsOf = (type: string): EffectSemantics | undefined =>
   Object.prototype.hasOwnProperty.call(APPROVED_EFFECT_SEMANTICS, type) ? APPROVED_EFFECT_SEMANTICS[type] : undefined;
@@ -147,6 +153,9 @@ export type RulesQuery = {
   abilityFunctions: (binding: ParticipantBinding) => QueryAnswer<boolean>;
   /** Whether a living, functioning No Dashii poisons this player through its passive (derived, never stored). */
   noDashiiPoisoned: (binding: ParticipantBinding) => QueryAnswer<boolean>;
+  /** SV-3a: whether this player is drunk because a living, functioning player gained their (actual) character's ability -- the
+   * Philosopher's "If this character is in play, they are drunk" (derived, never stored). */
+  gainedAbilityDrunk: (binding: ParticipantBinding) => QueryAnswer<boolean>;
   /** Protection against a death of `cause`. `generic` Protected never answers
    * "protected" automatically. LS-2a causes: "demon", "execution", "assassin"
    * (goes around every prevention, Effects included) and "any" (any other death). */
@@ -238,6 +247,8 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     const semantics = effectSemanticsOf(effect.type);
     if (!semantics) return unknown(`"${effect.type}" is a custom Effect: Silverwick applies no rule to it by name.`);
     if (semantics === "storytellerFact") return known(true); // as recorded; no source dependence
+    // SV-3a: a gained ability is the bearer's own while the bearer is still the character that gained it (derived, never rewritten).
+    if (semantics === "gainedAbility") return known(!!effect.sourceCharacter && holder.actualRole === effect.sourceCharacter);
     // Vigormortis: the retained ability stops if the holder is no longer a Minion (derived, nothing is rewritten).
     if (semantics === "retainedAbility" && environment.registry.get(holder.actualRole)?.type !== "minion") return known(false);
     const key = `${holder.participantId}:${effect.id}`;
@@ -340,6 +351,25 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     return undetermined ? unknown(undetermined) : known(false);
   };
 
+  /** SV-3a: a player who truly holds (actual character) the character a living, functioning gainer gained is drunk. Derived from
+   * Current State on every query, so it follows the gainer's death, impairment and character change, and a character that comes
+   * into play later, with no hook anywhere else. A Drunk or Marionette who only believes they are that character is not its holder. */
+  const gainedDrunk = (holder: STPlayerRecord, visiting: Set<string>): QueryAnswer<boolean> => {
+    if (!holder.actualRole) return known(false);
+    let undetermined: string | null = null;
+    for (const source of seated()) {
+      if (source.id === holder.id || !source.alive || !drunksGainedCharacter(source.actualRole) || gainedRoleOf(source) !== holder.actualRole) continue;
+      const role = environment.registry.get(source.actualRole);
+      if (!role || !isCanonicalRole(role)) continue;
+      const key = `gained:${source.participantId}:${holder.participantId}`;
+      if (visiting.has(key)) { undetermined ??= "These Effects depend on each other: the Storyteller decides."; continue; }
+      const functioning = functions(source, new Set(visiting).add(key));
+      if (!functioning.known) { undetermined ??= functioning.reason; continue; }
+      if (functioning.value) return known(true);
+    }
+    return undetermined ? unknown(undetermined) : known(false);
+  };
+
   /** Impairment of `player`: any applicable impairment Effect -> impaired;
    * any unknown one -> unknown; none -> not impaired. */
   const impairedOf = (player: STPlayerRecord, visiting: Set<string>, kinds: readonly EffectSemantics[]): QueryAnswer<boolean> => {
@@ -348,6 +378,9 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
       const derived = noDashiiPoison(player, visiting);
       if (!derived.known) undetermined = derived.reason;
       else if (derived.value) return known(true);
+      const drunk = gainedDrunk(player, visiting);
+      if (!drunk.known) undetermined ??= drunk.reason;
+      else if (drunk.value) return known(true);
     }
     for (const effect of player.effects) {
       const semantics = effectSemanticsOf(effect.type);
@@ -513,6 +546,7 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     retainsAbility: (binding) => require(binding, (player) => retained(player, new Set())),
     abilityFunctions: (binding) => require(binding, (player) => functions(player, new Set())),
     noDashiiPoisoned: (binding) => require(binding, (player) => noDashiiPoison(player, new Set())),
+    gainedAbilityDrunk: (binding) => require(binding, (player) => gainedDrunk(player, new Set())),
     protectedFrom: (binding, cause) => protection(binding, cause, false),
     deathOutcome: (binding, cause) => {
       const survives = survivesFirstDeath(self, binding, cause);

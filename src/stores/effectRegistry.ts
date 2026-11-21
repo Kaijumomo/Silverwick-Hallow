@@ -80,6 +80,8 @@ const DEFINITIONS: Record<string, EffectDefinition> = {
     description: "The Devil's Advocate's chosen player: if executed before dusk, they do not die, while the Devil's Advocate has the ability." },
   devilsAdvocateChoice: { type: "devilsAdvocateChoice", label: "Devil's Advocate's choice", indicator: "marked",
     description: "The player the Devil's Advocate chose; it cannot choose them again the next night. It draws no token." },
+  gainedAbility: { type: "gainedAbility", label: "Gained ability", indicator: "abilityState",
+    description: "The Philosopher's chosen character: the ability it gained. The board draws IS THE PHILOSOPHER when its token was swapped." },
   soberHealthy: { type: "soberHealthy", label: "Sober & healthy", indicator: "soberHealthy" },
   abilityLost: { type: "abilityLost", label: "No ability", indicator: "abilityLost" },
   mad: { type: "mad", label: "Mad", indicator: "mad" },

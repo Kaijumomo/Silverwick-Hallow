@@ -46,7 +46,8 @@ describe("coverage level and evidence (Stage 5A-1)", () => {
     // SV-2a moved the Snake Charmer from generic to guided (a wake: characters, alignments and a permanent poison in one resolution).
     // Against the v3 plan table (state at c4e884e): the ten Stage 4 characters moved from generic to reviewed (PR #26);
     // Bone Collector (night-guide prompt), Goon (Moonchild interaction) and Thief, Gunslinger, Scapegoat, Beggar (game-ending allow-list) were found to have a support piece.
-    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 31, reviewed: 28, partial: 61, generic: 61 });
+    // SV-3a moved the Philosopher from partial to guided (a wake: the choice, a gained-ability record and the derived DRUNK in one resolution).
+    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 32, reviewed: 28, partial: 60, generic: 61 });
   });
 
   it("level follows the facts the gates read", () => {
