@@ -55,6 +55,7 @@ it("tap a good player: the picker offers only Minions and Demons, tokens only; t
 });
 
 it("tap an evil player: the picker offers only Townsfolk and Outsiders; the Wake row shows good first, and one screen shows both", () => {
+  vi.useFakeTimers();
   show();
   tap("p3");
   expect(picker()).toMatchObject({ title: "Choose a false good character", types: ["townsfolk", "outsider"] });
@@ -67,6 +68,11 @@ it("tap an evil player: the picker offers only Townsfolk and Outsiders; the Wake
   expect(JSON.stringify(shownNow)).toContain("One of These Is Correct");
   expect(JSON.stringify(shownNow).indexOf("Artist")).toBeLessThan(JSON.stringify(shownNow).indexOf("Vigormortis"));
   expect(JSON.stringify(shownNow)).not.toContain("in Play");
+  // The tokens are information to show: like any information step, the card waits for Next and never moves on by itself.
+  act(() => { vi.advanceTimersByTime(5000); });
+  expect(screen.getByRole("group", { name: `Wake ${game().players.p0!.name}` })).toBeInTheDocument();
+  expect(screen.queryByText("Continuing…")).toBeNull();
+  vi.useRealTimers();
 });
 
 it("a Traveller cannot be chosen", () => {

@@ -481,12 +481,13 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   }, []);
   // A guided success that is not a direct board pick (or an information action) moves on by itself.
   // A direct pick waits for Next: its target stays correctable without a timer racing the Storyteller.
+  // SV-5c: the Dreamer's two tokens are information to show, so like any information step they wait for Next.
   useEffect(() => {
-    if (direct || inlineInformation || !success || !visible || success.key !== current?.stepKey || success.game !== game) return;
+    if (direct || inlineInformation || dreamerTurn || !success || !visible || success.key !== current?.stepKey || success.game !== game) return;
     const timer = window.setTimeout(advance, 2200);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [direct, inlineInformation, success, visible, current?.stepKey, game]);
+  }, [direct, inlineInformation, dreamerTurn, success, visible, current?.stepKey, game]);
   useEffect(() => {
     if (successorChoice && (successorChoice.game !== game || successorChoice.stepKey !== current?.stepKey)) setSuccessorChoice(null);
     if (tapRuling && (tapRuling.game !== game || tapRuling.stepKey !== current?.stepKey)) setTapRuling(null);
