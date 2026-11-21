@@ -56,6 +56,7 @@ it("a Recluse: a compact Yes or No on the Night card (no workspace); nothing cha
   expect(screen.queryByText("On Table")).toBeNull();
   expect(screen.queryByRole("radiogroup")).toBeNull();
   expect(useTargetPicker.getState().active).toBeNull();
+  expect(screen.queryByRole("button", { name: "Continue action" })).toBeNull();
   // Choose again: the tap is dropped and the board asks again.
   fireEvent.click(screen.getByRole("button", { name: "Choose again" }));
   expect(screen.queryByText("Does Player 4 register as a Demon?")).toBeNull();

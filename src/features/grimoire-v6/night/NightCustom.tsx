@@ -177,7 +177,7 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
       } else if (!done && engine.bureaucrat && engine.actor?.participantId) {
         rows.push(<BureaucratAction key={`${engine.actor.participantId}:${current.stepKey}`} source={{ playerId: engine.actor.id, participantId: engine.actor.participantId }}
           visible={engine.visible} completeStep={{ day: game.day, stepKey: current.stepKey }} onResolved={engine.finish} />);
-      } else if (!done && !engine.manual && !engine.canTarget) {
+      } else if (!done && !engine.manual && !engine.canTarget && !engine.tapRuling) {
         rows.push(<button key="continue" type="button" className="btn btn-gold" onClick={() => engine.openWorkspace()}>Continue action</button>);
       }
       // T30: the Godfather's first night shows the Outsiders in play on ONE screen, like the Demon's bluffs.

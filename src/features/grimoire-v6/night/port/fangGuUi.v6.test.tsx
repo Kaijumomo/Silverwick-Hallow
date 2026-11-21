@@ -52,6 +52,7 @@ it("a Recluse: a compact Yes or No on the Night card (no workspace); Yes jumps, 
   expect(game().players.p2!.alive).toBe(true);
   expect(screen.getByText("Does Player 2 register as an Outsider?")).toBeInTheDocument();
   expect(screen.queryByText("On Table")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Continue action" })).toBeNull();
   fireEvent.click(within(screen.getByRole("group", { name: "Your ruling" })).getByRole("button", { name: "No" }));
   expect(game().players.p2).toMatchObject({ alive: false, actualRole: "recluse" });
   act(() => { store.getState().undo(); });
