@@ -13,6 +13,10 @@ import { useV6Ctx } from "../ctx";
 import { useV6Ui } from "../v6Store";
 import { executeOffered, nightExecutionWarning, runExecute } from "./madnessExecution";
 import { dayHasExecution } from "./advance";
+import { endGameEligibility } from "@/stores/endGameEligibility";
+import { goodTwinIntents } from "@/stores/twinPair";
+import { applyEffectPlan, planEffectTransaction } from "@/stores/effectResolution";
+import { proofRegistry, proofScript } from "@/test/proofFixtures";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
 // p0 cerenovus, p1 imp, p2 chef, p3 saint, p4 fool, p5 monk, p6 empath
@@ -114,6 +118,13 @@ describe("SV-4b: Execute in the Day", () => {
     await run("p3");
     expect(game().players.p3!.alive).toBe(false);
     expect(today()).toEqual([expect.objectContaining({ kind: "execution", outcome: "died", actualRoleAtEvent: "saint" })]);
+  });
+
+  it("SV-4d: that Saint's execution is captured as game-ending evidence now that the Cerenovus is on the game-ending list (a good Saint: evil wins)", async () => {
+    // (No Fool in this game: the Fool is not on the game-ending list.)
+    madGame(["p3"], "day", ["cerenovus", "imp", "chef", "saint", "monk", "empath"]);
+    await run("p3");
+    expect(endGameEligibility(game(), { registry: proofRegistry, script: proofScript })).toEqual({ kind: "verified", team: "evil", reason: "saint" });
   });
 
   it("a Fool with the ability unused is asked the existing question; surviving uses the ability up in the same step", async () => {
@@ -228,6 +239,24 @@ describe("SV-4b: Execute at night", () => {
     expect(useV6Ui.getState().toast).toContain("Player 3 is the Saint: an execution may end the game. Check before ending.");
     expect(nightExecutionWarning(game().players.p3!)).toMatch(/Saint/);
     expect(nightExecutionWarning(game().players.p2!)).toBeNull();
+  });
+
+  it("SV-4d: a Good Twin gets the same line at night; nobody else beside an Evil Twin does", async () => {
+    let g = proofGame(["cerenovus", "eviltwin", "chef", "empath", "saint"], "night", 2);
+    const built = goodTwinIntents(g, { playerId: "p1", participantId: g.players.p1!.participantId! }, { playerId: "p2", participantId: g.players.p2!.participantId! });
+    if (!built.ok) throw new Error(built.message);
+    const result = planEffectTransaction(g, { intents: built.intents }, { historyId: () => "h", effectId: () => "fx" });
+    if (!result.ok || !result.changed) throw new Error("no plan");
+    g = applyEffectPlan(g, result.plan);
+    g = { ...g, nightProgress: {} };
+    g = planned(plan(g, request(g, "p0", "cerenovus", { [CERENOVUS_TARGET]: pick(g, "p2"), [CERENOVUS_CHARACTER]: { kind: "character", roleIds: ["sage"] } }, { withStep: true, completeStep: true })));
+    openInStore(g);
+    expect(nightExecutionWarning(game().players.p2!, game().players)).toMatch(/Good Twin: an execution may end the game/);
+    expect(nightExecutionWarning(game().players.p3!, game().players)).toBeNull();
+    // With the Evil Twin dead the Good Twin's execution no longer wins anything.
+    expect(nightExecutionWarning(game().players.p2!, patchPlayer(game(), "p1", { alive: false }).players)).toBeNull();
+    await run("p2");
+    expect(useV6Ui.getState().toast).toContain("Player 2 is the Good Twin: an execution may end the game. Check before ending.");
   });
 
   it("the Mutant at night: a death, with today's execution untouched", async () => {

@@ -4,7 +4,7 @@ import { useStorytellerStore } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { formatCode } from "@/firebase/lobby";
 import { buildPlayerJoinLink, qrModules } from "@/features/newgame/qr";
-import { demonGoneAdvisory, endGameEligibility, klutzAdvisory } from "@/stores/endGameEligibility";
+import { demonGoneAdvisory, endGameEligibility, klutzAdvisory, twinAdvisory, twinGoodWinBlock, withheldGoodWinLine } from "@/stores/endGameEligibility";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
 import { iconUrlFor } from "@/data/iconUrl";
@@ -23,9 +23,21 @@ const EXTRA_COLOR = { fabled: "#e0c070", loric: "#7fc4b4" } as const;
 export function endHint(ctx: V6Ctx): string {
   const { game, script, registry } = ctx;
   if (!script || game.phase === "setup" || game.phase === "ended") return "";
-  const e = endGameEligibility(game, { registry, script });
-  // SV-1c: the Klutz's recorded choice, hidden in Privacy Mode (it names who wins).
-  if (e.kind !== "verified") return (!ctx.privacy && klutzAdvisory(game)) || (demonGoneAdvisory(game, { registry, script }) ?? "");
+  const environment = { registry, script };
+  const e = endGameEligibility(game, environment);
+  if (e.kind !== "verified") {
+    if (!ctx.privacy) {
+      // SV-4d: the Evil Twin's lines (the Good Twin's execution; "good cannot win" for each route), hidden in Privacy Mode like every line that names a character.
+      const twin = twinAdvisory(game, environment);
+      if (twin) return twin;
+      // SV-1c: the Klutz's recorded choice, hidden in Privacy Mode (it names who wins).
+      const klutz = klutzAdvisory(game, twinGoodWinBlock(game, environment)?.kind === "blocked");
+      if (klutz) return klutz;
+      const withheld = withheldGoodWinLine(game, environment);
+      if (withheld) return withheld;
+    }
+    return demonGoneAdvisory(game, environment, !ctx.privacy) ?? "";
+  }
   const side = e.team === "good" ? "Good wins" : "Evil wins";
   if (e.reason === "demonDeath") return "The Demon is dead. Good wins";
   if (e.reason === "twoAlive") return "Only two players live. Evil wins";

@@ -5,6 +5,7 @@ import { executionsAt } from "@/stores/lifeEvents";
 import { createRulesQuery } from "@/stores/rulesQuery";
 import { captureVotingContext, useStorytellerStore } from "@/stores/storytellerStore";
 import { currentVotingState } from "@/stores/voting";
+import { twinPairOf } from "@/stores/twinPair";
 import type { LifeConfirmationToken } from "@/stores/lifeResolution";
 import type { ExecutionOutcome, STPlayerRecord } from "@/stores/types";
 import type { VotingIntent } from "@/stores/votingTypes";
@@ -22,8 +23,8 @@ import { chooseAsk, confirmAsk, flash } from "../v6Store";
  *   dead" for a dead player. A second execution that Day asks the existing "Record an additional execution?" confirmation. The dock then
  *   offers Begin Night, as after any execution ("If you execute them during the day ... go to the night phase").
  * - At night the Life Event model records no executions, so this is an ordinary death and the Day's one execution stays free
- *   (the Mutant page: "An execution may still happen the next day"). A death carries no execution evidence, so a player whose
- *   execution may decide the game gets one reminder line.
+ *   (the Mutant page: "An execution may still happen the next day"). A death carries no execution evidence, so a Saint or a Good Twin,
+ *   whose execution may decide the game, gets one reminder line.
  */
 
 /** Whether the seat's menu offers Execute: a live madness from a functioning Cerenovus, or a living Mutant. Never in Privacy Mode. */
@@ -38,8 +39,12 @@ export function executeOffered(ctx: V6Ctx, player: STPlayerRecord | undefined): 
 }
 
 /** One line for a night execution whose Day equivalent would decide the game (an ordinary death records no execution evidence). */
-export function nightExecutionWarning(player: STPlayerRecord): string | null {
-  return player.actualRole === "saint" ? `${player.name || "The Saint"} is the Saint: an execution may end the game. Check before ending.` : null;
+export function nightExecutionWarning(player: STPlayerRecord, players: Readonly<Record<string, STPlayerRecord>> = {}): string | null {
+  if (player.actualRole === "saint") return `${player.name || "The Saint"} is the Saint: an execution may end the game. Check before ending.`;
+  // SV-4d: "If the good player is executed, evil wins": the Good Twin of a standing pair.
+  const pair = twinPairOf(players);
+  if (pair.kind === "single" && pair.valid && pair.good?.id === player.id && pair.evil.alive) return `${player.name || "The Good Twin"} is the Good Twin: an execution may end the game. Check before ending.`;
+  return null;
 }
 
 type Settled = { ok: true; manualReason?: string } | { ok: false; code?: string; message: string; confirmation?: LifeConfirmationToken };
@@ -70,7 +75,7 @@ export async function runExecute(ctx: V6Ctx, player: STPlayerRecord): Promise<vo
   if (game.phase === "night") {
     const result = store.getState().recordDeath(player.id, undefined, captureVotingContext());
     if (!result.ok) { flash(result.message); return; }
-    flash([`${name} is executed at night: recorded as a death. Today's execution is still free.`, nightExecutionWarning(current)].filter(Boolean).join(" "));
+    flash([`${name} is executed at night: recorded as a death. Today's execution is still free.`, nightExecutionWarning(current, game.players)].filter(Boolean).join(" "));
     return;
   }
 
