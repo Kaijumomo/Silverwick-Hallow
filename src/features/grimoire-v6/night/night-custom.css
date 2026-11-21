@@ -116,26 +116,10 @@
 }
 /* A decline (the Demon chooses nobody) is not information shown to anyone: no "Show" label. */
 .gv-night-custom .night-information-choices.night-decline::before { content: none; }
-.gv-night-custom .night-information-choices .btn {
-  min-width: 48px;
-  height: 48px;
-  min-height: 48px;
-  padding: 0 14px;
-  border-radius: 24px;
-  border: 1.5px solid var(--gvn-line);
-  background: rgba(9, 10, 15, .7);
-  color: var(--gvn-faint);
-  font-family: var(--gvn-serif);
-  font-size: 24px;
-  font-weight: 400;
-}
-.gv-night-custom .night-information-choices .btn:hover:not(:disabled) {
-  background: rgba(9, 10, 15, .7);
-  border-color: var(--gvn-accent);
-  color: var(--gvn-hot);
-}
-.gv-night-custom .night-information-choices .btn { flex: none; }
-/* A calculated answer sits in the same 48px well, drawn as the selected option. */
+/* The same compact answer buttons as the Barber's card (choice.css), sized for a number or YES / NO. */
+.gv-night-custom .night-information-choices .gv-choice-answer { flex: 0 1 auto; min-width: 64px; }
+.gv-night-custom .night-information-why { margin: 0; font-size: 13px; line-height: 1.4; color: rgba(222, 216, 204, .6); }
+/* A calculated answer is drawn as the selected one of the same answer buttons. */
 .gv-night-custom .night-information-answer {
   position: relative;
   align-self: flex-start;
@@ -143,16 +127,16 @@
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  min-width: 48px;
+  min-width: 64px;
   height: 48px;
   margin: 0 0 0 52px;
-  padding: 0 14px;
-  border-radius: 24px;
-  border: 1.5px solid var(--gvn-accent);
-  background: rgba(9, 10, 15, .7);
-  color: var(--gvn-hot);
+  padding: 0 16px;
+  border-radius: 12px;
+  border: 1px solid #e8584a;
+  background: rgba(176, 186, 204, .06);
+  color: #ece6da;
   font-family: var(--gvn-serif);
-  font-size: 24px;
+  font-size: 20px;
   line-height: 1;
 }
 .gv-night-custom .night-information-answer::before {
