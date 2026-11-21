@@ -238,6 +238,11 @@ describe("Philosopher -- Not Tonight, and which nights they wake", () => {
     }
     const sage = planned(choose(patchPlayer(proofGame(ROLES), "p5", { actualRole: "savant", shownRole: "savant" }), "sage"));
     expect(rows(nextNight(sage))).not.toContain("p0:sage");
+    // The Fang Gu kills the Philosopher the next night: the gained Sage is listed (by hand) that night.
+    const night3 = nextNight(sage);
+    const killed = planned(plan(night3, request(night3, "p1", "fanggu", { target: pick(night3, "p0") }, { withStep: true, completeStep: true })));
+    expect(killed.players.p0!.alive).toBe(false);
+    expect(rows(killed)).toContain("p0:sage");
   });
 
   it("a gained row is the Storyteller's by hand in SV-3a: no information is prepared for it, and the gained row is the gained character's", () => {
@@ -246,6 +251,17 @@ describe("Philosopher -- Not Tonight, and which nights they wake", () => {
     expect(steps).toHaveLength(1);
     expect(steps[0]).toMatchObject({ effectiveRoleId: "mathematician", shownRoleId: "mathematician", isDeceived: false, gainedFrom: "philosopher" });
     expect((steps[0] as { advisory?: string }).advisory).toMatch(/Gained from the Philosopher/);
+  });
+});
+
+describe("Philosopher -- a gained ability outside the reviewed list (custom scripts)", () => {
+  it("a gained Soldier: the engine reads protection from a player's own character, so actions go to the Storyteller while it is held", () => {
+    const g = nextNight(planned(choose(proofGame(["philosopher", "imp", "chef", "monk", "poisoner"]), "soldier")));
+    expect(plan(g, request(g, "p1", "imp", { target: pick(g, "p0") }, { withStep: true, completeStep: true })))
+      .toMatchObject({ ok: false, code: "unsupported", message: "A gained ability in play has interactions outside verified coverage." });
+    // The Sects & Violets characters were reviewed: a gained Dreamer leaves the Imp's kill guided.
+    const dreamer = nextNight(planned(choose(proofGame(["philosopher", "imp", "chef", "monk", "poisoner"]), "dreamer")));
+    expect(plan(dreamer, request(dreamer, "p1", "imp", { target: pick(dreamer, "p0") }, { withStep: true, completeStep: true }))).toMatchObject({ ok: true });
   });
 });
 

@@ -13,8 +13,11 @@ import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { participantStepKey } from "@/stores/nightProgress";
 import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/abilityUi";
 import { captureFingerprint } from "@/stores/abilityResolution";
+import { AbilityWorkspace } from "@/features/abilities/AbilityWorkspace";
+import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
+import { GAINED_BY_HAND } from "@/features/grimoire-v6/night/useNightEngine";
 import { gainedRoleOf, gainedTokenShownOf } from "@/stores/gainedAbility";
-import { impair, openInStore, proofGame, proofScript } from "@/test/proofFixtures";
+import { impair, openInStore, proofGame, proofRegistry, proofScript } from "@/test/proofFixtures";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
 const game = () => store.getState().game!;
@@ -182,4 +185,27 @@ it("SV-3b: a gained Oracle is answered on the Night card like the real one, and 
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   const delivery = game().informationDeliveries.at(-1);
   expect(delivery).toMatchObject({ actualRole: "philosopher", performedRole: "oracle", informationActionId: "oracle-other-night" });
+});
+
+it("SV-3 (independent check): on a by-hand gained row, what the Storyteller records as told keeps the gained character performed", () => {
+  const g = proofGame(ROLES, "night", 2);
+  openInStore(g);
+  expect(store.getState().resolveAbility({ mode: "guided", invocationPath: "nightOrder", roleId: "philosopher", completeStep: true,
+    fingerprint: captureFingerprint(g, "p0", { day: 2, stepKey: stepKey(g) })!, inputs: { character: { kind: "character", roleIds: ["mathematician"] } } })).toMatchObject({ ok: true });
+  openInStore({ ...game(), day: 3 });
+  function Workspace() {
+    const current = store((s) => s.game)!;
+    return <AbilityWorkspace game={current} script={proofScript} registry={proofRegistry} semantics={CANONICAL_ABILITY_SEMANTICS} descriptor={null} manualReason={GAINED_BY_HAND}
+      target={{ actorId: "p0", roleId: "mathematician", roleName: "Mathematician", invocationPath: "nightOrder", step: { day: 3, stepKey: participantStepKey(current.players.p0!.participantId!, "mathematician") } }}
+      onClose={() => {}} onResolved={() => {}} />;
+  }
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  render(<Workspace />);
+  const dialog = screen.getByRole("dialog");
+  fireEvent.change(within(dialog).getByRole("textbox", { name: "Reason for manual resolution" }), { target: { value: "Gained Mathematician" } });
+  fireEvent.click(within(dialog).getByRole("button", { name: "+ Information told" }));
+  fireEvent.change(within(dialog).getByRole("textbox", { name: "Step 1 information told" }), { target: { value: "1" } });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Confirm and record" }));
+  expect(game().informationDeliveries.at(-1)).toMatchObject({ kind: "manual", actualRole: "philosopher", performedRole: "mathematician", text: "1" });
+  vi.unstubAllGlobals();
 });

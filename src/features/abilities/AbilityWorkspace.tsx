@@ -19,6 +19,7 @@ import type { Alignment, Script, STPlayerRecord, StorytellerLobbyRecord } from "
 import { describeOutcome, seatedParticipants, useTargetPicker } from "./abilityUi";
 import { MAX_MANUAL_DELIVERY_TEXT } from "@/stores/schemas";
 import { wakeIdentity } from "@/stores/wakeIdentity";
+import { gainedRoleOf } from "@/stores/gainedAbility";
 import { TextLimit } from "@/components/TextLimit";
 import { OriginTag, ParticipantSelect, RequirementInput } from "./RequirementInput";
 import { Segmented } from "@/components/Segmented";
@@ -131,7 +132,9 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
   function performedRoleFor(who: ParticipantBinding, observed: STPlayerRecord): string | undefined {
     if (!fingerprint || who.participantId !== fingerprint.actor.participantId || target.roleId === observed.actualRole) return undefined;
     const wake = wakeIdentity(observed, registry);
-    return wake?.simulated && wake.shownRoleId === target.roleId ? target.roleId : undefined;
+    if (wake?.simulated) return wake.shownRoleId === target.roleId ? target.roleId : undefined;
+    // SV-3: an ability this player gained (the Philosopher's), run by hand at that character's place.
+    return wake && gainedRoleOf(observed) === target.roleId ? target.roleId : undefined;
   }
 
   /** The Manual outcome, or null while any step still has no player (a step

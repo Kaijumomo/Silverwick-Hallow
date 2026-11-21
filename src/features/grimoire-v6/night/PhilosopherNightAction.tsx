@@ -31,7 +31,7 @@ const PICKER_KICKER = "The Philosopher · a Townsfolk or an Outsider";
  * Philosopher's ability (philosopher.ts) through the coordinator; a case the rules leave to the Storyteller goes by hand. After the
  * choice the card shows what was gained. Hidden in Privacy Mode, like every Night step.
  */
-export function PhilosopherNightAction({ game, script, step, ability, visible, resolved, onResolved, onManual }: Props) {
+export function PhilosopherNightAction({ game, script, step, visible, resolved, onResolved, onManual }: Props) {
   const registry = useMemo(() => buildRegistry(script), [script]);
   const environment = useMemo(() => ({ script, registry, semantics: CANONICAL_ABILITY_SEMANTICS }), [script, registry]);
   const privacy = usePrivacyStore((s) => s.enabled);
@@ -107,7 +107,6 @@ export function PhilosopherNightAction({ game, script, step, ability, visible, r
 
   // Drunk or poisoned (or only shown the Philosopher): the choice still uses the ability, and gains nothing.
   const functions = step.isDeceived ? { known: true as const, value: false } : query.abilityFunctions({ playerId: actor.id, participantId: actor.participantId! });
-  void ability;
   return <div className="gv-choice">
     <hr className="gv-choice-divider" />
     {functions.known && !functions.value && <p className="gv-choice-note">{`${nameOf(actor.id)} is drunk or poisoned: a choice uses the ability and gains nothing.`}</p>}

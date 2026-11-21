@@ -1,5 +1,5 @@
 import { isCanonicalRole } from "@/data/canonical";
-import { REVIEWED_INTERACTION_ROLES } from "./characters/passiveRules";
+import { REVIEWED_INTERACTION_ROLES, gainedAbilityReviewed } from "./characters/passiveRules";
 import type { AbilityDescriptor, AbilityInputs, InformationConstraint } from "./semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
@@ -32,7 +32,8 @@ export function interactionCoverageEligibility(query: RulesQuery, additionalRevi
     // SV-3a: a gained ability is in play as much as a character is (the Philosopher's chosen character).
     const gained = gainedRoleOf(represented);
     const gainedDefinition = gained ? query.roleOf(gained) : undefined;
-    if (gained && (!gainedDefinition || !isCanonicalRole(gainedDefinition) || (!REVIEWED_INTERACTION_ROLES.has(gained) && !additionalReviewedRoles.includes(gained)))) {
+    if (gained && (!gainedDefinition || !isCanonicalRole(gainedDefinition) || !gainedAbilityReviewed(gained)
+      || (!REVIEWED_INTERACTION_ROLES.has(gained) && !additionalReviewedRoles.includes(gained)))) {
       return { kind: "manual", reason: "A gained ability in play has interactions outside verified coverage." };
     }
   }

@@ -192,6 +192,16 @@ const GAINED_ABILITIES_RUN = new Set<RoleId>(["snakecharmer", "towncrier", "orac
 export const runsGainedAbility = (roleId: RoleId): boolean => GAINED_ABILITIES_RUN.has(roleId);
 
 /**
+ * SV-3 (independent check, finding 1): the gained abilities whose every interaction was reviewed for a Philosopher who holds them
+ * (docs/ai/SECTS_AND_VIOLETS_SV3_PAIRS.md): the good characters of Sects & Violets. The engine reads passive, life and registration
+ * rules from a player's actual character, so a gained Soldier, Mayor, Virgin, Fool, Tea Lady or Monk (custom scripts) would be
+ * silently ignored: any other gained ability sends the action to the Storyteller (Manual), with its reason.
+ */
+const GAINED_ABILITIES_REVIEWED = new Set<RoleId>(["clockmaker", "dreamer", "snakecharmer", "mathematician", "flowergirl", "towncrier", "oracle",
+  "savant", "seamstress", "artist", "juggler", "sage", "mutant", "sweetheart", "barber", "klutz"]);
+export const gainedAbilityReviewed = (roleId: RoleId): boolean => GAINED_ABILITIES_REVIEWED.has(roleId);
+
+/**
  * LS-1: a "survives once" row (the Fool). The holder is genuinely alive and shown alive, so nothing is hidden: the row only says
  * "this death does not happen and the ability is spent". It applies when the ability has not been used and (if the row needs it)
  * functions; a drunk or poisoned holder dies for real. Another character's protection is checked FIRST by the caller: "If another
