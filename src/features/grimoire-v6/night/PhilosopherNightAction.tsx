@@ -88,7 +88,7 @@ export function PhilosopherNightAction({ game, script, step, visible, resolved, 
   const choose = () => {
     if (!safe()) return;
     guardGesture();
-    useV6Ui.getState().set({ pickHover: null, picker: { mode: "show", title: PICKER_TITLE, kicker: PICKER_KICKER, types: ["townsfolk", "outsider"],
+    useV6Ui.getState().set({ pickHover: null, picker: { mode: "show", tokensOnly: true, title: PICKER_TITLE, kicker: PICKER_KICKER, types: ["townsfolk", "outsider"],
       onPick: (roleId) => {
         const current = useStorytellerStore.getState().game;
         if (!current || current !== live.current.game || !live.current.visible || usePrivacyStore.getState().enabled) return "The game changed. Close this and choose again.";

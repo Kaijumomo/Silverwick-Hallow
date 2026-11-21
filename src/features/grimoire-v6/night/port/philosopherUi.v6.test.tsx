@@ -60,7 +60,8 @@ it("Not Tonight closes tonight's step and uses nothing (one Undo)", () => {
 it("Choose Character opens the board's character picker on Townsfolk and Outsiders; the pick commits at once, in one Undo", () => {
   show();
   fireEvent.click(within(choice()).getByRole("button", { name: "Choose Character" }));
-  expect(picker()).toMatchObject({ mode: "show", title: "Choose a good character", kicker: "The Philosopher · a Townsfolk or an Outsider", types: ["townsfolk", "outsider"] });
+  // Character tokens and names only: no "who holds it" names (the app still tracks the holders for the in-play and DRUNK rules).
+  expect(picker()).toMatchObject({ mode: "show", tokensOnly: true, title: "Choose a good character", kicker: "The Philosopher · a Townsfolk or an Outsider", types: ["townsfolk", "outsider"] });
   expect(game().players.p0!.abilityUsed).toBe(false);
   expect(pickCharacter("dreamer")).toBeUndefined();
   expect(picker()).toBeNull();
