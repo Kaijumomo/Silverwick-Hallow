@@ -124,7 +124,8 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
       const stepAbility = abilityOf(step);
       if (!stepAbility || stepAbility.kind !== "guided" || step.advisory?.includes("Vigormortis")) continue;
       // A step whose trigger has fired (a Ravenkeeper killed tonight) wakes by its trigger, not by the night order the probe tries.
-      if (stepAbility.trigger?.kind === "triggered") continue;
+      // A trigger whose state is unknown (the death has no recorded evidence) is the Storyteller's check ("trigger needs your check"), never "does not wake".
+      if (stepAbility.trigger) continue;
       const fingerprint = captureFingerprint(game, step.playerId, { day: game.day, stepKey: step.stepKey });
       if (!fingerprint) continue;
       // The rules answer "does not act tonight" before they read any choice, so probe with placeholder choices.

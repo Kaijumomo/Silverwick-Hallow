@@ -57,7 +57,7 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
     stripItem({ label: "Dusk", img: "", marker: true, markerIcon: MARKER_ICON.dusk, done: false, index: 0, cursor: index, jump: () => engine.gotoCheckpoint("dusk") }),
     ...steps.map((step, i) => {
       const img = stepIcon(step, ctx.registry);
-      const item = stripItem({ label: stepLabel(step), img, marker: !img, markerIcon: MARKER_ICON.step, done: stepResolved(game, step, engine.settled), index: i + 1, cursor: index, jump: () => engine.navigate(step) });
+      const item = stripItem({ label: stepLabel(step), img, marker: !img, markerIcon: MARKER_ICON.step, done: stepResolved(game, step), index: i + 1, cursor: index, jump: () => engine.navigate(step) });
       // A step that does not wake tonight is dimmed along the strip (its reason shows when it is opened).
       return engine.settled.has(step.stepKey) && i + 1 !== index ? { ...item, op: Math.min(item.op, 0.4) } : item;
     }),
