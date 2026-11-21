@@ -71,14 +71,16 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
     const targetName = correction?.target ? game.players[correction.target.playerId]?.name || "The chosen player" : "";
     const player = current.kind === "player";
     const roleKey = current.kind === "player" ? current.effectiveRoleId : "";
+    // PO 2026-11-21: why a step does not wake is shown on every script; the rest of these verbs are Treacherous 30th's own wording.
+    const idleVerb = player && engine.skipReason ? `${engine.skipReason.replace(/\.$/, "")}. This character does not wake.` : undefined;
     const t30Verb = ctx.script?.id === "treacherous-30th" && roleKey
-      ? engine.skipReason ? `${engine.skipReason.replace(/\.$/, "")}. This character does not wake.` : roleKey === "godfather" && game.day === 1 ? godfatherInfoVerb(game, ctx.registry)
+      ? roleKey === "godfather" && game.day === 1 ? godfatherInfoVerb(game, ctx.registry)
         : roleKey === "moonchild" && engine.moonchildChoice ? `${game.players[engine.moonchildChoice.target.playerId]?.name || "The chosen player"} was chosen. If they are good, they die tonight.`
         : !inlineInformation ? T30_VERBS[roleKey] : undefined
       : undefined;
     const verb = player
       ? successorChoice ? roleKey === "vigormortis" ? "Which neighbouring Townsfolk is poisoned? The Minion keeps their ability." : "Choose the Minion who becomes the new Imp."
-        : t30Verb ?? (engine.manual || inlineInformation ? engine.role?.ability ?? current.prompt
+        : idleVerb ?? t30Verb ?? (engine.manual || inlineInformation ? engine.role?.ability ?? current.prompt
         : engine.ability?.kind === "guided" ? engine.ability.descriptor.presentation.action : current.prompt)
       : current.prompt;
     // PO review A03/C07: an impaired player is named by the pill beside the name, and the routine procedure lines

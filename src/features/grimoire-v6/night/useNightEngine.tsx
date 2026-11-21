@@ -111,13 +111,14 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     const player = game.players[step.playerId];
     return (query && player?.participantId && triggerAbility(step.effectiveRoleId, registry, semantics, query, bindingOf(player))) || ordinary;
   };
-  // T30 design: a step the rules say does not wake shows why (no Outsider died today, no execution today, ...). Those steps are
-  // collapsed: Next and Previous pass over them, Dawn does not count them, and the strip dims them -- but each stays one tap away
-  // on the strip, where its reason is shown.
+  // T30 design, PO-approved for every script on 2026-11-21: a step the rules say does not wake shows why (no Outsider died today, no
+  // execution today, ...). Those steps are collapsed: Next and Previous pass over them, Dawn does not count them, and the strip dims
+  // them -- but each stays one tap away on the strip, where its reason is shown. Only a step the shared rules planner can judge
+  // (a guided, reviewed-list ability) is probed; any other step stays the Storyteller's and is never marked.
   const probed = useMemo(() => {
     const out = new Map<string, string>();
     const questions = new Map<string, NightQuestion>();
-    if (script?.id !== "treacherous-30th") return { out, questions };
+    if (!script) return { out, questions };
     for (const step of steps) {
       if (step.kind !== "player" || stepResolved(game, step)) continue;
       const stepAbility = abilityOf(step);

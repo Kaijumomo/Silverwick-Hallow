@@ -17,6 +17,7 @@ import { newTravelerArrival } from "@/stores/travelers";
 import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/abilityUi";
 import { patchPlayer, pick, plan, planned, proofGame, proofScript, request } from "@/test/proofFixtures";
 import { deriveNightWork } from "@/features/nightOrder/nightWork";
+import { captureFingerprint } from "@/stores/abilityResolution";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 import { buildRegistry } from "@/data/roleRegistry";
 
@@ -738,4 +739,48 @@ it("a certain Outsider death (a Moonchild) beside a Recluse death asks no questi
   expect(useTargetPicker.getState().active?.label).toBeTruthy();
   tap("p2");
   expect(game().players.p2!.alive).toBe(false);
+});
+
+// PO 2026-11-21: Not waking is recognised on every script, not only Treacherous 30th.
+const customScript = { ...proofScript, id: "my-custom-script", name: "My custom script" };
+const idleNight = (script: typeof proofScript) => {
+  store.setState({ game: proofGame(["imp", "undertaker", "empath", "monk", "saint", "baron", "poisoner"], "night", 3, { scriptId: script.id }), lobby: null, undoStack: [], localSeq: 0, customScripts: { [script.id]: script } });
+  render(<Guide />);
+  const { steps } = deriveNightWork(game(), { script, registry: buildRegistry(script), semantics: CANONICAL_ABILITY_SEMANTICS });
+  const undertaker = steps.find((step) => step.kind === "player" && step.effectiveRoleId === "undertaker")!;
+  const before = steps[steps.indexOf(undertaker) - 1]!;
+  act(() => { useShellStore.getState().setNightCursor({ day: 3, stepKey: before.stepKey }); });
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  // Nobody was executed: Next passes over the Undertaker, straight to Dawn, and Previous comes back.
+  expect(screen.getByText(/No one died tonight/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Previous" }));
+  expect(current()).toBe(before.stepKey);
+  for (const button of screen.getAllByRole("button", { name: /Undertaker/ })) { fireEvent.click(button); if (current() === undertaker.stepKey) break; }
+  expect(current()).toBe(undertaker.stepKey);
+};
+it("a script that is neither Treacherous 30th nor custom: a step that does not wake shows the reason and the Not waking pill, and is passed over", () => {
+  idleNight(proofScript);
+  expect(screen.getByText(/This character does not wake/)).toBeInTheDocument();
+  expect(screen.getByText("Not waking")).toBeInTheDocument();
+});
+it("a custom script is treated the same way", () => {
+  idleNight(customScript);
+  expect(screen.getByText(/This character does not wake/)).toBeInTheDocument();
+  expect(screen.getByText("Not waking")).toBeInTheDocument();
+});
+it("a Philosopher's gained row that is run by hand never shows Not waking; a gained Snake Charmer that wakes shows no pill while pending", () => {
+  for (const [roleId, label] of [["mathematician", "by hand"], ["snakecharmer", "wakes"]] as const) {
+    const g = proofGame(["philosopher", "fanggu", "dreamer", "clockmaker", "witch"], "night", 2);
+    store.setState({ game: g, lobby: null, undoStack: [], localSeq: 0, customScripts: { [proofScript.id]: proofScript } });
+    const chosen = store.getState().resolveAbility({ mode: "guided", invocationPath: "nightOrder", roleId: "philosopher", completeStep: true,
+      fingerprint: captureFingerprint(g, "p0", { day: 2, stepKey: participantStepKey(g.players.p0!.participantId!, "philosopher") })!, inputs: { character: { kind: "character", roleIds: [roleId] } } });
+    expect(chosen).toMatchObject({ ok: true, changed: true });
+    store.setState({ game: { ...game(), day: 3 } });
+    useShellStore.getState().setNightCursor({ day: 3, stepKey: participantStepKey(game().players.p0!.participantId!, roleId) });
+    render(<Guide />);
+    expect(screen.getByText(/Gained from the Philosopher/), label).toBeInTheDocument();
+    expect(screen.queryByText("Not waking"), label).toBeNull();
+    expect(screen.queryByText("Completed"), label).toBeNull();
+    cleanup();
+  }
 });
