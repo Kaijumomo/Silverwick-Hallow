@@ -51,7 +51,7 @@ describe("Character Intelligence bounded automation", () => {
       expect(manifest.find(entry => entry.id === id)?.capabilities).toContainEqual(expect.objectContaining({ owner: "setup", boundary: expect.stringContaining("count policy") }));
     }
     for (const id of ["bureaucrat", "virgin"]) expect(manifest.find(entry => entry.id === id)?.capabilities).toContainEqual(expect.objectContaining({ owner: "voting" }));
-    expect(CANONICAL_ABILITY_SEMANTICS.size).toBe(37); // B5a adds Chef; Treacherous 30th adds Innkeeper, No Dashii, Vigormortis, Gambler, Shabaloth, Witch, Godfather, Moonchild, Town Crier, Oracle and Professor; LS-2c adds the Devil's Advocate; SV-1a adds the Sage; SV-1b the Sweetheart; SV-1c the Klutz; SV-1d the Barber; SV-2a the Snake Charmer; SV-2b the Fang Gu; SV-3a the Philosopher; SV-4a the Cerenovus; SV-4c the Evil Twin; SV-5a the Clockmaker; SV-5b the Seamstress; SV-5c the Dreamer.
+    expect(CANONICAL_ABILITY_SEMANTICS.size).toBe(38); // B5a adds Chef; Treacherous 30th adds Innkeeper, No Dashii, Vigormortis, Gambler, Shabaloth, Witch, Godfather, Moonchild, Town Crier, Oracle and Professor; LS-2c adds the Devil's Advocate; SV-1a adds the Sage; SV-1b the Sweetheart; SV-1c the Klutz; SV-1d the Barber; SV-2a the Snake Charmer; SV-2b the Fang Gu; SV-3a the Philosopher; SV-4a the Cerenovus; SV-4c the Evil Twin; SV-5a the Clockmaker; SV-5b the Seamstress; SV-5c the Dreamer; SV-5d the Flowergirl.
     expect(CANONICAL_ABILITY_SEMANTICS.has("soldier")).toBe(false);
     expect(CANONICAL_ABILITY_SEMANTICS.has("vortox")).toBe(false);
   });

@@ -58,7 +58,6 @@ export const OWNED_ELSEWHERE: Readonly<Record<RoleId, string>> = {
  * evaluator). Presentation only -- never mechanics, never read by any gate. */
 export const REVIEWED_MANUAL: Readonly<Record<RoleId, string>> = {
   mathematician: "Reviewed: counts abnormal abilities since dawn and changes nothing. The Abnormal reminders are Storyteller notation; the Chambermaid, Drunk, Marionette and Lunatic jinxes stay Storyteller judgments.",
-  flowergirl: "Reviewed: reads whether a Demon voted today and changes nothing. Demon Voted / Demon Not Voted are Storyteller notation; the Storyteller answers with a nod or a shake of the head.",
   savant: "Reviewed: day information (one true, one false) given in private by the Storyteller. Changes nothing; it has no night wake.",
   artist: "Reviewed: once per game, a private yes/no question answered by the Storyteller. Changes nothing; it has no night wake. No Ability is Storyteller notation after use.",
   juggler: "Reviewed: counts correct day-one guesses and changes nothing. The Correct reminders are Storyteller notation; the Cannibal jinx stays a Storyteller judgment.",

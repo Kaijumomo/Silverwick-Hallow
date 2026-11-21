@@ -10,13 +10,14 @@ import type { NightStep } from "@/rules/night/nightOrder";
 import { chefMaximumPairs } from "@/abilities/characters/chef";
 import { CLOCKMAKER_POSSIBLE, clockmakerAnswers, clockmakerMaximumSteps } from "@/abilities/characters/clockmaker";
 import { SEAMSTRESS_SAME } from "@/abilities/characters/seamstress";
+import { FLOWERGIRL_DEMON_VOTED } from "@/abilities/characters/flowergirl";
 import { createRulesQuery } from "@/stores/rulesQuery";
 import { captureInfoContext, infoContextCurrent } from "@/features/info/infoCommands";
 import { isDeathEvent } from "@/stores/lifeEvents";
 import { QuestionBlock } from "@/features/grimoire-v6/day/NominationExtras";
 import { SAGE, SAGE_PLAYERS, sageCauseQuestion } from "@/abilities/characters/sage";
 
-export const CALCULATED_INFORMATION_ROLES = new Set(["chef", "empath", "fortuneteller", "towncrier", "oracle", "clockmaker", "seamstress"]);
+export const CALCULATED_INFORMATION_ROLES = new Set(["chef", "empath", "fortuneteller", "towncrier", "oracle", "clockmaker", "seamstress", "flowergirl"]);
 export const NIGHT_INFORMATION_ROLES = new Set([...CALCULATED_INFORMATION_ROLES, "undertaker", "ravenkeeper", "sage"]);
 const EMPTY_INPUTS: AbilityInputs = {};
 export type NightInformationHandle = { next: () => boolean };
@@ -236,10 +237,15 @@ export const NightInformationAction = forwardRef<NightInformationHandle, Props>(
     {!resolved && requirement?.source === "storyteller" && requirement.kind === "boolean" && requirement.id.startsWith("towncrier:minionNominated") && preview && !preview.ok &&
       <QuestionBlock heading="Did a Minion nominate today?" note={preview.message.replace(/\s*Did a Minion nominate today\?$/, "")}
         actions={[true, false].map((choice) => ({ label: choice ? "Yes" : "No", onClick: () => { commit({ ...inputs, [requirement.id]: { kind: "boolean", value: choice } }); } }))} />}
+    {/* SV-5d: a voter who may have been a Demon (a changed character, a Recluse, an unfinished vote): the Storyteller rules, in the
+        Town Crier's prompt style. */}
+    {!resolved && requirement?.source === "storyteller" && requirement.kind === "boolean" && requirement.id.startsWith(FLOWERGIRL_DEMON_VOTED) && preview && !preview.ok &&
+      <QuestionBlock heading="Did a Demon vote today?" note={preview.message.replace(/\s*Did a Demon vote today\?$/, "")}
+        actions={[true, false].map((choice) => ({ label: choice ? "Yes" : "No", onClick: () => { commit({ ...inputs, [requirement.id]: { kind: "boolean", value: choice } }); } }))} />}
     {!resolved && requirement?.source === "storyteller" && requirement.id.startsWith(CLOCKMAKER_POSSIBLE) && preview && !preview.ok &&
       <p className="night-information-why" style={{ margin: "4px 0 0", opacity: 0.85, fontSize: 13 }}>{preview.message.replace(/\s*Choose the number to show\.$/, "")}</p>}
     {!resolved && requirement?.source === "storyteller" && ["number", "boolean"].includes(requirement.kind) && !requirement.id.startsWith("towncrier:minionNominated")
-      && !requirement.id.startsWith(SEAMSTRESS_SAME) && <>
+      && !requirement.id.startsWith(SEAMSTRESS_SAME) && !requirement.id.startsWith(FLOWERGIRL_DEMON_VOTED) && <>
       <div className="night-information-choices" role="group" aria-label="Information to communicate">{choices.map(choice =>
         <button className="btn" key={String(choice)} type="button" onClick={() => commit({ ...inputs,
           [requirement.id]: typeof choice === "boolean" ? { kind: "boolean", value: choice } : { kind: "number", value: choice } })}>

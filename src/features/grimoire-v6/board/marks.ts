@@ -10,6 +10,7 @@ import { butlerReminderOrigin } from "@/stores/butlerSelection";
 import { isDeathEvent } from "@/stores/lifeEvents";
 import { teaLadyCovers } from "@/abilities/characters/passiveRules";
 import { haircutsTonight } from "@/abilities/characters/barber";
+import { demonVotedOn, flowergirlDay } from "@/abilities/characters/flowergirl";
 import { isCanonicalRole } from "@/data/canonical";
 import { ruleFactForReminder } from "@/stores/reminderRuleFacts";
 import { gainedRoleOf, gainedTokenShownOf } from "@/stores/gainedAbility";
@@ -111,6 +112,20 @@ function townCrierToken({ game, query }: MarkEnv, player: STPlayerRecord): "Mini
 }
 
 /**
+ * SV-5d: the Flowergirl's official tokens, read from the Day's voting record (PO Q3: derived, never stored): DEMON NOT VOTED from
+ * dawn, DEMON VOTED once a Demon has voted, until the Flowergirl has woken that Night (the record is the Day just ended). Only for a
+ * living, real Flowergirl (or a Philosopher with her ability, as the Town Crier's). A vote the app cannot rule (a Recluse, a character
+ * changed since the vote, an unfinished vote) or a record that cannot be verified draws nothing, like the Town Crier's.
+ */
+function flowergirlToken({ query }: MarkEnv, player: STPlayerRecord): "Demon Voted" | "Demon Not Voted" | null {
+  if (!query || !player.alive || (player.actualRole !== "flowergirl" && gainedRoleOf(player) !== "flowergirl")) return null;
+  const day = flowergirlDay(query);
+  if (day < 1) return null;
+  const record = demonVotedOn(query, day);
+  return record.kind === "known" ? record.voted ? "Demon Voted" : "Demon Not Voted" : null;
+}
+
+/**
  * The Tea Lady's official CANNOT DIE token: on each of a living, real Tea Lady's two alive neighbours while both register as good to
  * her ("updated immediately... throughout the entire game"). Derived from seating, life and alignment on every draw, never stored.
  * Still drawn while she is drunk or poisoned (PO ruling 2026-11-12 22:51Z): the app then does not honour the protection, the
@@ -190,6 +205,12 @@ export function playerMarks(env: MarkEnv, player: STPlayerRecord): Mark[] {
     const source = officialNotationRole("towncrier", crier) ?? registry.get("towncrier");
     marks.push({ key: "derived:towncrier-nominations", kind: "effect", label: crier, title: `Town Crier: ${crier}`, src: source ? iconUrlFor(source) : "", size: ROLE_SIZE,
       removal: { type: "derived", reason: "This follows the Day's nominations. It ends at dawn." } });
+  }
+  const flowergirl = flowergirlToken(env, player);
+  if (flowergirl) {
+    const source = officialNotationRole("flowergirl", flowergirl) ?? registry.get("flowergirl");
+    marks.push({ key: "derived:flowergirl-votes", kind: "effect", label: flowergirl, title: `Flowergirl: ${flowergirl}`, src: source ? iconUrlFor(source) : "", size: ROLE_SIZE,
+      removal: { type: "derived", reason: "This follows the Day's votes. It ends at dawn." } });
   }
   const voting = currentVotingState(game);
   const linked = (id: string) => voting.modifiers.find((m) => m.target.playerId === player.id && m.target.participantId === player.participantId && `voting-${m.id}` === id);

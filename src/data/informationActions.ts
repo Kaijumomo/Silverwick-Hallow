@@ -161,6 +161,18 @@ export const INFORMATION_ACTIONS: Record<RoleId, InformationAction[]> = {
     },
   ],
 
+  // "Each night*, you learn if a Demon voted today." (SV-5d) -- Boolean, other nights only.
+  flowergirl: [
+    {
+      id: "flowergirl-other-night",
+      timing: { kind: "otherNight" },
+      instruction: "Nod if a Demon voted today, shake your head if not.",
+      requirements: [
+        { id: "demonVoted", kind: "boolean", label: "Whether a Demon voted today" },
+      ],
+    },
+  ],
+
   // "Each night*, you learn how many dead players are evil." -- Number, other nights only.
   // Treacherous 30th (owner-authorized Silverwick-authored metadata; no pinned action existed).
   oracle: [

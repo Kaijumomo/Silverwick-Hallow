@@ -41,7 +41,7 @@ const OFFICIAL: Record<string, Official> = {
 };
 const IDS = Object.keys(OFFICIAL);
 /** SV-5 part 1 made these guided (their own descriptor and tests); they stay on the reviewed interaction list. */
-const GUIDED_LATER = ["clockmaker", "seamstress", "dreamer"];
+const GUIDED_LATER = ["clockmaker", "seamstress", "dreamer", "flowergirl"];
 
 describe("the ten reviewed information characters match the official data", () => {
   it.each(IDS)("%s: team, ability text, reminder tokens and night wakes", (id) => {
