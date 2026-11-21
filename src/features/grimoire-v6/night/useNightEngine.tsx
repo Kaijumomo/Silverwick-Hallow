@@ -8,7 +8,8 @@ import { usePrivacyStore } from "@/stores/privacyStore";
 import { captureFingerprint, planAbilityResolution, type ParticipantBinding } from "@/stores/abilityResolution";
 import { getNightActionCorrection } from "@/stores/nightActionCorrection";
 import { travelerArrivalStepKey } from "@/stores/nightProgress";
-import type { StorytellerLobbyRecord } from "@/stores/types";
+import type { RoleType, StorytellerLobbyRecord } from "@/stores/types";
+import { CERENOVUS_CHARACTER } from "@/abilities/characters/cerenovus";
 import type { WorkspaceTarget } from "@/features/abilities/AbilityWorkspace";
 import { bindingOf, pathAbility, seatedParticipants, triggerAbility, useTargetPicker, type StepAbility } from "@/features/abilities/abilityUi";
 import { runsGainedAbility } from "@/abilities/characters/passiveRules";
@@ -29,7 +30,15 @@ import { duskRegurgitation, regurgitate } from "./regurgitate";
 
 const semantics = CANONICAL_ABILITY_SEMANTICS;
 /** Characters whose whole action is tapped on the board (T30 design). Others keep the ability workspace. */
-const BOARD_ROLES = new Set(["innkeeper", "shabaloth", "gambler", "godfather", "professor", "moonchild", "vigormortis"]);
+const BOARD_ROLES = new Set(["innkeeper", "shabaloth", "gambler", "godfather", "professor", "moonchild", "vigormortis", "cerenovus"]);
+/** A player tapped on the board, then a character picked from the board's character picker (the Gambler's guess; SV-4a: the Cerenovus's
+ * madness, a Townsfolk or an Outsider, tokens only, no player names). */
+const CHARACTER_PICKS: Record<string, { input: string; title: string; kicker: (target: string) => string; types?: RoleType[] }> = {
+  gambler: { input: "guess", title: "What does the Gambler guess?", kicker: (target) => `The Gambler · guess ${target}’s character` },
+  cerenovus: { input: CERENOVUS_CHARACTER, title: "Choose a character", kicker: () => "The Cerenovus · a Townsfolk or an Outsider", types: ["townsfolk", "outsider"] },
+};
+/** What the Cerenovus chose tonight, kept for the Night card's reveal row (a drunk or poisoned Cerenovus records no MAD, so the pick is also held here). */
+export type CerenovusChoice = { stepKey: string; target: ParticipantBinding; roleId: string };
 /**
  * A simple single-player choice is always tapped on the board. The BOARD_ROLES also tap a fixed count of players
  * (Innkeeper, Shabaloth) or a player then a character guess (Gambler). A needsInput the board cannot answer
@@ -92,6 +101,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   // while the guess is being picked.
   const [picks, setPicks] = useScoped<ParticipantBinding[]>(scope, EMPTY_PICKS);
   const [guessFor, setGuessFor] = useScoped<ParticipantBinding | null>(scope, null);
+  const [cerenovusChoice, setCerenovusChoice] = useScoped<CerenovusChoice | null>(scope, null);
   // A ruling the Storyteller gives BEFORE any player is tapped (the Godfather's "did an Outsider die today?"), by step.
   const [rulings, setRulings] = useScoped<Record<string, Record<string, AbilityInputValue>>>(scope, EMPTY_RULINGS);
   // A ruling belongs to the Day it was given about: it is keyed by that Day's recorded events, which are new every time the Day is replayed
@@ -288,7 +298,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
       setPicks(EMPTY_PICKS);
       commitPicks(chosen, input.id); return;
     }
-    if (current.effectiveRoleId === "gambler" && !successorChoice) { chooseGuess(target, input.id); return; }
+    if (CHARACTER_PICKS[current.effectiveRoleId] && !successorChoice) { chooseGuess(target, input.id); return; }
     if (successorChoice && (live.current.successorChoice !== successorChoice || successorChoice.game !== game || successorChoice.stepKey !== current.stepKey)) return;
     const inputs = successorChoice
       ? { ...successorChoice.inputs, [successorChoice.id]: { kind: "participant" as const, participants: [target] } }
@@ -374,7 +384,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     if (!result.ok) { setError(result.message); return; }
     finish(useStorytellerStore.getState().game!);
   };
-  /** The Gambler taps the player, then the guess is picked from the board's character picker. */
+  /** The Gambler (and, SV-4a, the Cerenovus) taps the player, then the character is picked from the board's character picker. */
   const closeGuess = () => { const picker = useV6Ui.getState().picker; if (picker?.mode === "show" && picker.onPick) useV6Ui.getState().set({ picker: null }); };
   const chooseGuess = (target: ParticipantBinding, inputId: string) => {
     if (!current || current.kind !== "player" || !script) return;
@@ -382,12 +392,13 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     const base = current;
     guardGesture();
     const gambler = game.players[base.playerId];
-    useV6Ui.getState().set({ pickHover: null, picker: { mode: "show", tokensOnly: true, title: "What does the Gambler guess?",
-      kicker: `The Gambler · guess ${game.players[target.playerId]?.name || "the player"}’s character`,
+    const pick = CHARACTER_PICKS[base.effectiveRoleId]!;
+    useV6Ui.getState().set({ pickHover: null, picker: { mode: "show", tokensOnly: true, title: pick.title,
+      kicker: pick.kicker(game.players[target.playerId]?.name || "the player"), ...(pick.types ? { types: pick.types } : {}),
       onPick: (roleId) => {
         const fingerprint = captureFingerprint(game, base.playerId, { day: game.day, stepKey: base.stepKey });
         if (!fingerprint || !gambler) return "This player is no longer seated.";
-        const inputs: Record<string, AbilityInputValue> = { [inputId]: { kind: "participant", participants: [target] }, guess: { kind: "character", roleIds: [roleId] } };
+        const inputs: Record<string, AbilityInputValue> = { [inputId]: { kind: "participant", participants: [target] }, [pick.input]: { kind: "character", roleIds: [roleId] } };
         const request = { mode: "guided" as const, invocationPath: "nightOrder" as const, fingerprint, roleId: base.effectiveRoleId, inputs, completeStep: true };
         const plan = planAbilityResolution(game, request, { script, registry, semantics });
         if (!plan.ok && plan.code === "needsInput") { closeGuess(); setGuessFor(null); openWorkspace(inputs); return undefined; }
@@ -395,6 +406,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
         const result = useStorytellerStore.getState().resolveAbility(request, semantics, actionContext);
         if (!result.ok) return result.message;
         closeGuess(); setGuessFor(null);
+        if (base.effectiveRoleId === "cerenovus") setCerenovusChoice({ stepKey: base.stepKey, target, roleId });
         finish(useStorytellerStore.getState().game!);
         return undefined;
       } } });
@@ -555,7 +567,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
 
   return {
     active, visible, work, steps, unfinished, pos, current, currentIndex, positionIndex, resolved, actor, role, ability, query,
-    eligible, direct, canTarget, question, answerQuestion, skipReason, settled, moonchildChoice, regurgitation, needed, picks, guessFor, inlineInformation, preparedInformation, butlerTurn, barberTurn, philosopherTurn, bureaucrat, manual, manualRavenkeeper, correction,
+    eligible, direct, canTarget, question, answerQuestion, skipReason, settled, moonchildChoice, regurgitation, needed, picks, guessFor, cerenovusChoice, inlineInformation, preparedInformation, butlerTurn, barberTurn, philosopherTurn, bureaucrat, manual, manualRavenkeeper, correction,
     workspace, setWorkspace, setPaused, error, setError, success, successorChoice, tapRuling: pendingRuling, answerTapRuling, picker, refused, owner, actionContext,
     navigate, gotoCheckpoint, prev, next, beginDay, openWorkspace, openTrigger, requireManual, finish,
   };

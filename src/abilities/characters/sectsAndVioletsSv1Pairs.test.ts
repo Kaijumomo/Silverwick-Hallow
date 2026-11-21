@@ -37,16 +37,16 @@ const actions = (other: string) => {
 };
 
 describe("SV-1 pairs: the reviewed-list gate", () => {
-  it("with the Evil Twin or Cerenovus in play, every SV-1 action is the Storyteller's (Manual)", () => {
-    for (const other of ["eviltwin", "cerenovus"]) {
+  it("with the Evil Twin in play, every SV-1 action is the Storyteller's (Manual); the Cerenovus joined the reviewed list in SV-4a", () => {
+    for (const other of ["eviltwin"]) {
       for (const [name, result] of Object.entries(actions(other))) {
         expect(result, `${name} + ${other}`).toMatchObject({ ok: false, code: "unsupported" });
       }
     }
   });
 
-  it("with any other character of the script in play, every SV-1 action is guided (the Philosopher since SV-3a)", () => {
-    for (const other of ["philosopher", "clockmaker", "dreamer", "mathematician", "flowergirl", "towncrier", "oracle", "savant", "seamstress", "artist", "juggler", "mutant", "witch", "pithag", "nodashii", "vigormortis", "snakecharmer", "fanggu"]) {
+  it("with any other character of the script in play, every SV-1 action is guided (the Philosopher since SV-3a, the Cerenovus since SV-4a)", () => {
+    for (const other of ["philosopher", "clockmaker", "dreamer", "mathematician", "flowergirl", "towncrier", "oracle", "savant", "seamstress", "artist", "juggler", "mutant", "witch", "pithag", "nodashii", "vigormortis", "snakecharmer", "fanggu", "cerenovus"]) {
       for (const [name, result] of Object.entries(actions(other))) {
         // Two Demons (Imp and No Dashii, Vigormortis or Fang Gu) make the Barber's step ask which Demon swaps; everything else commits.
         if (name === "barber" && ["nodashii", "vigormortis", "fanggu"].includes(other)) expect(result, `${name} + ${other}`).toMatchObject({ ok: false, code: "needsInput" });

@@ -1,5 +1,6 @@
 import { BarberNightAction } from "@/features/nightOrder/BarberNightAction";
 import { PhilosopherNightAction } from "./PhilosopherNightAction";
+import { CerenovusResult } from "./CerenovusResult";
 import { Fragment, useRef, useState, type ReactNode, type RefObject } from "react";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 import { AbilityWorkspace } from "@/features/abilities/AbilityWorkspace";
@@ -181,6 +182,10 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
           visible={engine.visible} completeStep={{ day: game.day, stepKey: current.stepKey }} onResolved={engine.finish} />);
       } else if (!done && !engine.manual && !engine.canTarget && !engine.tapRuling) {
         rows.push(<button key="continue" type="button" className="btn btn-gold" onClick={() => engine.openWorkspace()}>Continue action</button>);
+      }
+      // SV-4a: the Cerenovus's choice is tapped on the board; the card shows what was chosen and the Wake row with the two reveal tokens.
+      if (current.effectiveRoleId === "cerenovus" && !current.gainedFrom && engine.ability?.kind === "guided" && (engine.eligible || done)) {
+        rows.push(<CerenovusResult key={`cerenovus:${current.stepKey}`} game={game} registry={registry} query={engine.query} step={current} done={done} choice={engine.cerenovusChoice} />);
       }
       // T30: the Godfather's first night shows the Outsiders in play on ONE screen, like the Demon's bluffs.
       if (current.effectiveRoleId === "godfather" && game.day === 1 && !current.isDeceived && !engine.settled.has(current.stepKey)) {

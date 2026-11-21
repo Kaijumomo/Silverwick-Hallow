@@ -58,9 +58,11 @@ const unknown = <T,>(reason: string): QueryAnswer<T> => ({ known: false, reason 
  *  - gainedAbility (SV-3a): the bearer has gained another character's
  *    ability (stores/gainedAbility.ts). It applies while the bearer is still
  *    the character that gained it; it is never an impairment or a protection.
+ *  - madness (SV-4a): the bearer is "mad" about being a character; it applies
+ *    while its source (the Cerenovus) functions and decides nothing by itself.
  */
 export type DeathOutcomeAnswer = { kind: "dies" } | { kind: "survives"; spends: boolean };
-export type EffectSemantics = "impairment" | "noAbility" | "demonProtection" | "deathImmunity" | "executionProtection" | "genericProtection" | "judgment" | "storytellerFact" | "curse" | "retainedAbility" | "gainedAbility";
+export type EffectSemantics = "impairment" | "noAbility" | "demonProtection" | "deathImmunity" | "executionProtection" | "genericProtection" | "judgment" | "storytellerFact" | "curse" | "retainedAbility" | "gainedAbility" | "madness";
 export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>> = {
   drunk: "impairment",
   poisoned: "impairment",
@@ -95,6 +97,10 @@ export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>
   devilsAdvocateChoice: "storytellerFact",
   /** SV-3a: the Philosopher's chosen character, gained as an ability (the official IS THE PHILOSOPHER token when the token was swapped). */
   gainedAbility: "gainedAbility",
+  /** SV-4a: the Cerenovus's MAD. It applies while its source functions (the Witch's pattern, declared by the Cerenovus) and carries
+   * the character the player is mad about being. It is its own meaning: the Witch's Day prompt reads `curse`, never this. Whether the
+   * player tried is always the Storyteller's judgment. */
+  mad: "madness",
 };
 export const effectSemanticsOf = (type: string): EffectSemantics | undefined =>
   Object.prototype.hasOwnProperty.call(APPROVED_EFFECT_SEMANTICS, type) ? APPROVED_EFFECT_SEMANTICS[type] : undefined;

@@ -85,6 +85,9 @@ export function planSourceAbilityLoss(
       const supported = effect.sourceCharacter === "poisoner" && effect.type === "poisoned" || effect.sourceCharacter === "monk" && effect.type === "safeFromDemon" ||
         effect.sourceCharacter === "innkeeper" && (effect.type === "cannotDie" || effect.type === "drunk") ||
         effect.sourceCharacter === "vigormortis" && (effect.type === "poisoned" || effect.type === "retainsAbility") || effect.sourceCharacter === "witch" && effect.type === "witchCurse" ||
+        // SV-4a: the Cerenovus's MAD applies only while it functions, so a Cerenovus that dies or changes character takes it away (a
+        // Vigormortis-kept Cerenovus is excluded above, like the Witch).
+        effect.sourceCharacter === "cerenovus" && effect.type === "mad" ||
         effect.sourceCharacter === "devilsadvocate" && effect.type === "survivesExecution" ||
         characterChange && effect.sourceCharacter === "sweetheart" && effect.type === "drunk" ||
         // SV-3a: a Philosopher who changes character no longer has what it gained ("They do not become that character"; a new
