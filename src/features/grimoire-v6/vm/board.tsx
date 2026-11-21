@@ -12,6 +12,7 @@ import { litActorIdOf } from "@/features/grimoire/seatTap";
 import { createRulesQuery } from "@/stores/rulesQuery";
 import { currentLiveMoment, isDeathEvent, lifeEventsAt } from "@/stores/lifeEvents";
 import { arrivalsAreTravelers, publicTravelerRole } from "@/stores/travelers";
+import { gainedTokenShownOf } from "@/stores/gainedAbility";
 import type { PlayerId, RoleDef, STPlayerRecord } from "@/stores/types";
 import type { V6Ctx } from "../ctx";
 import { ICON, TEAM_COLOR, TEAM_LABEL } from "../icons";
@@ -46,10 +47,11 @@ const RADIAL_ICON = {
   more: ICON.info,
 } as const;
 
-/** What a seat shows: the Shown Role is primary on the Storyteller's table; Privacy Mode keeps only a public Traveller. */
+/** What a seat shows: the Shown Role is primary on the Storyteller's table; Privacy Mode keeps only a public Traveller. SV-3a: a
+ * Philosopher who gained a character nobody truly held shows that character's token (with IS THE PHILOSOPHER); the player is shown nothing new. */
 function displayRoleOf(p: STPlayerRecord, ctx: V6Ctx): RoleDef | undefined {
   if (ctx.privacy) return publicTravelerRole(p);
-  const id = p.shownRole ?? p.actualRole;
+  const id = gainedTokenShownOf(p) ?? p.shownRole ?? p.actualRole;
   return id ? ctx.registry.get(id) : undefined;
 }
 

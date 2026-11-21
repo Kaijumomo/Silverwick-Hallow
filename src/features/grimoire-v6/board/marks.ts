@@ -12,6 +12,7 @@ import { teaLadyCovers } from "@/abilities/characters/passiveRules";
 import { haircutsTonight } from "@/abilities/characters/barber";
 import { isCanonicalRole } from "@/data/canonical";
 import { ruleFactForReminder } from "@/stores/reminderRuleFacts";
+import { gainedRoleOf, gainedTokenShownOf } from "@/stores/gainedAbility";
 import {
   firstInformationReminderGroups, officialEffectPresentation, officialNotationRole, redHerringNotationCovered,
   type OfficialEffectToken,
@@ -141,6 +142,20 @@ export function playerMarks(env: MarkEnv, player: STPlayerRecord): Mark[] {
     marks.push({ key: "derived:nodashii-poison", kind: "effect", label: "Poisoned", title: "No Dashii: Poisoned", src: source ? iconUrlFor(source) : "", size: ROLE_SIZE,
       removal: { type: "derived", reason: "This follows the No Dashii. It ends when the No Dashii dies or loses its ability." } });
   }
+  // SV-3a: the Philosopher's official DRUNK token on whoever truly holds the character a living, functioning Philosopher gained.
+  // Derived like the No Dashii's poison, so it disappears by itself when the Philosopher dies, is drunk or poisoned, or changes character.
+  const gainedDrunk = query.gainedAbilityDrunk({ playerId: player.id, participantId: player.participantId });
+  if (gainedDrunk.known && gainedDrunk.value) {
+    const source = officialNotationRole("philosopher", "Drunk") ?? registry.get("philosopher");
+    marks.push({ key: "derived:philosopher-drunk", kind: "effect", label: "Drunk", title: "Philosopher: Drunk", src: source ? iconUrlFor(source) : "", size: ROLE_SIZE,
+      removal: { type: "derived", reason: "This follows the Philosopher. It ends when the Philosopher dies, is drunk or poisoned, or changes character." } });
+  }
+  // SV-3a: the official IS THE PHILOSOPHER token on a Philosopher whose seat shows the character they gained (nobody truly held it then).
+  if (gainedTokenShownOf(player)) {
+    const source = officialNotationRole(player.actualRole, "Is The Philosopher") ?? registry.get(player.actualRole);
+    marks.push({ key: "derived:philosopher-is", kind: "effect", label: "Is The Philosopher", title: `${source?.name ?? "Philosopher"}: Is The Philosopher`, src: source ? iconUrlFor(source) : "", size: ROLE_SIZE,
+      removal: { type: "derived", reason: "This follows the Philosopher's choice. Undo the choice to remove it." } });
+  }
   // The Godfather's official DIED TODAY token: a dead Outsider whose death was during the Day the Godfather is acting on (this Day, or
   // the Day just ended once Night falls). Drawn from the Life Event Window, never stored, so Undo and reload need nothing.
   if (diedToday(env, player)) {
@@ -249,6 +264,8 @@ export function reminderPalette(env: MarkEnv): { inPlay: PaletteEntry[]; all: Pa
   const { game, script, registry } = env;
   if (!script) return { inPlay: [], all: [] };
   const present = new Set(Object.values(game.players).filter((p) => !p.isEmpty).map((p) => p.actualRole));
+  // SV-3a: "You can now use the duplicated character's reminders for the Philosopher": a gained character's tokens are in play too.
+  for (const p of Object.values(game.players)) { const gained = gainedRoleOf(p); if (gained) present.add(gained); }
   const chosen = new Set([...(game.fabled ?? []), ...(game.lorics ?? [])]);
   const ids = new Set([
     ...script.characters.map((r) => r.id), ...(script.fabled ?? []).map((r) => r.id), ...chosen,

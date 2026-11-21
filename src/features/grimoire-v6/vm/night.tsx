@@ -84,7 +84,9 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
     // PO review A03/C07: an impaired player is named by the pill beside the name, and the routine procedure lines
     // (manual prompt, impairment, death check) are not repeated in amber. Rarer Storyteller checks still show.
     const seat = player ? game.players[current.playerId] : undefined;
-    const drunk = player && !!seat && (current.isDeceived && current.actualRoleId === "drunk" || hasEffect(seat, "drunk"));
+    // The Philosopher's DRUNK is derived live too (SV-3a): the true holder of the gained character holds no stored Effect.
+    const gainedDrunk = !!seat?.participantId && engine.query?.gainedAbilityDrunk({ playerId: seat.id, participantId: seat.participantId });
+    const drunk = player && !!seat && (current.isDeceived && current.actualRoleId === "drunk" || hasEffect(seat, "drunk") || !!gainedDrunk && gainedDrunk.known && gainedDrunk.value);
     // A player poisoned by the No Dashii's passive holds no Effect (it is derived live), so the card asks the rules for the effective state.
     const noDashii = !!seat?.participantId && engine.query?.noDashiiPoisoned({ playerId: seat.id, participantId: seat.participantId });
     // The Marionette is shown the same pill, in the same style: the card names who they really are beside the name.

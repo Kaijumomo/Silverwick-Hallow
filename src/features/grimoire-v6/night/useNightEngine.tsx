@@ -102,6 +102,8 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
 
   const abilityOf = (step: NightStep): StepAbility | null => {
     if (step.kind !== "player") return null;
+    // SV-3a: an ability the player gained (the Philosopher's chosen character) is run by hand at that character's place.
+    if (step.gainedFrom) return { kind: "manual", reason: GAINED_BY_HAND };
     const ordinary = pathAbility(step.effectiveRoleId, registry, semantics, "nightOrder", game);
     if (ordinary.kind === "guided") return ordinary;
     const player = game.players[step.playerId];
@@ -174,8 +176,8 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
       roleId: current.effectiveRoleId, simulated: current.isDeceived }).kind === "automated"
     && manualAction !== current.stepKey);
   const manualRavenkeeper = current?.kind === "player" && current.effectiveRoleId === "ravenkeeper" && current.isDeceived;
-  const preparedInformation = current?.kind === "player" && FIRST_INFORMATION_CHARACTERS.has(current.effectiveRoleId);
-  const butlerTurn = current?.kind === "player" && current.effectiveRoleId === "butler";
+  const preparedInformation = current?.kind === "player" && !current.gainedFrom && FIRST_INFORMATION_CHARACTERS.has(current.effectiveRoleId);
+  const butlerTurn = current?.kind === "player" && !current.gainedFrom && current.effectiveRoleId === "butler";
   const inlineInformation = !!(butlerTurn || preparedInformation || current?.kind === "player" && NIGHT_INFORMATION_ROLES.has(current.effectiveRoleId)
     && ability?.kind === "guided" && (!!eligible || resolved || manualRavenkeeper));
   const direct = !inlineInformation && eligible && ability?.kind === "guided" && !ability.invocationPath && boardTarget(ability.descriptor);
@@ -197,6 +199,8 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   const manual = !bureaucrat && !eligible;
   // PO review 2026-11-14 (C1): the Barber's verified step is tapped on the board in the Night card (BarberNightAction), not the workspace.
   const barberTurn = !!eligible && current?.kind === "player" && current.effectiveRoleId === "barber" && ability?.kind === "guided";
+  // SV-3a (PO 2026-11-21): the Philosopher's choice is made on the Night card (PhilosopherNightAction), never in the workspace.
+  const philosopherTurn = !!eligible && current?.kind === "player" && !current.gainedFrom && current.effectiveRoleId === "philosopher" && ability?.kind === "guided";
   const owner = current ? `night-guide:${game.code}:${game.day}:${current.stepKey}` : "night-guide";
   const live = useRef({ visible, current, game, successorChoice });
   live.current = { visible, current, game, successorChoice };
@@ -488,7 +492,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     if (!visible) { ui.set({ panel: "night" }); return; }
     lastRequest.current = actionRequest;
     if (resolved) return;
-    if (direct || bureaucrat || inlineInformation || barberTurn) setPaused(false); else if (!workspace) openWorkspace();
+    if (direct || bureaucrat || inlineInformation || barberTurn || philosopherTurn) setPaused(false); else if (!workspace) openWorkspace();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actionRequest, visible, active]);
 
@@ -544,7 +548,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
 
   return {
     active, visible, work, steps, unfinished, pos, current, currentIndex, positionIndex, resolved, actor, role, ability, query,
-    eligible, direct, canTarget, question, answerQuestion, skipReason, settled, moonchildChoice, regurgitation, needed, picks, guessFor, inlineInformation, preparedInformation, butlerTurn, barberTurn, bureaucrat, manual, manualRavenkeeper, correction,
+    eligible, direct, canTarget, question, answerQuestion, skipReason, settled, moonchildChoice, regurgitation, needed, picks, guessFor, inlineInformation, preparedInformation, butlerTurn, barberTurn, philosopherTurn, bureaucrat, manual, manualRavenkeeper, correction,
     workspace, setWorkspace, setPaused, error, setError, success, successorChoice, tapRuling: pendingRuling, answerTapRuling, picker, refused, owner, actionContext,
     navigate, gotoCheckpoint, prev, next, beginDay, openWorkspace, openTrigger, requireManual, finish,
   };
@@ -553,6 +557,8 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
 export type NightEngine = ReturnType<typeof useNightEngine>;
 
 const EMPTY_STEPS: NightStep[] = [];
+/** SV-3a: why a gained ability's row is the Storyteller's. */
+export const GAINED_BY_HAND = "An ability the Philosopher gained is run by hand at that character's place.";
 const EMPTY_PICKS: ParticipantBinding[] = [];
 const EMPTY_RULINGS: Record<string, Record<string, AbilityInputValue>> = {};
 /** A yes/no the Storyteller answers before the step asks for any player. */

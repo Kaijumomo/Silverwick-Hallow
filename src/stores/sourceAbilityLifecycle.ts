@@ -52,7 +52,7 @@ export function planRemovedVotingReminders(game: StorytellerLobbyRecord, removed
  * abilities; temporary impairment only changes derived applicability. This
  * narrow policy intentionally covers no other character or effect type.
  * `characterChange`: the loss is a change of character (not a death or a resurrection). The Sweetheart's DRUNK ends only then:
- * "This ability works while the Sweetheart is dead" (SV-1b).
+ * "This ability works while the Sweetheart is dead" (SV-1b). The Philosopher's gained ability ends the same way (SV-3a).
  * https://wiki.bloodontheclocktower.com/Abilities */
 export function planSourceAbilityLoss(
   game: StorytellerLobbyRecord,
@@ -86,7 +86,10 @@ export function planSourceAbilityLoss(
         effect.sourceCharacter === "innkeeper" && (effect.type === "cannotDie" || effect.type === "drunk") ||
         effect.sourceCharacter === "vigormortis" && (effect.type === "poisoned" || effect.type === "retainsAbility") || effect.sourceCharacter === "witch" && effect.type === "witchCurse" ||
         effect.sourceCharacter === "devilsadvocate" && effect.type === "survivesExecution" ||
-        characterChange && effect.sourceCharacter === "sweetheart" && effect.type === "drunk";
+        characterChange && effect.sourceCharacter === "sweetheart" && effect.type === "drunk" ||
+        // SV-3a: a Philosopher who changes character no longer has what it gained ("They do not become that character"; a new
+        // Philosopher starts fresh). Death does not end it: a gained ability that works while dead still works.
+        characterChange && effect.sourceCharacter === "philosopher" && effect.type === "gainedAbility";
       const definition = effect.sourceCharacter ? environment?.registry.get(effect.sourceCharacter) : undefined;
       if (!supported || !definition || !isCanonicalRole(definition)) continue;
       const result = planEffectTransaction(working, { intents: [{ kind: "remove", target: { playerId: player.id, participantId: player.participantId }, effectId: effect.id }],

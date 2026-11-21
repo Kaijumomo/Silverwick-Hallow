@@ -175,6 +175,13 @@ export const lifeRuleNeedsRosterReview = (roleId: RoleId): boolean => {
  * https://wiki.bloodontheclocktower.com/No_Dashii */
 export const isNeighbourPoisoner = (roleId: RoleId): boolean => roleId === "nodashii";
 
+/** SV-3a: characters whose GAINED ability makes every player who truly holds the gained character drunk, while the gainer is alive
+ * and its ability functions (derived by the Rules Query, never stored). "If this character is in play, they are drunk." "If the
+ * Philosopher then dies or becomes drunk or poisoned, the player they are making drunk becomes sober again." "If the Philosopher
+ * chose a character that was not in play at the time but is in play now, that character is drunk."
+ * https://wiki.bloodontheclocktower.com/Philosopher */
+export const drunksGainedCharacter = (roleId: RoleId): boolean => roleId === "philosopher";
+
 /**
  * LS-1: a "survives once" row (the Fool). The holder is genuinely alive and shown alive, so nothing is hidden: the row only says
  * "this death does not happen and the ability is spent". It applies when the ability has not been used and (if the row needs it)
@@ -295,6 +302,9 @@ export const REVIEWED_INTERACTION_ROLES: ReadonlySet<string> = new Set([
   // SV-2b: the Fang Gu's kill goes through the shared Demon death gate; its one jump into an Outsider is one Life, Role and Alignment
   // resolution that records the ONCE game-rule fact. It changes no other ability.
   "fanggu",
+  // SV-3a: the Philosopher's choice records a gained-ability Effect on itself; the player who truly holds the gained character is
+  // drunk through the shared impairment query (derived, like the No Dashii's poison). It changes no other ability.
+  "philosopher",
   // Marionette has no ability effects of its own: it is an evil Minion who believes they are good, and every query reads its ACTUAL role and alignment.
   "marionette",
   // Information-only characters (Sects & Violets / Bad Moon Rising): each only reads game state and changes none, so it has no
