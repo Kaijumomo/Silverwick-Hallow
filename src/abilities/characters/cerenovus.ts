@@ -1,4 +1,5 @@
-import type { AbilityOperation } from "@/stores/abilityResolution";
+import type { AbilityOperation, ParticipantBinding } from "@/stores/abilityResolution";
+import type { RulesQuery } from "@/stores/rulesQuery";
 import type { AbilityDescriptor, AbilityEvaluation } from "../semantics";
 import { answerOf, firstParticipant, nothing, outcome, requireLivingActor } from "./shared";
 
@@ -70,3 +71,19 @@ export const CERENOVUS: AbilityDescriptor = {
     return outcome([operation]);
   },
 };
+
+/**
+ * SV-4b: whether the Storyteller's Execute item is offered for this player's madness. Offered while a MAD this Cerenovus placed is
+ * still live and either applies or cannot be told (the Storyteller decides); not once the MAD has ended ("a previously mad player can
+ * talk about it without penalty") and not when it is known not to apply (its Cerenovus no longer functions). The app never decides
+ * whether the player tried: this only says the choice is the Storyteller's to make.
+ */
+export function madnessAllowsExecution(query: RulesQuery, binding: ParticipantBinding): boolean {
+  const player = query.participant(binding);
+  if (!player) return false;
+  return player.effects.some((effect) => {
+    if (effect.type !== MAD_EFFECT || effect.state !== "active" || effect.sourceCharacter !== "cerenovus") return false;
+    const applies = query.effectApplies(binding, effect);
+    return !applies.known || applies.value;
+  });
+}

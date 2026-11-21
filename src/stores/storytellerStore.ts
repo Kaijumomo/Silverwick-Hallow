@@ -743,7 +743,7 @@ export type StorytellerStore = {
   recordExecution: (
     id: PlayerId,
     outcome: ExecutionOutcome,
-    options?: { confirmations?: readonly LifeConfirmationToken[] },
+    options?: { confirmations?: readonly LifeConfirmationToken[]; spendsAbility?: boolean },
     context?: MutationContext,
     actionContext?: CharacterActionContext,
   ) => LifeCommandResult;
@@ -3046,9 +3046,11 @@ export const useStorytellerStore = create<StorytellerStore>()(
       recordDeath: (id, context, actionContext) =>
         commitLifeOutcome({ intents: [{ kind: "death", playerId: id }], context }, actionContext, true),
 
+      // `spendsAbility` (LS-1's Fool): a survived execution that also uses up the executee's own ability, in the same transaction.
       recordExecution: (id, outcome, options, context, actionContext) =>
         commitLifeOutcome({ intents: [{ kind: "execution", playerId: id, outcome,
-          ...(options?.confirmations?.length ? { confirmations: options.confirmations } : {}) }], context }, actionContext, true),
+          ...(options?.confirmations?.length ? { confirmations: options.confirmations } : {}) },
+          ...(options?.spendsAbility && outcome === "survived" ? [{ kind: "useAbility" as const, playerId: id }] : [])], context }, actionContext, true),
 
       resurrect: (id, context) =>
         get().resolveLife({ intents: [{ kind: "resurrection", playerId: id }], context }),
