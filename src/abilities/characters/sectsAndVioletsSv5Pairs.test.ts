@@ -7,7 +7,7 @@ import { PHILOSOPHER_CHARACTER } from "./philosopher";
 import { FANG_GU_TARGET } from "./fanggu";
 import { DREAMER_FALSE_EVIL, DREAMER_FALSE_GOOD } from "./dreamer";
 import { FLOWERGIRL_DEMON_VOTED } from "./flowergirl";
-import { REVIEWED_INTERACTION_ROLES } from "./passiveRules";
+import { REVIEWED_INTERACTION_ROLES, runsGainedAbility } from "./passiveRules";
 import { pick, plan, planned, proofGame, proofScript, request } from "@/test/proofFixtures";
 import { computeNightOrder } from "@/rules/night/nightOrder";
 import type { AbilityInputs } from "@/abilities/semantics";
@@ -105,6 +105,16 @@ describe("SV-5b pairs: the Seamstress against every other character of the scrip
     const vortox = proofGame(["seamstress", "imp", "chef", "vortox", "poisoner", "empath"], "night", 2);
     byHand(plan(vortox, request(vortox, "p0", "seamstress", { targets: pick(vortox, "p2", "p3") })));
   });
+  it("Evil Twin: choosing both Twins gives NO (opposing alignments)", () => {
+    const g = proofGame(["seamstress", "imp", "chef", "eviltwin", "poisoner", "empath"], "night", 2);
+    expect(valueOf(g, "seamstress", { targets: pick(g, "p2", "p3") }).find((v) => v.kind === "boolean")).toMatchObject({ value: false });
+  });
+  it("Witch: a cursed Seamstress keeps her ability", () => {
+    let g = proofGame(["seamstress", "imp", "chef", "witch", "poisoner", "empath"], "night", 2);
+    g = planned(plan(g, request(g, "p3", "witch", { target: pick(g, "p0") }, step)));
+    expect(g.players.p0!.effects.some((e) => e.type === "witchCurse")).toBe(true);
+    expect(valueOf(g, "seamstress", { targets: pick(g, "p2", "p5") }).find((v) => v.kind === "boolean")).toMatchObject({ value: true });
+  });
   it("Fang Gu: a jumped Outsider is read as the evil player they are now", () => {
     // p0 seamstress, p1 fanggu, p2 chef, p3 mutant, p4 poisoner, p5 empath. The Fang Gu kills the Mutant: they become the evil Fang Gu.
     const g = proofGame(["seamstress", "fanggu", "chef", "mutant", "poisoner", "empath"], "night", 2);
@@ -171,11 +181,15 @@ describe("SV-5d pairs: the Flowergirl against every other character of the scrip
     expect(id.startsWith(FLOWERGIRL_DEMON_VOTED)).toBe(true);
     expect(valueOf(swapped, "flowergirl", { [id]: { kind: "boolean", value: true } })[0]).toMatchObject({ value: true });
   });
-  it("Philosopher: a Philosopher who gained the Flowergirl's ability is the Storyteller's to run", () => {
+  it("Philosopher: a Philosopher who gained the Flowergirl's ability wakes at her place, and that wake is the Storyteller's to run", () => {
     const g = proofGame(["philosopher", "imp", "chef", "monk", "poisoner", "empath"], "night", 2);
     const chose = planned(plan(g, request(g, "p0", "philosopher", { [PHILOSOPHER_CHARACTER]: character("flowergirl") }, step)));
-    const later = withVotes({ ...chose, day: 3, nightProgress: {} }, 2, "p5", ["p1"]);
-    expect(plan(later, request(later, "p0", "flowergirl"))).toMatchObject({ ok: false });
+    const later = { ...chose, day: 3, nightProgress: {} };
+    const gained = computeNightOrder(later.players, later.seatOrder, proofScript, false, later)
+      .filter((s) => s.kind === "player" && s.playerId === "p0" && s.effectiveRoleId === "flowergirl");
+    expect(gained).toEqual([expect.objectContaining({ gainedFrom: "philosopher" })]);
+    // The Night card runs a gained row only for the abilities on this list (SV-3b); every other gained wake is by hand.
+    expect(runsGainedAbility("flowergirl")).toBe(false);
   });
   it("wakes every night but the first, beside every other character", () => {
     for (const other of others("flowergirl")) {

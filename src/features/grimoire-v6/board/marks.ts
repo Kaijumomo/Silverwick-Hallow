@@ -113,7 +113,7 @@ function townCrierToken({ game, query }: MarkEnv, player: STPlayerRecord): "Mini
 
 /**
  * SV-5d: the Flowergirl's official tokens, read from the Day's voting record (PO Q3: derived, never stored): DEMON NOT VOTED from
- * dawn, DEMON VOTED once a Demon has voted, until the Flowergirl has woken that Night (the record is the Day just ended). Only for a
+ * dawn, DEMON VOTED once a Demon has voted, through the Night that follows (the record is the Day just ended). Only for a
  * living, real Flowergirl (or a Philosopher with her ability, as the Town Crier's). A vote the app cannot rule (a Recluse, a character
  * changed since the vote, an unfinished vote) or a record that cannot be verified draws nothing, like the Town Crier's.
  */

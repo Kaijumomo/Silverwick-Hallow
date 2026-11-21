@@ -4,6 +4,8 @@
 import { describe, expect, it } from "vitest";
 import { homebrewEnv, impair, patchPlayer, pick, plan, planned, proofGame, request } from "@/test/proofFixtures";
 import { CERENOVUS_CHARACTER } from "./cerenovus";
+import { PHILOSOPHER_CHARACTER } from "./philosopher";
+import { gainedRoleOf } from "@/stores/gainedAbility";
 import { DREAMER_EVIL, DREAMER_FALSE_EVIL, DREAMER_FALSE_GOOD, DREAMER_GOOD } from "./dreamer";
 import type { AbilityInputs } from "@/abilities/semantics";
 import type { StorytellerLobbyRecord } from "@/stores/types";
@@ -32,7 +34,9 @@ describe("SV-5c Dreamer: the page's examples", () => {
   });
 
   it("a Philosopher who gained another ability is still the Philosopher (shown with the Vigormortis)", () => {
-    const g = proofGame(ROLES, "night", 2);
+    const before = proofGame(ROLES, "night", 2);
+    const g = planned(plan(before, request(before, "p4", "philosopher", { [PHILOSOPHER_CHARACTER]: character("savant") }, { withStep: true, completeStep: true })));
+    expect(gainedRoleOf(g.players.p4)).toBe("savant");
     const id = asked(g, "p4")!.id;
     expect(shown(g, "p4", { [id]: character("vigormortis") })).toEqual([["goodCharacter", "philosopher"], ["evilCharacter", "vigormortis"]]);
   });

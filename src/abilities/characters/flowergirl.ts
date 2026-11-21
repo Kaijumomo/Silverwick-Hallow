@@ -18,8 +18,8 @@ import { informationAbilityRefusal, recluseRegistrationChoice } from "./informat
  * dead Demon's ghost vote counts). A voter's character at the vote is known when their current character began before that Day
  * (`characterSince`, recorded from Night 1); otherwise it changed since (a swap, a Pit-Hag, a jump) and the app cannot tell, so the
  * Storyteller is asked ONE question, never guessed. A healthy Recluse who voted may register as a Demon (PO Q2): the same question,
- * unless a Demon certainly voted (then YES). A YES in a vote that was abandoned or never finished, by a player who is or may have
- * been a Demon, is also the Storyteller's question. An incomplete or missing record: by hand, as the Town Crier's.
+ * unless a Demon certainly voted (then YES). A YES in a vote that was abandoned, by a player who is or may have been a Demon, is also
+ * the Storyteller's question (a vote still open counts at once). One certain Demon YES anywhere in the Day is YES. An incomplete or missing record: by hand, as the Town Crier's.
  * Drunk or poisoned (or a Drunk shown the Flowergirl): the Storyteller chooses YES or NO. Shared rules:
  * docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md (matrix Section 8, information support). A Vortox in play makes the whole step Manual
  * through the shared information modifier (passiveRules.ts) until the Vortox merge.
@@ -30,7 +30,7 @@ export const FLOWERGIRL_DEMON_VOTED = "flowergirl:demonVoted";
 export type DemonVotedRecord =
   | { kind: "known"; voted: boolean }
   /** The Storyteller rules: `changed` voters' characters may have changed since they voted; `recluses` may register as a Demon;
-   * `unfinished` voted YES in a vote that was abandoned or never finished. */
+   * `unfinished` voted YES in a vote that was abandoned. */
   | { kind: "ask"; changed: ParticipantBinding[]; recluses: ParticipantBinding[]; unfinished: ParticipantBinding[] }
   | { kind: "manual"; message: string };
 
@@ -50,23 +50,27 @@ export function demonVotedOn(query: RulesQuery, day: number): DemonVotedRecord {
     return { kind: "manual", message: "The Day's voting record is incomplete. Resolve this information manually." };
   const changed: ParticipantBinding[] = [], recluses: ParticipantBinding[] = [], unfinished: ParticipantBinding[] = [];
   const add = (list: ParticipantBinding[], who: ParticipantBinding) => { if (!list.some((item) => item.participantId === who.participantId)) list.push(who); };
+  // Every YES is read before deciding: one certain Demon vote anywhere in the Day is YES, whatever else the record holds.
+  let manual: string | null = null;
   for (const round of voting.rounds) {
     if (round.mode !== "nomination") continue;
-    const finished = round.status === "outcome" || round.status === "acknowledged";
+    // A hand raised in a vote still open counts at once ("DEMON VOTED once the Demon votes"); only an abandoned vote is doubtful.
+    const abandoned = round.status === "abandoned";
     for (const response of round.responses) {
       if (response.choice !== "yes") continue;
       const voter = { playerId: response.voter.playerId, participantId: response.voter.participantId };
       const player = query.participant(voter);
-      if (!player) return { kind: "manual", message: "A voter's seat changed since the vote: the Storyteller decides." };
+      if (!player) { manual ??= "A voter's seat changed since the vote: the Storyteller decides."; continue; }
       if (!characterHeldSince(query.game, player, day)) { add(changed, voter); continue; }
       const demon = query.registersAsType(voter, "demon", "flowergirl");
       if (demon.known && !demon.value) continue;
-      if (!demon.known && !recluseRegistrationChoice(query, voter)) return { kind: "manual", message: demon.reason };
-      if (!finished) { add(unfinished, voter); continue; }
+      if (!demon.known && !recluseRegistrationChoice(query, voter)) { manual ??= demon.reason; continue; }
+      if (abandoned) { add(unfinished, voter); continue; }
       if (demon.known) return { kind: "known", voted: true };
       add(recluses, voter);
     }
   }
+  if (manual) return { kind: "manual", message: manual };
   return changed.length || recluses.length || unfinished.length ? { kind: "ask", changed, recluses, unfinished } : { kind: "known", voted: false };
 }
 
@@ -109,7 +113,7 @@ export const FLOWERGIRL: AbilityDescriptor = {
     const why = [
       record.changed.length ? `${names(record.changed)} voted and ${record.changed.length === 1 ? "has" : "have"} changed character since, so may have been a Demon then.` : "",
       record.recluses.length ? `${names(record.recluses)} voted and may register as a Demon.` : "",
-      record.unfinished.length ? `${names(record.unfinished)} voted in a vote that was not finished.` : "",
+      record.unfinished.length ? `${names(record.unfinished)} voted in a vote that was abandoned.` : "",
     ].filter(Boolean).join(" ");
     const id = subjectId(FLOWERGIRL_DEMON_VOTED, ...record.changed, ...record.recluses, ...record.unfinished);
     const ruled = answerOf(context.inputs, id, "boolean");

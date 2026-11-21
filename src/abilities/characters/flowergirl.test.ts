@@ -2,7 +2,7 @@
 // SV-5d: the Flowergirl (https://wiki.bloodontheclocktower.com/Flowergirl, saved 2026-11-11). Expected answers are the page's examples
 // and rules, typed here, never read back from the code under test.
 import { describe, expect, it } from "vitest";
-import { homebrewEnv, impair, patchPlayer, plan, planned, proofGame, proofQuery, request, yes } from "@/test/proofFixtures";
+import { homebrewEnv, impair, patchPlayer, plan, planned, proofGame, proofQuery, request, reseat, yes } from "@/test/proofFixtures";
 import { FLOWERGIRL_DEMON_VOTED, demonVotedOn } from "./flowergirl";
 import type { AbilityInputs } from "@/abilities/semantics";
 import type { StorytellerLobbyRecord } from "@/stores/types";
@@ -102,6 +102,24 @@ describe("SV-5d Flowergirl: what counts", () => {
     expect(told(withVoting(base, 2, [round(base, "p3", "p5", ["p2", "p3"], { status: "abandoned" })]))).toBe(false);
   });
 
+  it("one certain Demon vote anywhere in the Day is YES, even after a vote the app cannot read", () => {
+    // Round 1: p2 voted, and p2's seat has since been taken by a new participant. Round 2: the Fang Gu (p1) voted.
+    const base = night3();
+    const record = withVoting(base, 2, [round(base, "p3", "p4", ["p2"]), round(base, "p5", "p3", ["p1"])]);
+    expect(told(reseat(record, "p2"))).toBe(true);
+    // Without the Demon's vote, the unreadable one sends the step by hand.
+    expect(learn(reseat(withVoting(base, 2, [round(base, "p3", "p4", ["p2"])]), "p2"))).toMatchObject({ ok: false, code: "unsupported" });
+  });
+
+  it("a Demon's hand raised in a vote still open counts at once", () => {
+    const base = night3();
+    // Nominee p4: the order runs p5, p6, p0, p1, ...; four hands are in, the Fang Gu's (p1) last.
+    const open = round(base, "p3", "p4", ["p1"], { status: "voting" });
+    const live = { ...open, responses: open.responses.slice(0, 4), result: null, tally: open.responses.slice(0, 4).reduce((n, r) => n + r.weight, 0) };
+    expect(demonVotedOn(proofQuery({ ...withVoting(base, 2, [live]), voting: { ...withVoting(base, 2, [live]).voting!, activeRoundId: live.id } }), 2))
+      .toEqual({ kind: "known", voted: true });
+  });
+
   it("the record is read, not stored: correcting a vote changes the answer", () => {
     const base = night3();
     expect(demonVotedOn(proofQuery(withVoting(base, 2, [round(base, "p3", "p5", ["p1"])])), 2)).toEqual({ kind: "known", voted: true });
@@ -115,6 +133,16 @@ describe("SV-5d Flowergirl: impaired, the first night and by hand", () => {
     const g = impair(withVoting(base, 2, [round(base, "p3", "p5", ["p1"])]), "p0", type);
     expect(learn(g)).toMatchObject({ ok: false, code: "needsInput", requirements: [{ id: "communicated", kind: "boolean", source: "storyteller" }] });
     expect(told(g, { communicated: yes(false) })).toBe(false);
+  });
+
+  it("a Drunk shown the Flowergirl: a simulated answer the Storyteller chooses, recorded for the Drunk", () => {
+    const base = night3();
+    const g = patchPlayer(withVoting(base, 2, [round(base, "p3", "p5", ["p1"])]), "p0",
+      { actualRole: "drunk", shownRole: "flowergirl", shownAlignment: null, behaviorMode: "drunk_fake_role_behavior" });
+    expect(learn(g)).toMatchObject({ ok: false, code: "needsInput", requirements: [{ id: "communicated" }] });
+    const next = planned(learn(g, { communicated: yes(false) }));
+    expect(next.informationDeliveries.at(-1)).toMatchObject({ actualRole: "drunk", performedRole: "flowergirl" });
+    expect(next.players).toBe(g.players);
   });
 
   it("no answer on the first night; by hand when the record is missing, from another Day or incomplete; a Vortox; homebrew", () => {
