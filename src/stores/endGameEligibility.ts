@@ -49,6 +49,8 @@ export function twinGoodWinBlock(game: StorytellerLobbyRecord, environment: Rule
  */
 export function twinAdvisory(game: StorytellerLobbyRecord, environment: RulesQueryEnvironment): string | null {
   if (game.phase !== "day") return null;
+  const afterDemon = saintAfterDemonLine(game, environment);
+  if (afterDemon) return afterDemon;
   const pair = twinPairOf(game.players);
   if (pair.kind !== "single" || !pair.valid || !pair.good) return null;
   const good = pair.good;
@@ -70,6 +72,21 @@ export function twinAdvisory(game: StorytellerLobbyRecord, environment: RulesQue
   const died = executed.some((event) => event.kind === "execution" && event.outcome === "died");
   if (functions.known && died) return "The Good Twin was executed. Evil wins. Check before ending the game";
   return "The Good Twin was executed but may not have died, or the Evil Twin's ability is in doubt. Your ruling";
+}
+
+/**
+ * With the Demon dead and the Evil Twin's block holding, play goes on, so a Saint's execution that Day still matters ("if you die by
+ * execution, your team loses"). The qualification evidence is not captured once no Demon lives (the existing rule), so this is a
+ * reminder only: it names no winner and records nothing; the Storyteller checks the Saint.
+ */
+function saintAfterDemonLine(game: StorytellerLobbyRecord, environment: RulesQueryEnvironment): string | null {
+  if (twinGoodWinBlock(game, environment)?.kind !== "blocked") return null;
+  const players = Object.values(game.players).filter((player) => !player.isEmpty && !!player.participantId && !player.isTraveler);
+  const isDemon = (player: (typeof players)[number]) => environment.registry.get(player.actualRole)?.type === "demon";
+  if (players.some((player) => player.alive && isDemon(player)) || !players.some((player) => !player.alive && isDemon(player))) return null;
+  const events = executionsAt(game, { phase: "day", day: game.day });
+  const saint = (events.status === "known" ? events.events : events.recorded).some((event) => event.kind === "execution" && event.outcome === "died" && event.actualRoleAtEvent === "saint");
+  return saint ? "The Saint was executed after the Demon died, and both Twins live. Check before ending the game" : null;
 }
 
 /**

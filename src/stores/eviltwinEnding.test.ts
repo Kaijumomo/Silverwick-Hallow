@@ -258,3 +258,21 @@ describe("review finding: the Demon died, then the Good Twin was executed the sa
     expect(endHint(ctx)).toBe("The Good Twin was executed. Evil wins. Check before ending the game");
   });
 });
+
+describe("review finding: the Demon died, both Twins live, then a Saint was executed the same Day", () => {
+  it("the End control says to check the Saint instead of 'the Demon is dead, good cannot win'", () => {
+    let g = twinned(proofGame(["imp", "eviltwin", "chef", "saint", "empath", "washerwoman"], "day", 2), "p1", "p2");
+    g = patchPlayer(patchPlayer(g, "p5", { alive: false }), "p4", { alive: false });
+    openInStore(g);
+    expect(state().recordExecution("p0", "died")).toMatchObject({ ok: true });
+    const ctx = () => ({ game: game(), script: env.script, registry: env.registry, privacy: false }) as unknown as V6Ctx;
+    expect(endHint(ctx())).toBe(`The Demon is dead. ${TWINS_BLOCK_GOOD_WIN}`);
+    // The Saint is executed too (the Storyteller's second execution that Day).
+    const now = game();
+    const ref = { kind: "participant" as const, playerId: "p3", participantId: now.players.p3!.participantId!, nameAtTime: "Player 3" };
+    store.setState({ game: { ...patchPlayer(now, "p3", { alive: false }), lifeEventWindow: { ...now.lifeEventWindow, events: [...now.lifeEventWindow.events, { id: "ev-saint", kind: "execution", subject: ref, actualRoleAtEvent: "saint", moment: { phase: "day", day: 2 }, outcome: "died" } as never] } } });
+    expect(endGameEligibility(game(), env).kind).toBe("unknown");
+    expect(endHint(ctx())).toBe("The Saint was executed after the Demon died, and both Twins live. Check before ending the game");
+    expect(endHint({ ...ctx(), privacy: true } as unknown as V6Ctx)).not.toMatch(/Twin|Saint/);
+  });
+});
