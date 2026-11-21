@@ -143,6 +143,26 @@ describe("SV-4b: Execute in the Day", () => {
     expect(today()).toEqual([]);
   });
 
+  it("review finding: at night a Fool with the ability unused is asked too; surviving uses the ability up, records no death and no execution, and Undo restores it", async () => {
+    madGame(["p4"], "night");
+    const pending = run("p4");
+    await settle();
+    expect(useV6Ui.getState().ask).toMatchObject({ title: "Did Player 4 die?" });
+    await answer("alt");
+    await pending;
+    expect(game().players.p4).toMatchObject({ alive: true, abilityUsed: true });
+    expect(game().lifeEventWindow.events.filter((e) => e.subject.participantId === game().players.p4!.participantId)).toEqual([]);
+    act(() => { store.getState().undo(); });
+    expect(game().players.p4).toMatchObject({ alive: true, abilityUsed: false });
+    // 'Yes · died' records the ordinary death, and today's execution stays free.
+    const again = run("p4");
+    await settle();
+    await answer("run");
+    await again;
+    expect(game().players.p4!.alive).toBe(false);
+    expect(today()).toEqual([]);
+  });
+
   it("answering the Fool's question 'died' records the death; dismissing it records nothing", async () => {
     madGame(["p4"], "day");
     let pending = run("p4");

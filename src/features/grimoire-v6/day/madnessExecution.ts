@@ -72,7 +72,29 @@ export async function runExecute(ctx: V6Ctx, player: STPlayerRecord): Promise<vo
   }
   if (!executeOffered(ctx, current)) { flash(`${name} cannot be executed from here right now.`); return; }
 
+  const environment = ctx.script ? { script: ctx.script, registry: ctx.registry } : undefined;
   if (game.phase === "night") {
+    // The same question as the Day, because the death gate (the Fool, a sober Sailor, unknown protection) concerns an execution too; the answer
+    // only decides whether an ordinary death is recorded (the Life Event model records no execution at night, so today's execution stays free).
+    const advice = executionAdvice(game, current.id, environment);
+    const choices = executionChoiceNames(game.players);
+    let died = true;
+    if (advice || choices.length || !executionDeathKnown(game, current.id, environment)) {
+      const body = [...choices.map((who) => `${who} may apply: you decide whether an executed good player survives.`), advice?.note ?? null].filter(Boolean).join(" ");
+      const answer = await chooseAsk(`Did ${name} die?`, body, "Yes · died", "No · survived");
+      if (!answer) return;
+      died = answer === "first";
+    }
+    if (store.getState().game !== game) { flash("The game changed. Choose Execute again."); return; }
+    if (!died) {
+      // A survival that uses up the player's own ability (the Fool) records that use, in one commit; nothing else changes.
+      if (executionSpendsAbility(game, current.id, environment)) {
+        const spent = store.getState().resolveLife({ intents: [{ kind: "useAbility", playerId: current.id }] }, captureVotingContext());
+        if (!spent.ok) { flash(spent.message); return; }
+      }
+      flash(`${name} survives the execution.`);
+      return;
+    }
     const result = store.getState().recordDeath(player.id, undefined, captureVotingContext());
     if (!result.ok) { flash(result.message); return; }
     flash([`${name} is executed at night: recorded as a death. Today's execution is still free.`, nightExecutionWarning(current, game.players)].filter(Boolean).join(" "));
@@ -80,7 +102,6 @@ export async function runExecute(ctx: V6Ctx, player: STPlayerRecord): Promise<vo
   }
 
   // Day: the outcome follows the rules gate, and the Storyteller is asked only where the gate says survival is possible.
-  const environment = ctx.script ? { script: ctx.script, registry: ctx.registry } : undefined;
   let outcome: ExecutionOutcome = "alreadyDead";
   if (current.alive) {
     const advice = executionAdvice(game, current.id, environment);
