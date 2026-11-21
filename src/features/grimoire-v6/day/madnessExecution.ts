@@ -1,6 +1,6 @@
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 import { madnessAllowsExecution } from "@/abilities/characters/cerenovus";
-import { executionAdvice, executionChoiceNames, executionSpendsAbility } from "@/stores/executionAdvice";
+import { executionAdvice, executionChoiceNames, executionDeathKnown, executionSpendsAbility } from "@/stores/executionAdvice";
 import { executionsAt } from "@/stores/lifeEvents";
 import { createRulesQuery } from "@/stores/rulesQuery";
 import { captureVotingContext, useStorytellerStore } from "@/stores/storytellerStore";
@@ -85,7 +85,8 @@ export async function runExecute(ctx: V6Ctx, player: STPlayerRecord): Promise<vo
   if (current.alive) {
     const advice = executionAdvice(game, current.id, environment);
     const choices = executionChoiceNames(game.players);
-    if (advice || choices.length) {
+    // The Storyteller is asked unless the rules positively establish that the execution kills (unknown or generic protection is theirs to judge).
+    if (advice || choices.length || !executionDeathKnown(game, current.id, environment)) {
       const body = [...choices.map((who) => `${who} may apply: you decide whether an executed good player survives.`), advice?.note ?? null].filter(Boolean).join(" ");
       const answer = await chooseAsk(`Did ${name} die?`, body, "Yes · died", "No · survived");
       if (!answer) return;

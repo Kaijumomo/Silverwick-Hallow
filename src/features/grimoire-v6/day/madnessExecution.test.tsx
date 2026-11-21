@@ -268,4 +268,16 @@ describe("SV-4b: Execute at night", () => {
     expect(game().players.p0!.alive).toBe(false);
     expect(game().lifeEventWindow.events.filter((e) => e.kind === "execution")).toEqual([]);
   });
+
+  it("review finding: a living player whose protection is the Storyteller's judgment is asked 'Did they die?' instead of being recorded as dead", async () => {
+    openInStore(impair(proofGame(["mutant", "imp", "chef", "empath"], "day", 3), "p0", "protected"));
+    const pending = run("p0");
+    await settle();
+    expect(useV6Ui.getState().ask?.title).toBe("Did Player 0 die?");
+    expect(game().players.p0!.alive).toBe(true);
+    await answer("alt");
+    await pending;
+    expect(game().players.p0!.alive).toBe(true);
+    expect(today()).toEqual([expect.objectContaining({ kind: "execution", outcome: "survived" })]);
+  });
 });

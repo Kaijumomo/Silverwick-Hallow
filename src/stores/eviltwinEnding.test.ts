@@ -239,3 +239,22 @@ describe("independent check follow-ups (2e82ad9)", () => {
     expect(withheldGoodWinLine(after, env)).toMatch(/^The Mayor’s condition is met\. The Twins need your ruling/);
   });
 });
+
+describe("review finding: the Demon died, then the Good Twin was executed the same Day", () => {
+  it("no route proposes good: the End control carries the Good Twin line, not 'Good wins'", () => {
+    let g = twinned(proofGame(["imp", "eviltwin", "chef", "empath", "saint", "washerwoman"], "day", 2), "p1", "p2");
+    g = patchPlayer(patchPlayer(g, "p4", { alive: false }), "p5", { alive: false });
+    openInStore(g);
+    expect(state().recordExecution("p0", "died")).toMatchObject({ ok: true });
+    // The Imp's death alone, both Twins alive: withheld by the block.
+    expect(endGameEligibility(game(), env).kind).toBe("unknown");
+    // Then the Good Twin is executed too (the second execution, recorded as the Storyteller's choice).
+    const now = game();
+    const ref = { kind: "participant" as const, playerId: "p2", participantId: now.players.p2!.participantId!, nameAtTime: "Player 2" };
+    store.setState({ game: { ...patchPlayer(now, "p2", { alive: false }), lifeEventWindow: { ...now.lifeEventWindow, events: [...now.lifeEventWindow.events, { id: "ev-good-twin", kind: "execution", subject: ref, actualRoleAtEvent: "chef", moment: { phase: "day", day: 2 }, outcome: "died" } as never] } } });
+    expect(endGameEligibility(game(), env).kind).toBe("unknown");
+    expect(twinAdvisory(game(), env)).toBe("The Good Twin was executed. Evil wins. Check before ending the game");
+    const ctx = { game: game(), script: env.script, registry: env.registry, privacy: false } as unknown as V6Ctx;
+    expect(endHint(ctx)).toBe("The Good Twin was executed. Evil wins. Check before ending the game");
+  });
+});

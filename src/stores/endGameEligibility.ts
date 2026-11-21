@@ -18,7 +18,10 @@ export function endGameEligibility(game: StorytellerLobbyRecord, environment: Ru
   const result = baseEligibility(game, environment);
   if (result.kind !== "verified" || result.team !== "good") return result;
   const block = twinGoodWinBlock(game, environment);
-  return block ? unknown(block.reason) : result;
+  if (block) return unknown(block.reason);
+  // The Good Twin was executed today with a functioning Evil Twin: evil wins, so no route may propose good (the block above no longer
+  // holds once the Good Twin is dead).
+  return twinAdvisory(game, environment) ? unknown("The Good Twin was executed: the Evil Twin's ending needs the Storyteller's ruling.") : result;
 }
 
 /** What the Evil Twin's "Good can't win if both Twins live" asks of a "good wins" proposal: `blocked` (the Evil Twin functions and both
