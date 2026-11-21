@@ -9,13 +9,14 @@ import type { RoleDef, RoleType, Script, StorytellerLobbyRecord } from "@/stores
 import type { NightStep } from "@/rules/night/nightOrder";
 import { chefMaximumPairs } from "@/abilities/characters/chef";
 import { CLOCKMAKER_POSSIBLE, clockmakerAnswers, clockmakerMaximumSteps } from "@/abilities/characters/clockmaker";
+import { SEAMSTRESS_SAME } from "@/abilities/characters/seamstress";
 import { createRulesQuery } from "@/stores/rulesQuery";
 import { captureInfoContext, infoContextCurrent } from "@/features/info/infoCommands";
 import { isDeathEvent } from "@/stores/lifeEvents";
 import { QuestionBlock } from "@/features/grimoire-v6/day/NominationExtras";
 import { SAGE, SAGE_PLAYERS, sageCauseQuestion } from "@/abilities/characters/sage";
 
-export const CALCULATED_INFORMATION_ROLES = new Set(["chef", "empath", "fortuneteller", "towncrier", "oracle", "clockmaker"]);
+export const CALCULATED_INFORMATION_ROLES = new Set(["chef", "empath", "fortuneteller", "towncrier", "oracle", "clockmaker", "seamstress"]);
 export const NIGHT_INFORMATION_ROLES = new Set([...CALCULATED_INFORMATION_ROLES, "undertaker", "ravenkeeper", "sage"]);
 const EMPTY_INPUTS: AbilityInputs = {};
 export type NightInformationHandle = { next: () => boolean };
@@ -75,7 +76,10 @@ export const NightInformationAction = forwardRef<NightInformationHandle, Props>(
   const causeQuestion = sage && trigger && !resolved ? sageCauseQuestion(createRulesQuery(game, environment), { playerId: step.playerId, participantId: step.participantId }, trigger.eventId) : null;
   const causeAnswer = causeQuestion ? inputs[causeQuestion.id] : undefined;
   const awaitingCause = !!causeQuestion && causeAnswer?.kind !== "boolean";
-  const hasTargets = !["fortuneteller", "ravenkeeper", "sage"].includes(step.effectiveRoleId)
+  /** The roles whose players are tapped on the board before the answer is worked out. */
+  const tapped = ["fortuneteller", "ravenkeeper", "sage", "seamstress"].includes(step.effectiveRoleId);
+  const seamstress = step.effectiveRoleId === "seamstress";
+  const hasTargets = !tapped
     || inputs[targetId]?.kind === "participant" && inputs[targetId].participants.length === targetCount;
   const preview = useMemo(() => !resolved && !simulatedRavenkeeper && fingerprint && hasTargets ? planAbilityResolution(game, request(inputs), environment) : null,
     [game, inputs, resolved, step.stepKey, environment]);
@@ -111,6 +115,15 @@ export const NightInformationAction = forwardRef<NightInformationHandle, Props>(
     if (revealRole) showCharacter(revealRole, committed);
     return true;
   };
+  // SV-5b: "They either shake their head no or point at any two players": the head shake closes tonight's step and uses nothing.
+  const notTonight = () => {
+    if (!safe()) return;
+    const result = useStorytellerStore.getState().setNightStepStatus(game.day, step.stepKey, "done", actionContext);
+    if (!result.ok) { setError(result.message); return; }
+    submitted.current = game;
+    useTargetPicker.getState().cancel();
+    onResolved(useStorytellerStore.getState().game!);
+  };
   useImperativeHandle(ref, () => ({ next: () => {
     if (resolved || characterInformation) return true;
     // Next means the displayed calculated answer was communicated. An
@@ -123,7 +136,7 @@ export const NightInformationAction = forwardRef<NightInformationHandle, Props>(
   }, [preview?.ok, preview && !preview.ok ? preview.code : undefined, requirement?.source]);
   const targetInput = inputs[targetId];
   const targets = targetInput?.kind === "participant" ? targetInput.participants : [];
-  const needsTargets = !resolved && ["fortuneteller", "ravenkeeper", "sage"].includes(step.effectiveRoleId) && targets.length < targetCount
+  const needsTargets = !resolved && tapped && targets.length < targetCount
     && (!simulatedRavenkeeper || manualWake) && !awaitingCause;
   const choose = (target: ParticipantBinding) => {
     if (!safe() || targets.some(other => other.participantId === target.participantId)) return;
@@ -148,7 +161,9 @@ export const NightInformationAction = forwardRef<NightInformationHandle, Props>(
   useEffect(() => {
     if (!visible || paused || !needsTargets) return;
     let active = true;
-    const eligible = new Set(seatedParticipants(game).filter(player => !targets.some(target => target.participantId === player.participantId)).map(player => player.participantId!));
+    // SV-5b: the Seamstress chooses two players "except themself" (the dead and Travellers allowed).
+    const eligible = new Set(seatedParticipants(game).filter(player => !targets.some(target => target.participantId === player.participantId)
+      && !(seamstress && player.participantId === step.participantId)).map(player => player.participantId!));
     useTargetPicker.getState().start(targetCount === 1 ? "Choose a player" : sage && !targets.length ? SAGE.presentation.action : `Choose player ${targets.length + 1} of 2`, target => { if (active) choose(target); }, { owner, eligible });
     return () => { active = false; if (useTargetPicker.getState().active?.owner === owner) useTargetPicker.getState().cancel(); };
   }, [visible, paused, needsTargets, game, inputs]);
@@ -213,18 +228,27 @@ export const NightInformationAction = forwardRef<NightInformationHandle, Props>(
         : why.length ? "The Storyteller chose NO although a chosen player registers as a Demon or Red Herring." : "Why NO: neither chosen player is the Demon or the Red Herring.";
       return <p className="night-information-why" style={{ margin: "4px 0 0", opacity: 0.85, fontSize: 13 }}>{text}</p>;
     })()}
+    {/* SV-5b: a Spy or Recluse was chosen and could change the answer: the Storyteller rules, in the Godfather's prompt style. */}
+    {!resolved && requirement?.source === "storyteller" && requirement.kind === "boolean" && requirement.id.startsWith(SEAMSTRESS_SAME) && preview && !preview.ok &&
+      <QuestionBlock heading="Do they register as the same alignment?" note={preview.message.replace(/\s*Do .* register as the same alignment\?$/, "")}
+        actions={[true, false].map((choice) => ({ label: choice ? "Yes" : "No", onClick: () => { commit({ ...inputs, [requirement.id]: { kind: "boolean", value: choice } }); } }))} />}
     {/* A Spy or Recluse nominated: whether they count as a Minion is the Storyteller's ruling, asked in the Godfather's prompt style. */}
     {!resolved && requirement?.source === "storyteller" && requirement.kind === "boolean" && requirement.id.startsWith("towncrier:minionNominated") && preview && !preview.ok &&
       <QuestionBlock heading="Did a Minion nominate today?" note={preview.message.replace(/\s*Did a Minion nominate today\?$/, "")}
         actions={[true, false].map((choice) => ({ label: choice ? "Yes" : "No", onClick: () => { commit({ ...inputs, [requirement.id]: { kind: "boolean", value: choice } }); } }))} />}
     {!resolved && requirement?.source === "storyteller" && requirement.id.startsWith(CLOCKMAKER_POSSIBLE) && preview && !preview.ok &&
       <p className="night-information-why" style={{ margin: "4px 0 0", opacity: 0.85, fontSize: 13 }}>{preview.message.replace(/\s*Choose the number to show\.$/, "")}</p>}
-    {!resolved && requirement?.source === "storyteller" && ["number", "boolean"].includes(requirement.kind) && !requirement.id.startsWith("towncrier:minionNominated") && <>
+    {!resolved && requirement?.source === "storyteller" && ["number", "boolean"].includes(requirement.kind) && !requirement.id.startsWith("towncrier:minionNominated")
+      && !requirement.id.startsWith(SEAMSTRESS_SAME) && <>
       <div className="night-information-choices" role="group" aria-label="Information to communicate">{choices.map(choice =>
         <button className="btn" key={String(choice)} type="button" onClick={() => commit({ ...inputs,
           [requirement.id]: typeof choice === "boolean" ? { kind: "boolean", value: choice } : { kind: "number", value: choice } })}>
           {typeof choice === "boolean" ? choice ? "YES" : "NO" : choice}</button>)}</div>
     </>}
+    {seamstress && resolved && !delivery && <p className="gv-choice-note">Not tonight: the ability is kept.</p>}
+    {seamstress && !resolved && targets.length < targetCount && <div className="gv-choice-actions" role="group" aria-label="The Seamstress's choice">
+      <button className="gv-choice-pill" type="button" onClick={notTonight}>Not Tonight</button>
+    </div>}
     {needsTargets && <>
       {/* PO review C04/C12: chosen players sit inline beside the prompt, as in V2; no cancel control. */}
       <p className="modern-night-pick">{targetCount === 1 ? "Choose a player on the board" : targets.length ? "Choose one more player on the board" : sage ? SAGE.presentation.action : "Choose two players on the board"}

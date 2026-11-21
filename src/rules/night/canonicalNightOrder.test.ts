@@ -124,8 +124,11 @@ describe("state-sensitive and deceptive procedures", () => {
   it("SOL-10F-L6: a used, unverified once-per-game character is not suppressed by prose", () =>
     // SOL-10F-L6: prose-derived `oncePerGame` never suppresses a row -- the
     // unverified once-per-game character stays visible, marked used.
-    expect(wakes(generate(["seamstress"], false, { seamstress: { abilityUsed: true } }))).toEqual([
-      expect.objectContaining({ effectiveRoleId: "seamstress", abilityUsed: true })]));
+    // (SV-5b made the Seamstress verified: its descriptor stops it waking once used. The Courtier is still unverified.)
+    expect(wakes(generate(["courtier"], false, { courtier: { abilityUsed: true } }))).toEqual([
+      expect.objectContaining({ effectiveRoleId: "courtier", abilityUsed: true })]));
+  it("SV-5b: a used Seamstress no longer wakes (verified descriptor, WAKES_UNTIL_USED)", () =>
+    expect(wakes(generate(["seamstress"], false, { seamstress: { abilityUsed: true } }))).toEqual([]));
   it("dead ordinary characters are omitted, death-triggered Ravenkeeper is a conditional check", () => {
     const steps = wakes(generate(["empath", "ravenkeeper"], false, { empath: { alive: false }, ravenkeeper: { alive: false } }));
     expect(steps).toHaveLength(1);

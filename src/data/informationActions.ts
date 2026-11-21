@@ -198,6 +198,29 @@ export const INFORMATION_ACTIONS: Record<RoleId, InformationAction[]> = {
     },
   ],
 
+  // "Once per game, at night, choose 2 players (not yourself): you learn if they are the same alignment." (SV-5b) -- Players + Boolean,
+  // every night until used.
+  seamstress: [
+    {
+      id: "seamstress-first-night",
+      timing: { kind: "firstNight" },
+      instruction: "The Seamstress might choose 2 players. Nod if they are the same alignment, shake your head if not.",
+      requirements: [
+        { id: "players", kind: "player", cardinality: { kind: "exactly", count: 2 }, label: "The two players chosen" },
+        { id: "sameAlignment", kind: "boolean", label: "Whether they are the same alignment" },
+      ],
+    },
+    {
+      id: "seamstress-other-night",
+      timing: { kind: "otherNight" },
+      instruction: "The Seamstress might choose 2 players. Nod if they are the same alignment, shake your head if not.",
+      requirements: [
+        { id: "players", kind: "player", cardinality: { kind: "exactly", count: 2 }, label: "The two players chosen" },
+        { id: "sameAlignment", kind: "boolean", label: "Whether they are the same alignment" },
+      ],
+    },
+  ],
+
   // "If the Demon kills you, you learn that it is 1 of 2 players." (SV-1a) -- two players, one of them the Demon that killed the Sage.
   sage: [
     {
