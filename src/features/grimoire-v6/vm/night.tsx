@@ -2,11 +2,14 @@ import { createElement as E, useEffect, useRef, type ReactNode } from "react";
 import type { NightInformationHandle } from "@/features/nightOrder/NightInformationAction";
 import { stepResolved } from "@/features/nightOrder/nightWork";
 import { hasEffect } from "@/stores/effects";
+import { captureCharacterActionContext, useStorytellerStore } from "@/stores/storytellerStore";
+import { useTargetPicker } from "@/features/abilities/abilityUi";
 import type { V6Ctx } from "../ctx";
 import { renderNightCustom } from "../night/NightCustom";
 import { T30_VERBS, godfatherInfoVerb } from "../night/t30Verbs";
 import { dawnText, duskText, MARKER_ICON, stepIcon, stepLabel, stepWho, stripItem } from "../night/nightSteps";
 import { useNightEngine } from "../night/useNightEngine";
+import { flash } from "../v6Store";
 import { EMPTY, type SliceResult } from "./types";
 
 const BREATH = E("span", { style: { width: 8, height: 8, borderRadius: "50%", background: "#ff7a68", boxShadow: "0 0 10px #ff7a68", animation: "swBreath 1.8s ease-in-out infinite", flex: "none" } });
@@ -111,6 +114,19 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
         resultHint = steps.slice(engine.currentIndex + 1).some((step) => !stepResolved(game, step, engine.settled)) ? "Continuing…" : "";
       }
     }
+    // PO 2026-11-21 (T30 cleanup): the Professor may shake their head instead, as the Seamstress does: it closes tonight's step only and
+    // uses nothing. It sits at the right end of the "Tap a player" line so the card does not grow taller.
+    const notTonight = roleKey === "professor" && player && !current.gainedFrom && !resolved && !engine.skipReason && canTarget && !successorChoice
+      ? {
+        label: "Not Tonight",
+        run: () => {
+          if (!engine.visible || useStorytellerStore.getState().game !== game) return;
+          const result = useStorytellerStore.getState().setNightStepStatus(game.day, current.stepKey, "done", captureCharacterActionContext());
+          if (!result.ok) { flash(result.message); return; }
+          useTargetPicker.getState().cancel();
+          engine.finish(useStorytellerStore.getState().game!);
+        },
+      } : undefined;
     const statePill = resolved ? { label: "Completed", kind: "done" } : engine.skipReason ? { label: "Not waking", kind: "idle" } : undefined;
     cur = {
       isRole: true, isMarker: false,
@@ -118,7 +134,7 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
       // PO review C09/C10: the Minion and Demon information steps carry only their title and the show row.
       verb: current.stepKey === "minionInfo" || current.stepKey === "demonInfo" ? "" : verb,
       impOn: drunk || marionette || poisoned, impLabel: drunk ? "Drunk" : marionette ? "Marionette" : "Poisoned",
-      waiting, waitText: successorChoice ? roleKey === "vigormortis" ? "Tap the neighbouring Townsfolk who is poisoned" : "Choose the new Imp on the board"
+      waiting: waiting || !!notTonight, waitAction: notTonight ?? null, waitText: successorChoice ? roleKey === "vigormortis" ? "Tap the neighbouring Townsfolk who is poisoned" : "Choose the new Imp on the board"
         : engine.needed > 1 ? engine.picks.length ? "Choose one more player on the board" : "Tap two players on the board" : "Tap a player on the board",
       picks: engine.picks.map((pick) => ({ name: game.players[pick.playerId]?.name ?? "" })),
       hasNumber: false, numberOpts: [], hasToken: false,
