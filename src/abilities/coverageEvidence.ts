@@ -321,7 +321,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   undertaker: ["src/stores/troubleBrewingB5bIndependent.test.ts", "src/stores/b9WholeGames.test.ts"],
   vigormortis: ["src/abilities/characters/vigormortis.test.ts", "src/rules/setup/setupAnalyzer.test.ts"],
   virgin: ["src/features/info/infoModel.test.ts", "src/stores/b7Virgin.test.ts"],
-  vortox: ["src/abilities/characters/phase10gConsumers.test.ts", "src/abilities/characters/characterIntelligence.test.ts", "src/abilities/falseInformation.test.ts", "src/abilities/characters/vortoxFalseAnswers.test.ts"],
+  vortox: ["src/abilities/characters/phase10gConsumers.test.ts", "src/abilities/characters/characterIntelligence.test.ts", "src/abilities/falseInformation.test.ts", "src/abilities/characters/vortoxFalseAnswers.test.ts", "src/stores/vortoxNoExecution.test.ts", "src/features/grimoire-v6/night/port/vortoxEndLine.v6.test.tsx"],
   washerwoman: ["src/rules/setup/setupAnalyzer.test.ts", "src/stores/projections.test.ts"],
   witch: ["src/abilities/characters/witch.test.ts", "src/rules/night/nightOrder.test.ts"],
 };

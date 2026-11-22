@@ -13,7 +13,7 @@ import {
   toymakerSkipStatus,
 } from "./gameRuleFacts";
 import { createRulesQuery } from "./rulesQuery";
-import { FANG_GU_ONCE, KLUTZ_CHOICE_RULING, KLUTZ_EVIL_TEAM_LOST, KLUTZ_GOOD_TEAM_LOST, VICTORY_EVIDENCE_TYPES } from "./gameRuleFactRegistry";
+import { FANG_GU_ONCE, KLUTZ_CHOICE_RULING, KLUTZ_EVIL_TEAM_LOST, KLUTZ_GOOD_TEAM_LOST, VICTORY_EVIDENCE_TYPES, VORTOX_DAY_END_TYPES } from "./gameRuleFactRegistry";
 import { detectLegacyGameVersion, hasV25Evidence, migrateGameEntry } from "./gameMigration";
 import { GameRuleFactHistoryRecordSchema, HistoryRecordSchema, StorytellerGamePersistedSchema } from "./schemas";
 import { setupGame, setupScript } from "@/test/setupFixtures";
@@ -49,8 +49,8 @@ const fact = (type: string, over: Partial<GameRuleFactRecord> = {}): GameRuleFac
   ({ type, recordedAt: { phase: "night", day: 2 }, ...over });
 
 describe("10G-AC-01 / AC-02: the registry and v25 authoritative state", () => {
-  it("preserves the original two facts and adds exactly seven approved capture-only qualification records (and SV-1c's three Klutz records, SV-2b's Fang Gu ONCE)", () => {
-    expect([...GAME_RULE_FACT_REGISTRY.keys()]).toEqual([PIT_HAG_ARBITRARY_DEATHS, TOYMAKER_DEMON_SKIP_OCCURRED, ...VICTORY_EVIDENCE_TYPES, KLUTZ_GOOD_TEAM_LOST, KLUTZ_EVIL_TEAM_LOST, KLUTZ_CHOICE_RULING, FANG_GU_ONCE]);
+  it("preserves the original two facts and adds exactly seven approved capture-only qualification records (and SV-1c's three Klutz records, SV-2b's Fang Gu ONCE, SV-5l's two capture-only Vortox records)", () => {
+    expect([...GAME_RULE_FACT_REGISTRY.keys()]).toEqual([PIT_HAG_ARBITRARY_DEATHS, TOYMAKER_DEMON_SKIP_OCCURRED, ...VICTORY_EVIDENCE_TYPES, KLUTZ_GOOD_TEAM_LOST, KLUTZ_EVIL_TEAM_LOST, KLUTZ_CHOICE_RULING, FANG_GU_ONCE, ...VORTOX_DAY_END_TYPES]);
     expect([...GAME_RULE_FACT_REGISTRY.values()].filter(definition => !definition.captureOnly).map(definition => definition.type))
       .toEqual([PIT_HAG_ARBITRARY_DEATHS, TOYMAKER_DEMON_SKIP_OCCURRED, KLUTZ_GOOD_TEAM_LOST, KLUTZ_EVIL_TEAM_LOST, KLUTZ_CHOICE_RULING, FANG_GU_ONCE]);
   });

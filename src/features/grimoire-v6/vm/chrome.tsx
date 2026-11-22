@@ -4,7 +4,7 @@ import { useStorytellerStore } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { formatCode } from "@/firebase/lobby";
 import { buildPlayerJoinLink, qrModules } from "@/features/newgame/qr";
-import { demonGoneAdvisory, endGameEligibility, klutzAdvisory, twinAdvisory, twinGoodWinBlock, withheldGoodWinLine } from "@/stores/endGameEligibility";
+import { demonGoneAdvisory, endGameEligibility, klutzAdvisory, twinAdvisory, twinGoodWinBlock, vortoxAdvisory, withheldGoodWinLine } from "@/stores/endGameEligibility";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
 import { iconUrlFor } from "@/data/iconUrl";
@@ -33,6 +33,9 @@ export function endHint(ctx: V6Ctx): string {
       // SV-1c: the Klutz's recorded choice, hidden in Privacy Mode (it names who wins).
       const klutz = klutzAdvisory(game, twinGoodWinBlock(game, environment)?.kind ?? null);
       if (klutz) return klutz;
+      // SV-5l: the Vortox's no-execution ending, hidden in Privacy Mode (it names a character and who wins).
+      const vortox = vortoxAdvisory(game);
+      if (vortox) return vortox;
       const withheld = withheldGoodWinLine(game, environment);
       if (withheld) return withheld;
     }

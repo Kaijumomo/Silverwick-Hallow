@@ -1,8 +1,8 @@
 import { isCanonicalRole } from "@/data/canonical";
 import { scarletWomanSuccession } from "@/abilities/characters/scarletWoman";
 import { bindingOf, createRulesQuery, effectSemanticsOf, type RulesQueryEnvironment } from "./rulesQuery";
-import { applyGameRuleFactPlan, planCapturedVictoryEvidence, planGameRuleFactTransaction } from "./gameRuleFacts";
-import { isVictoryEvidenceType, isSaintNonqualifyingEvidenceType, victoryEvidenceInvalidReason, victoryEvidenceCollectionInvalidReason, SAINT_EXECUTION_GOOD_TEAM_LOST, SAINT_EXECUTION_EVIL_TEAM_LOST, SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED, SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED, MAYOR_DAY_END_GOOD_TEAM_WON, MAYOR_DAY_END_EVIL_TEAM_WON, RESOLVED_DEMON_DEATH_NO_SUCCESSOR } from "./gameRuleFactRegistry";
+import { applyGameRuleFactPlan, planCapturedDayEndFact, planCapturedVictoryEvidence, planGameRuleFactTransaction } from "./gameRuleFacts";
+import { isVictoryEvidenceType, isSaintNonqualifyingEvidenceType, victoryEvidenceInvalidReason, victoryEvidenceCollectionInvalidReason, SAINT_EXECUTION_GOOD_TEAM_LOST, SAINT_EXECUTION_EVIL_TEAM_LOST, SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED, SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED, MAYOR_DAY_END_GOOD_TEAM_WON, MAYOR_DAY_END_EVIL_TEAM_WON, RESOLVED_DEMON_DEATH_NO_SUCCESSOR, VORTOX_NO_EXECUTION_EVIL_WON, VORTOX_NO_EXECUTION_RULING } from "./gameRuleFactRegistry";
 export { isSaintNonqualifyingEvidenceType } from "./gameRuleFactRegistry";
 import { executionsAt, momentOrdinal } from "./lifeEvents";
 import { sameSnapshot } from "./history";
@@ -100,6 +100,39 @@ export function captureMayorQualification(before: StorytellerLobbyRecord, after:
   const functioning = createRulesQuery(before, environment).abilityFunctions(bindingOf(source));
   if (!functioning.known || !functioning.value) return accepted(after);
   return capture(after, before, source, source.actualAlignment === "good" ? MAYOR_DAY_END_GOOD_TEAM_WON : MAYOR_DAY_END_EVIL_TEAM_WON);
+}
+
+/**
+ * SV-5l: the Vortox's "Each day, if no-one is executed, evil wins" (https://wiki.bloodontheclocktower.com/Vortox), at the same exact
+ * Day N -> Night N+1 boundary as the Mayor, but NOT behind the game-ending coverage list: it records a fact the End control shows as an
+ * advisory line (never a winner, never an ending). Life, drunkenness and poisoning are read from the authoritative state at the end of
+ * the Day (`before`), never from reminders. Every execution counts, whatever its outcome (an execution that did not kill, an
+ * already-dead player, an execution by an ability: they are all execution records); an exile is not an execution. A dead, drunk or
+ * poisoned Vortox, or a homebrew character reusing its id, records nothing. Unknown functioning, or a Day whose execution record is
+ * incomplete with none recorded, records the ruling fact instead.
+ */
+export function captureVortoxNoExecution(before: StorytellerLobbyRecord, after: StorytellerLobbyRecord, environment: RulesQueryEnvironment): VictoryEvidenceResult {
+  if (!sameGame(before, after) || before.phase !== "day" || after.phase !== "night" || after.day !== before.day + 1) return accepted(after);
+  const executions = executionsAt(before, { phase: "day", day: before.day });
+  if ((executions.status === "known" ? executions.events : executions.recorded).length) return accepted(after);
+  const query = createRulesQuery(before, environment);
+  let working: STPlayerRecord | undefined;
+  let doubtful: STPlayerRecord | undefined;
+  for (const player of participants(before)) {
+    const role = environment.registry.get(player.actualRole);
+    if (player.actualRole !== "vortox" || !role || !isCanonicalRole(role) || !player.alive || !sameSource(player, after.players[player.id])) continue;
+    const functioning = query.abilityFunctions(bindingOf(player));
+    if (!functioning.known) doubtful ??= player;
+    else if (functioning.value) { working = player; break; }
+  }
+  const source = working ?? doubtful;
+  if (!source) return accepted(after);
+  const type = working && executions.status === "known" ? VORTOX_NO_EXECUTION_EVIL_WON : VORTOX_NO_EXECUTION_RULING;
+  const result = planCapturedDayEndFact({ ...after, phase: "day", day: before.day }, {
+    intents: [{ kind: "apply", type }], context: { provenance: { sourcePlayer: source.id, sourceCharacter: source.actualRole } },
+  });
+  if (!result.ok) return result;
+  return accepted(result.changed ? applyGameRuleFactPlan(after, result.plan) : after);
 }
 
 export type ResolvedDemonDeathMode = "recordedDay" | "recordedNight" | "automaticImp" | "automaticSlayer";
