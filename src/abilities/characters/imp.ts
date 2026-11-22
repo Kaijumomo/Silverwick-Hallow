@@ -4,7 +4,7 @@ import { toldRoleChangeIntents } from "@/stores/roleResolution";
 import type { AbilityDescriptor, AbilityEvaluation, AbilityEvaluationContext } from "../semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
-import { ask, deathAttempt, firstParticipant, followUpParticipant, lifeOperation, nameOf, nothing, survivedOutcome, tokenOutcome, requireLivingActor } from "./shared";
+import { answerOf, ask, deathAttempt, mayorBounceOffered, firstParticipant, followUpParticipant, lifeOperation, nameOf, nothing, subjectId, survivedOutcome, tokenOutcome, requireLivingActor } from "./shared";
 import { scarletWomanSuccession } from "./scarletWoman";
 
 /**
@@ -34,6 +34,10 @@ import { scarletWomanSuccession } from "./scarletWoman";
  * Game end is not decided here (Section 6).
  */
 export const SUCCESSOR = "successor";
+/** The Mayor's bounce, asked of the Storyteller on the Imp's own card: first whether another player dies instead, then who. The ids carry
+ * the Mayor, so an answer given for one Mayor can never be used for another. */
+export const MAYOR_BOUNCE = "mayor:bounce";
+export const MAYOR_REPLACEMENT = "mayor:replacement";
 export const swFunctionsJudgment = (participantId: string) => `scarletWoman:functions:${participantId}`;
 
 /** Ordinary perception the seam can update truthfully: shown as their own
@@ -107,12 +111,41 @@ export const IMP: AbilityDescriptor = {
     const target = firstParticipant(context.inputs, "target");
     const self = target.participantId === context.actor.binding.participantId;
     if (!context.query.participant(target)?.alive) return nothing();
-    const death = deathAttempt(context, target, "demon");
+    // The Mayor: "another player might die instead". The Storyteller's Night card asks the first question as soon as a certainly working,
+    // unprotected Mayor is tapped, and the answers arrive here; without the answer (any other route) the attack stays wholly Manual, as ever.
+    // A protected Mayor never reaches this: the death gate answers "survives" (nobody dies, no bounce).
+    let victim = target;
+    let mayorDies = false;
+    const bounceId = subjectId(MAYOR_BOUNCE, target);
+    const bounce = !self ? answerOf(context.inputs, bounceId, "boolean") : undefined;
+    if (bounce && mayorBounceOffered(context.query, target)) {
+      const mayor = nameOf(context, target);
+      if (bounce.value) {
+        const replacementId = subjectId(MAYOR_REPLACEMENT, target);
+        const chosen = followUpParticipant(context, context.inputs, replacementId);
+        if (!chosen) return ask(`Choose the player who dies instead of ${mayor}.`,
+          { id: replacementId, kind: "participant", source: "storyteller", label: `The player who dies instead of ${mayor}` });
+        if ("refusal" in chosen) return chosen.refusal;
+        const other = context.query.participant(chosen.binding)!;
+        if (!other.alive) return { kind: "illegal", message: "Choose a living player to die instead." };
+        if (chosen.binding.participantId === target.participantId) return { kind: "illegal", message: `Choose a player other than ${mayor}.` };
+        if (chosen.binding.participantId === context.actor.binding.participantId) {
+          return { kind: "unsupported", message: "The Imp would die through the Mayor's bounce: whether a Minion becomes the Imp is not modeled. Resolve the whole action manually." };
+        }
+        victim = chosen.binding;
+      } else mayorDies = true;
+    }
+    // A bounce is a death attempt like any other: a protected replacement does not die, and the Storyteller chooses again.
+    const death = mayorDies ? { kind: "dies" as const } : deathAttempt(context, victim, "demon");
     if (death.kind === "ask") return ask(death.message, death.requirement);
+    if (death.kind === "survives" && victim !== target) {
+      if (death.spend) return { kind: "unsupported", message: `${nameOf(context, victim)} survives and uses up their ability: this is not modeled for a Mayor's bounce. Resolve the whole action manually.` };
+      return { kind: "illegal", message: `${nameOf(context, victim)} is protected and does not die. Choose another player.` };
+    }
     if (death.kind === "survives") return survivedOutcome(death);
-    const kill = lifeOperation([{ kind: "death", target }]);
+    const kill = lifeOperation([{ kind: "death", target: victim }]);
     if (!self) {
-      const succession = scarletWomanSuccession(context.query, target);
+      const succession = scarletWomanSuccession(context.query, victim);
       if (succession.kind === "manual") return { kind: "unsupported", message: succession.reason };
       return tokenOutcome(context, "imp", succession.kind === "successor"
         ? [kill, { domain: "role", intents: toldRoleChangeIntents(context.query.participant(succession.target)!, "imp") }]

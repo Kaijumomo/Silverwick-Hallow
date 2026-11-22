@@ -1,7 +1,8 @@
-import { survivesFirstDeath, type LifeRuleCause } from "./passiveRules";
+import { mayorBounceApplies, survivesFirstDeath, type LifeRuleCause } from "./passiveRules";
 import type { AbilityEvaluation, AbilityEvaluationContext, AbilityInputRequirement, AbilityInputs, AbilityInputValue } from "../semantics";
 import type { AbilityOperation, AbilityOutcome, ParticipantBinding } from "@/stores/abilityResolution";
 import type { ReminderIntent } from "@/stores/reminderResolution";
+import type { RulesQuery } from "@/stores/rulesQuery";
 import { PIT_HAG_ARBITRARY_DEATHS } from "@/stores/gameRuleFacts";
 
 /**
@@ -201,6 +202,15 @@ export function deathAttempt(
     requirement: { id, kind: "boolean", source: "judgment",
       label: `${nameOf(context, target)} is protected from this ${cause === "demon" ? "Demon " : ""}death${attempt?.label ? ` (${attempt.label})` : ""} (Yes: they do not die)` },
   };
+}
+
+/**
+ * Whether the Storyteller's Mayor choice ("they die" or "another player dies instead") is open for a Demon attack on this player: the rules
+ * layer says a certainly working, unprotected Mayor, and no Pit-Hag has made deaths arbitrary (those stay the Storyteller's own judgment).
+ */
+export function mayorBounceOffered(query: RulesQuery, target: ParticipantBinding): boolean {
+  const arbitrary = query.gameRuleFact(PIT_HAG_ARBITRARY_DEATHS);
+  return !(arbitrary.known && arbitrary.value) && mayorBounceApplies(query, target);
 }
 
 /** For killers whose later steps depend on the Fool's ability state (Al-Hadikhia's rounds, the Harlot's pair): the survival would spend it,

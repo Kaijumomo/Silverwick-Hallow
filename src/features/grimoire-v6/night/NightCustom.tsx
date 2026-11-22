@@ -145,7 +145,19 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
       const slotOf = (playerId: string) => { const p = game.players[playerId]; const role = p?.actualRole ? registry.get(p.actualRole) : undefined;
         return <ChoiceSlot filled label={nameOf(playerId)} img={role ? iconUrlFor(role) : undefined} sub={role?.name ?? ""} />; };
       const demon = held.kind === "demon";
-      rows.push(<div key="tap-ruling" className="gv-choice">
+      // TB: the Demon's attack landed on a working, unprotected Mayor ("another player might die instead"): two answers, no Yes / No.
+      if (held.kind === "mayor") {
+        rows.push(<div key="tap-ruling" className="gv-choice">
+          <hr className="gv-choice-divider" />
+          <ChoicePrompt text={`${nameOf(held.target.playerId)} is the Mayor. What happens?`}
+            action={<button className="gv-choice-pill is-small" type="button" onClick={() => engine.answerTapRuling(null)}>Choose again</button>} />
+          <div className="gv-choice-slots">{slotOf(held.target.playerId)}</div>
+          <div className="gv-choice-actions" role="group" aria-label="Your ruling">
+            <button className="gv-choice-answer" type="button" onClick={() => engine.answerTapRuling(false)}>Mayor Dies</button>
+            <button className="gv-choice-answer" type="button" onClick={() => engine.answerTapRuling(true)}>Another Player Dies</button>
+          </div>
+        </div>);
+      } else rows.push(<div key="tap-ruling" className="gv-choice">
         <hr className="gv-choice-divider" />
         <ChoicePrompt text={`Does ${nameOf(held.target.playerId)} register as ${demon ? "a Demon" : "an Outsider"}?`}
           action={<button className="gv-choice-pill is-small" type="button" onClick={() => engine.answerTapRuling(null)}>Choose again</button>} />

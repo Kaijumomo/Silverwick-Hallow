@@ -1,7 +1,8 @@
 // Phase 10F Slice 7 -- Imp + the narrow Scarlet Woman dependency
 // (matrix Sections 6 and 18.1). Production semantics.
 import { beforeEach, describe, expect, it } from "vitest";
-import { SUCCESSOR, swFunctionsJudgment } from "./imp";
+import { MAYOR_BOUNCE, MAYOR_REPLACEMENT, SUCCESSOR, swFunctionsJudgment } from "./imp";
+import { subjectId } from "./shared";
 import { protectionId, homebrewEnv, homebrewScript, impair, openInStore, patchPlayer, pick, plan, planned, proofEnv, proofGame, proofScript, request, requirementIds, reseat, yes } from "@/test/proofFixtures";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { computeNightOrder } from "@/rules/night/nightOrder";
@@ -212,5 +213,61 @@ describe("Imp -- star-pass with a possible Minion (WP-1)", () => {
 
   it("a protected Imp that does not die passes nothing on, even with a Recluse", () => {
     expect(own(monkSafe(proofGame(T30), "p0"))).toEqual({ ok: true, changed: false });
+  });
+});
+
+
+// The Mayor's bounce (TB): "If you die at night, another player might die instead." The Storyteller's Night card asks, then plans with the answers.
+describe("Imp -- the Mayor's bounce", () => {
+  // p0 imp, p1 poisoner, p2 soldier, p3 monk, p4 mayor, p5 empath, p6 chef
+  const town = () => proofGame(["imp", "poisoner", "soldier", "monk", "mayor", "empath", "chef"]);
+  const bounceId = (g: StorytellerLobbyRecord) => subjectId(MAYOR_BOUNCE, { playerId: "p4", participantId: g.players.p4!.participantId! });
+  const replacementId = (g: StorytellerLobbyRecord) => subjectId(MAYOR_REPLACEMENT, { playerId: "p4", participantId: g.players.p4!.participantId! });
+  const attack = (g: StorytellerLobbyRecord, extra: Record<string, ReturnType<typeof yes> | ReturnType<typeof pick>> = {}) =>
+    plan(g, request(g, "p0", "imp", { target: pick(g, "p4"), ...extra }));
+
+  it("without the Storyteller's answer the attack stays wholly Manual (every other route)", () => {
+    expect(attack(town())).toMatchObject({ ok: false, code: "unsupported" });
+  });
+
+  it("'the Mayor dies' kills the Mayor with the Imp's Dead reminder", () => {
+    const g = town();
+    const next = planned(attack(g, { [bounceId(g)]: yes(false) }));
+    expect(next.players.p4!.alive).toBe(false);
+    expect(next.players.p4!.reminders).toMatchObject([{ label: "Dead", sourceCharacter: "imp" }]);
+  });
+
+  it("'another player dies' asks who, then kills only that player", () => {
+    const g = town();
+    const asked = attack(g, { [bounceId(g)]: yes(true) });
+    expect(requirementIds(asked)).toEqual([replacementId(g)]);
+    const next = planned(attack(g, { [bounceId(g)]: yes(true), [replacementId(g)]: pick(g, "p6") }));
+    expect(next.players.p4!.alive).toBe(true);
+    expect(next.players.p6!.alive).toBe(false);
+    expect(next.players.p6!.reminders).toMatchObject([{ label: "Dead", sourceCharacter: "imp" }]);
+  });
+
+  it("a protected replacement does not die: the attempt is refused with the reason so the Storyteller picks again", () => {
+    const g = town();
+    const result = attack(g, { [bounceId(g)]: yes(true), [replacementId(g)]: pick(g, "p2") });
+    expect(result).toMatchObject({ ok: false, code: "illegal", message: expect.stringContaining("is protected and does not die") });
+    expect(g.players.p2!.alive).toBe(true);
+  });
+
+  it("the Mayor, a dead player and the Imp itself are not accepted as the replacement", () => {
+    const g = town();
+    expect(attack(g, { [bounceId(g)]: yes(true), [replacementId(g)]: pick(g, "p4") })).toMatchObject({ ok: false, code: "illegal" });
+    const dead = patchPlayer(g, "p6", { alive: false });
+    expect(attack(dead, { [bounceId(dead)]: yes(true), [replacementId(dead)]: pick(dead, "p6") })).toMatchObject({ ok: false, code: "illegal" });
+    expect(attack(g, { [bounceId(g)]: yes(true), [replacementId(g)]: pick(g, "p0") })).toMatchObject({ ok: false, code: "unsupported" });
+  });
+
+  it("a poisoned Mayor or one a Monk protects never gets a bounce: the answer is ignored", () => {
+    const g = impair(town(), "p4");
+    expect(planned(attack(g, { [bounceId(g)]: yes(true) })).players.p4!.alive).toBe(false);
+    const safe = patchPlayer(town(), "p4", { effects: [{ id: "safe-p4", type: "safeFromDemon", sourceCharacter: "monk", lifetime: { kind: "untilDawn" }, state: "active",
+      sourceParticipant: { kind: "participant", participantId: town().players.p3!.participantId!, playerId: "p3", nameAtTime: "Player 3" },
+      expiry: { kind: "at", moment: { phase: "day", day: 2 } }, appliedAt: { phase: "night", day: 2 } } as EffectRecord] });
+    expect(attack(safe, { [bounceId(safe)]: yes(true) })).toEqual({ ok: true, changed: false });
   });
 });

@@ -136,6 +136,24 @@ export function teaLadyCovers(query: RulesQuery, teaLady: ParticipantBinding, ta
   return undetermined ? { known: false, reason: undetermined } : { known: true, value: true };
 }
 
+const unmodelledDeathReason = (roleName: string): string => `${roleName} death interactions are not modeled. Resolve the whole action manually.`;
+
+/**
+ * The Mayor's bounce, TB's Demon attack: "If you die at night, another player might die instead." The Storyteller decides, so the app only
+ * says WHEN the choice is open: a living Mayor whose ability certainly works (a drunk or poisoned Mayor simply dies; an uncertain one is
+ * the Storyteller's whole action by hand) and that nothing else protects (a Monk's protection or a Tea Lady's: nobody dies and there is no
+ * bounce, as the death gate already answers first). It is exactly the case where the shared death gate still says "Mayor death interactions
+ * are not modeled" for a certainly working Mayor. https://wiki.bloodontheclocktower.com/Mayor
+ */
+export function mayorBounceApplies(query: RulesQuery, target: ParticipantBinding): boolean {
+  const player = query.participant(target);
+  if (!player || !player.alive || player.actualRole !== "mayor") return false;
+  const working = query.abilityFunctions(target);
+  if (!working.known || !working.value) return false;
+  const gate = query.deathOutcome(target, "demon");
+  return !gate.known && gate.reason === unmodelledDeathReason(query.roleOf("mayor")?.name ?? "Mayor");
+}
+
 const ASSASSIN = ["assassin"] as const;
 const GAP = { holder: "self", duration: "permanent", needsFunctioning: true, causes: "any", decision: "unmodelled", onSurvive: "nothing" } as const;
 export const LIFE_RULES: Readonly<Partial<Record<RoleId, LifeRule>>> = Object.freeze({
@@ -255,7 +273,7 @@ export function passiveProtection(query: RulesQuery, target: ParticipantBinding,
   if (!rule || rule.holder !== "self") return { known: true, value: false };
   if (rule.earlyProtection?.(query, target, cause)) return { known: true, value: true };
   if (rule.decision === "unmodelled") {
-    if (!functioning.known || functioning.value) return { known: false, reason: `${role.name} death interactions are not modeled. Resolve the whole action manually.` };
+    if (!functioning.known || functioning.value) return { known: false, reason: unmodelledDeathReason(role.name) };
     return { known: true, value: false };
   }
   // A Storyteller-choice row is advice only (see above), and a bypassing cause goes around the row without asking anything.
