@@ -16,7 +16,7 @@ import { participantScopedStepKey, participantStepKey, travelerArrivalStepKey } 
 import { newTravelerArrival } from "@/stores/travelers";
 import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/abilityUi";
 import { patchPlayer, pick, plan, planned, proofGame, proofScript, request } from "@/test/proofFixtures";
-import { deriveNightWork } from "@/features/nightOrder/nightWork";
+import { deriveNightWork, unfinishedNightWork } from "@/features/nightOrder/nightWork";
 import { captureFingerprint } from "@/stores/abilityResolution";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 import { buildRegistry } from "@/data/roleRegistry";
@@ -683,6 +683,8 @@ it("the Godfather asks 'Did an Outsider die today?' before any player is tapped;
   render(<Guide />);
   expect(screen.getByText("Did an Outsider die today?")).toBeInTheDocument();
   expect(screen.getByText(/may register as something other than an Outsider/)).toBeInTheDocument();
+  // T30 cleanup: the question is answered right there; the old "Continue action" step is not offered beside it.
+  expect(screen.queryByRole("button", { name: "Continue action" })).toBeNull();
   // Nothing is asked of the board yet, and no legacy workspace is open.
   expect(useTargetPicker.getState().active).toBeNull();
   expect(screen.queryByText(/Further choices/)).toBeNull();
@@ -783,4 +785,52 @@ it("a Philosopher's gained row that is run by hand never shows Not waking; a gai
     expect(screen.queryByText("Completed"), label).toBeNull();
     cleanup();
   }
+});
+
+// ── T30 cleanup (PO 2026-11-21): the Professor's Not Tonight, exactly as the Seamstress's ──────────────────────
+const professorNight = (day = 3) => {
+  t30Night(["professor", "chef", "empath", "monk", "imp", "saint", "baron"], day);
+  const seeded = game();
+  store.setState({ game: { ...seeded, players: { ...seeded.players, p1: { ...seeded.players.p1!, alive: false } } }, undoStack: [] });
+  const step = participantStepKey(game().players.p0!.participantId!, "professor");
+  useShellStore.getState().setNightCursor({ day, stepKey: step });
+  return step;
+};
+
+it("the Professor's Not Tonight closes the step with the Completed pill, uses nothing, and is one Undo", () => {
+  const step = professorNight();
+  render(<Guide />);
+  expect(useTargetPicker.getState().active).not.toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Not Tonight" }));
+  expect(game().nightProgress[`3:${step}`]?.status).toBe("done");
+  expect(game().players.p0!.abilityUsed).toBeFalsy();
+  expect(game().players.p1!.alive).toBe(false);
+  expect(useTargetPicker.getState().active).toBeNull();
+  expect(screen.getAllByText("Completed").length).toBeGreaterThan(0);
+  expect(screen.queryByRole("button", { name: "Not Tonight" })).toBeNull();
+  expect(store.getState().undoStack).toHaveLength(1);
+  act(() => store.getState().undo());
+  expect(game().nightProgress[`3:${step}`]).toBeUndefined();
+});
+
+it("a Professor who said Not Tonight still wakes the next night", () => {
+  const step = professorNight();
+  render(<Guide />);
+  fireEvent.click(screen.getByRole("button", { name: "Not Tonight" }));
+  cleanup();
+  store.setState({ game: { ...game(), day: 4, nightProgress: {} }, undoStack: [] });
+  useTargetPicker.getState().cancel();
+  useShellStore.getState().setNightCursor({ day: 4, stepKey: step });
+  render(<Guide />);
+  expect(screen.queryByText(/This ability has already been used/)).toBeNull();
+  expect(screen.getByRole("button", { name: "Not Tonight" })).toBeInTheDocument();
+});
+
+it("with the Professor's Not Tonight taken, the Dawn list no longer holds the Professor", () => {
+  const step = professorNight();
+  render(<Guide />);
+  const env = { script: t30Script, registry: buildRegistry(t30Script), semantics: CANONICAL_ABILITY_SEMANTICS };
+  expect(unfinishedNightWork(game(), deriveNightWork(game(), env)).rows.map((item) => item.stepKey)).toContain(step);
+  fireEvent.click(screen.getByRole("button", { name: "Not Tonight" }));
+  expect(unfinishedNightWork(game(), deriveNightWork(game(), env)).rows.map((item) => item.stepKey)).not.toContain(step);
 });

@@ -227,7 +227,7 @@ export const NightInformationAction = forwardRef<NightInformationHandle, Props>(
       const why = [...demons.map(name => `${name} is the Demon`), ...herrings.map(name => `${name} is the Red Herring`)];
       const text = value.value ? (why.length ? `Why YES: ${why.join("; ")}.` : "Why YES: the Storyteller chose this answer (this Fortune Teller is drunk, poisoned or only shown as one).")
         : why.length ? "The Storyteller chose NO although a chosen player registers as a Demon or Red Herring." : "Why NO: neither chosen player is the Demon or the Red Herring.";
-      return <p className="night-information-why" style={{ margin: "4px 0 0", opacity: 0.85, fontSize: 13 }}>{text}</p>;
+      return <p className="night-information-why">{text}</p>;
     })()}
     {/* SV-5b: a Spy or Recluse was chosen and could change the answer: the Storyteller rules, in the Godfather's prompt style. */}
     {!resolved && requirement?.source === "storyteller" && requirement.kind === "boolean" && requirement.id.startsWith(SEAMSTRESS_SAME) && preview && !preview.ok &&
@@ -243,11 +243,11 @@ export const NightInformationAction = forwardRef<NightInformationHandle, Props>(
       <QuestionBlock heading="Did a Demon vote today?" note={preview.message.replace(/\s*Did a Demon vote today\?$/, "")}
         actions={[true, false].map((choice) => ({ label: choice ? "Yes" : "No", onClick: () => { commit({ ...inputs, [requirement.id]: { kind: "boolean", value: choice } }); } }))} />}
     {!resolved && requirement?.source === "storyteller" && requirement.id.startsWith(CLOCKMAKER_POSSIBLE) && preview && !preview.ok &&
-      <p className="night-information-why" style={{ margin: "4px 0 0", opacity: 0.85, fontSize: 13 }}>{preview.message.replace(/\s*Choose the number to show\.$/, "")}</p>}
+      <p className="night-information-why">{preview.message.replace(/\s*Choose the number to show\.$/, "")}</p>}
     {!resolved && requirement?.source === "storyteller" && ["number", "boolean"].includes(requirement.kind) && !requirement.id.startsWith("towncrier:minionNominated")
       && !requirement.id.startsWith(SEAMSTRESS_SAME) && !requirement.id.startsWith(FLOWERGIRL_DEMON_VOTED) && <>
       <div className="night-information-choices" role="group" aria-label="Information to communicate">{choices.map(choice =>
-        <button className="btn" key={String(choice)} type="button" onClick={() => commit({ ...inputs,
+        <button className="gv-choice-answer" key={String(choice)} type="button" onClick={() => commit({ ...inputs,
           [requirement.id]: typeof choice === "boolean" ? { kind: "boolean", value: choice } : { kind: "number", value: choice } })}>
           {typeof choice === "boolean" ? choice ? "YES" : "NO" : choice}</button>)}</div>
     </>}

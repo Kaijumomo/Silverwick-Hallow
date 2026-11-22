@@ -116,7 +116,7 @@ export const PreparedInformationAction = forwardRef<NightInformationHandle, Prop
     })()}
     {picking && <p className="night-information-recipients" role="status">{picking === "Choose the first player"
       ? `Now tap the player you show as the ${team} on the board` : "Now tap the other player on the board"}</p>}
-    {choosing && character === "librarian" && <button className="btn" onClick={() => replace({ kind: "zero-outsiders" })}>Show 0 Outsiders</button>}
+    {choosing && character === "librarian" && <button className="gv-choice-pill" type="button" onClick={() => replace({ kind: "zero-outsiders" })}>Show 0 Outsiders</button>}
     {error && <p role="alert">{error}</p>}
   </div>;
 });

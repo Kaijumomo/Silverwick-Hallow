@@ -241,13 +241,20 @@ describe("the Slayer's shot", () => {
     expect(evaluateSlayerShot(mount().result.current.ctx, town.ids.Kestrel!, town.ids.Hollis!)).toMatchObject({ real: true, kind: "plan", dies: true });
     const m = mount();
     shoot(m, "Kestrel", "Hollis");
-    const sv = m.result.current.day.vm.sv as Record<string, any>;
-    expect(sv).toMatchObject({ open: true, result: true, resTitle: "Hollis dies", confirmText: "Confirm death", overrideText: "They survive", s1: "Kestrel", s2: "Hollis" });
-    act(() => { sv.confirm(); });
+    // PO 2026-11-21 (T30 cleanup): tapping the target records the shot at once; no Confirm step, one Undo.
+    expect(m.result.current.day.vm.sv).toMatchObject({ open: false, status: "Used" });
+    expect(useV6Ui.getState().toast).toBe("Hollis dies.");
+    // A second tap on the same (now stale) context records nothing more.
+    const staleCtx = m.result.current.ctx;
+    act(() => { dayTokenTap(staleCtx, town.ids.Kestrel!); });
+    expect(game().players[town.ids.Hollis!]!.alive).toBe(false);
     expect(game().players[town.ids.Hollis!]!.alive).toBe(false);
     expect(game().players[town.ids.Kestrel!]!.abilityUsed).toBe(true);
     expect(useV6Ui.getState().slay).toBeNull();
-    expect((m.result.current.day.vm.sv as any)).toMatchObject({ status: "Used" });
+    // One Undo takes the whole shot back: the Demon lives and the ability is unspent again.
+    act(() => { useStorytellerStore.getState().undo(); });
+    expect(game().players[town.ids.Hollis!]!.alive).toBe(true);
+    expect(game().players[town.ids.Kestrel!]!.abilityUsed).toBeFalsy();
     // The Slayer row carries no shot history: the status says Used, and Undo cannot leave a stale line behind.
     expect(m.result.current.day.vm.sv as any).not.toHaveProperty("log");;
   });
@@ -255,9 +262,7 @@ describe("the Slayer's shot", () => {
   it("a shot at a non-Demon spends the ability and nothing happens", () => {
     const m = mount();
     shoot(m, "Kestrel", "Ada");
-    const sv = m.result.current.day.vm.sv as Record<string, any>;
-    expect(sv.resTitle).toBe("Nothing happens");
-    act(() => { sv.confirm(); });
+    expect(useV6Ui.getState().toast).toBe("Nothing happens.");
     expect(game().players[town.ids.Ada!]!.alive).toBe(true);
     expect(game().players[town.ids.Kestrel!]!.abilityUsed).toBe(true);
   });
@@ -265,9 +270,8 @@ describe("the Slayer's shot", () => {
   it("a bluff by someone else records nothing", () => {
     const m = mount();
     shoot(m, "Ada", "Hollis");
-    const sv = m.result.current.day.vm.sv as Record<string, any>;
-    expect(sv).toMatchObject({ note: "Ada is not the Slayer.", resTitle: "Nothing happens" });
-    act(() => { sv.confirm(); });
+    expect(useV6Ui.getState().toast).toBe("Nothing happens. Ada is not the Slayer.");
+    expect(m.result.current.day.vm.sv).toMatchObject({ open: false });
     expect(game().players[town.ids.Hollis!]!.alive).toBe(true);
     expect(game().players[town.ids.Kestrel!]!.abilityUsed).toBe(false);
   });
@@ -276,12 +280,8 @@ describe("the Slayer's shot", () => {
     useStorytellerStore.setState({ game: impair(game(), town.ids.Kestrel!) });
     const m = mount();
     shoot(m, "Kestrel", "Hollis");
-    let sv = m.result.current.day.vm.sv as Record<string, any>;
-    expect(sv).toMatchObject({ resTitle: "Nothing happens", overrideOn: false });
-    act(() => { sv.override(); });
-    sv = m.result.current.day.vm.sv as Record<string, any>;
-    expect(sv.resTitle).toBe("Nothing happens");
-    act(() => { sv.confirm(); });
+    // No Storyteller choice exists here, so no ruling card opens: the shot is recorded as spent, nobody dies.
+    expect(m.result.current.day.vm.sv).toMatchObject({ open: false });
     expect(game().players[town.ids.Hollis!]!.alive).toBe(true);
     expect(game().players[town.ids.Kestrel!]!.abilityUsed).toBe(true);
   });
@@ -306,19 +306,16 @@ describe("the Slayer's shot", () => {
     useStorytellerStore.setState({ game: impair(withRecluse(), town.ids.Kestrel!) });
     m = mount();
     shoot(m, "Kestrel", "Ada");
-    sv = m.result.current.day.vm.sv as Record<string, any>;
-    expect(sv).toMatchObject({ resTitle: "Nothing happens", overrideOn: false });
+    expect(m.result.current.day.vm.sv).toMatchObject({ open: false });
+    expect(game().players[town.ids.Ada!]!.alive).toBe(true);
+    expect(game().players[town.ids.Kestrel!]!.abilityUsed).toBe(true);
   });
 
-  it("a healthy real Slayer's shot is ruled by the rules alone: no override is offered, and a forced one is ignored", () => {
+  it("a healthy real Slayer's shot is ruled by the rules alone: no override is offered, and nothing is left open", () => {
     const m = mount();
     shoot(m, "Kestrel", "Hollis");
-    let sv = m.result.current.day.vm.sv as Record<string, any>;
-    expect(sv).toMatchObject({ resTitle: "Hollis dies", overrideOn: false });
-    act(() => { sv.override(); });
-    sv = m.result.current.day.vm.sv as Record<string, any>;
-    expect(sv).toMatchObject({ resTitle: "Hollis dies", resSub: "The Slayer’s ability is now spent." });
-    act(() => { sv.confirm(); });
+    // The rules alone decide: recorded by the tap, no ruling card, and a stray override call changes nothing.
+    expect(m.result.current.day.vm.sv).toMatchObject({ open: false });
     expect(game().players[town.ids.Hollis!]!.alive).toBe(false);
   });
 
@@ -334,12 +331,7 @@ describe("the Slayer's shot", () => {
       if (who !== "bluff") concealed(who);
       const m = mount();
       shoot(m, "Ada", "Hollis");
-      let sv = m.result.current.day.vm.sv as Record<string, any>;
-      expect(sv, who).toMatchObject({ resTitle: "Nothing happens", overrideOn: false });
-      act(() => { sv.override(); });
-      sv = m.result.current.day.vm.sv as Record<string, any>;
-      expect(sv.resTitle, who).toBe("Nothing happens");
-      act(() => { sv.confirm(); });
+      expect(m.result.current.day.vm.sv, who).toMatchObject({ open: false });
       expect(game().players[town.ids.Hollis!]!.alive, who).toBe(true);
     }
   });

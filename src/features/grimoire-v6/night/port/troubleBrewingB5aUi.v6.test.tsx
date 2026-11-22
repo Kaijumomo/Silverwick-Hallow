@@ -71,6 +71,9 @@ it("poisoned Fortune Teller can deliberately communicate the truthful NO", () =>
   const g = impair(withRedHerring(proofGame(["fortuneteller", "imp", "poisoner", "soldier", "saint"]), "p3"), "p0");
   open(g); tap("p0"); tap("p4"); expect(game()).toBe(g);
   expect(screen.queryByRole("status")).toBeNull();
+  // T30 cleanup: the Storyteller's choice uses the shared compact answer buttons (the Barber's), not a bespoke control.
+  expect(screen.getByRole("button", { name: "NO" })).toHaveClass("gv-choice-answer");
+  expect(screen.getByRole("button", { name: "YES" })).toHaveClass("gv-choice-answer");
   fireEvent.click(screen.getByRole("button", { name: "NO" }));
   expect(screen.getByLabelText("Information to communicate")).toHaveTextContent("NO");
   expect(game().players).toEqual(g.players);

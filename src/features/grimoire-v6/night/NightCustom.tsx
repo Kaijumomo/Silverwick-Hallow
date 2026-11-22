@@ -187,7 +187,8 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
       } else if (!done && engine.bureaucrat && engine.actor?.participantId) {
         rows.push(<BureaucratAction key={`${engine.actor.participantId}:${current.stepKey}`} source={{ playerId: engine.actor.id, participantId: engine.actor.participantId }}
           visible={engine.visible} completeStep={{ day: game.day, stepKey: current.stepKey }} onResolved={engine.finish} />);
-      } else if (!done && !engine.manual && !engine.canTarget && !engine.tapRuling) {
+      } else if (!done && !engine.manual && !engine.canTarget && !engine.tapRuling && !engine.question) {
+        // T30 cleanup: not while the Godfather's own question is open (it is answered right there, with no further step).
         rows.push(<button key="continue" type="button" className="btn btn-gold" onClick={() => engine.openWorkspace()}>Continue action</button>);
       }
       // SV-4a: the Cerenovus's choice is tapped on the board; the card shows what was chosen and the Wake row with the two reveal tokens.

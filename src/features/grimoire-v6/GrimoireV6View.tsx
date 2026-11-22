@@ -2780,6 +2780,9 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                           </span>
                         </Fragment>
                       ))}
+                      {vm.night?.cur?.waitAction && (
+                        <button type="button" className="gv-choice-pill is-small" style={{ margin: "-7px 0 -7px auto" }} onClick={vm.night.cur.waitAction.run}>{T(vm.night.cur.waitAction.label)}</button>
+                      )}
                     </div>
                     </>
                   )}

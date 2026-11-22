@@ -126,24 +126,30 @@ export function slayerTap(ctx: V6Ctx, id: PlayerId): void {
     return;
   }
   if (id === sl.shooter) { ctx.ui.set({ slay: { stage: "shooter" } }); return; }
-  ctx.ui.set({ slay: { ...sl, stage: "result", target: id, override: false } });
+  if (!p.participantId) { flash("That seat is empty."); return; }
+  const aimed = { ...sl, stage: "result" as const, target: id, override: false };
+  // PO 2026-11-21 (T30 cleanup): tapping the target is the deliberate act, so a shot the rules alone decide is recorded at once (one Undo).
+  // Only a shot that leaves a real Storyteller choice (a healthy Slayer at a Recluse, or a table Silverwick cannot rule on) keeps the ruling card.
+  const ev = evaluate(ctx, sl.shooter!, id);
+  if (!ev.overridable) { confirm(ctx, ev, ev.dies, aimed); return; }
+  ctx.ui.set({ slay: aimed });
 }
 
 /** Commits the shot the Storyteller has ruled on (or only announces it, when the rules record nothing). */
-function confirm(ctx: V6Ctx, ev: Evaluation, dies: boolean): void {
+function confirm(ctx: V6Ctx, ev: Evaluation, dies: boolean, aimed?: NonNullable<V6Ctx["ui"]["slay"]>): void {
   const { game, script, ui } = ctx;
-  const sl = ui.slay;
+  const sl = aimed ?? ui.slay;
   const shooter = sl?.shooter ? game.players[sl.shooter] : undefined;
   const target = sl?.target ? game.players[sl.target] : undefined;
   if (!sl || !shooter || !target || shooter.isEmpty || target.isEmpty) return;
   const override = !!sl.override && ev.overridable;
   const finish = () => {
     ui.set({ slay: null });
-    flash(dies ? `${target.name} dies.` : "Nothing happens.");
+    flash(dies ? `${target.name} dies.` : ev.kind === "none" && ev.why ? `Nothing happens. ${ev.why}` : "Nothing happens.");
   };
   // Nothing for the rules to record (a bluff, a spent or dead Slayer): announce it -- unless the Storyteller rules a death.
   if (ev.kind === "none" && !dies) { finish(); return; }
-  if (!script) return;
+  if (!script) { flash("Silverwick cannot rule on this shot without a script."); return; }
   const store = useStorytellerStore.getState();
   const actionContext = captureCharacterActionContext();
   let result;
@@ -162,7 +168,7 @@ function confirm(ctx: V6Ctx, ev: Evaluation, dies: boolean): void {
     const spends = ev.real && !ev.used;
     const intents = [...(spends ? [{ kind: "useAbility" as const, target: bindingOf(shooter) }] : []), ...(dies ? [{ kind: "death" as const, target: bindingOf(target) }] : [])];
     result = store.resolveAbility({ mode: "manual", fingerprint, roleId: "slayer", outcome: { operations: [{ domain: "life", intents }] },
-      reason: override ? "Storyteller override of a Slayer shot" : "Storyteller ruling on a Slayer shot" }, CANONICAL_ABILITY_SEMANTICS, actionContext);
+      reason: override ? "Storyteller override of a Slayer shot" : ev.overridable ? "Storyteller ruling on a Slayer shot" : "Slayer shot decided by the rules" }, CANONICAL_ABILITY_SEMANTICS, actionContext);
   }
   if (!result.ok) { flash(result.message); return; }
   finish();
