@@ -388,6 +388,8 @@ it("'Another Player Dies': the Storyteller taps who dies instead; the Mayor live
   fireEvent.click(screen.getByRole("button", { name: "Another Player Dies" }));
   expect(game().players.p4!.alive).toBe(true);
   expect(useTargetPicker.getState().active?.label).toBe("Choose who dies instead");
+  expect(screen.getByText("Choose the player who dies instead of Player 4.")).toBeInTheDocument();
+  expect(screen.queryByText("Choose the Minion who becomes the new Imp.")).toBeNull();
   tap("p4");
   expect(game().players.p4!.alive).toBe(true);
   tap("p3");

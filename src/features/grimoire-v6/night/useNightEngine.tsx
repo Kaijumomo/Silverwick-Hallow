@@ -68,7 +68,7 @@ const TAP_RULINGS = [
 ];
 export type TapRuling = { game: StorytellerLobbyRecord; stepKey: string; inputs: Record<string, AbilityInputValue>; id: string; kind: "demon" | "outsider" | "mayor"; target: ParticipantBinding };
 /** `replacement`: the Mayor's bounce is waiting for the player who dies instead (any living player may be tapped; a protected one is refused with the reason). */
-export type SuccessorChoice = { game: StorytellerLobbyRecord; stepKey: string; inputs: Record<string, AbilityInputValue>; id: string; eligible: Set<string>; replacement?: boolean };
+export type SuccessorChoice = { game: StorytellerLobbyRecord; stepKey: string; inputs: Record<string, AbilityInputValue>; id: string; eligible: Set<string>; replacement?: boolean; target?: string };
 type Success = { key: string; game: StorytellerLobbyRecord; step: NightStep };
 
 /**
@@ -380,7 +380,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
       const requirement = plan.requirements?.length === 1 ? plan.requirements[0] : undefined;
       // "Another player dies": the player who dies instead is tapped on the board. Any living player but the Mayor may be tapped.
       if (held.kind === "mayor" && value && requirement?.source === "storyteller" && requirement.kind === "participant") {
-        setSuccessorChoice({ game, stepKey: current.stepKey, inputs, id: requirement.id, replacement: true,
+        setSuccessorChoice({ game, stepKey: current.stepKey, inputs, id: requirement.id, replacement: true, target: held.target.playerId,
           eligible: new Set(seatedParticipants(game).filter((p) => p.alive && p.participantId !== held.target.participantId).map((p) => p.participantId!)) });
         setPaused(false); return;
       }
