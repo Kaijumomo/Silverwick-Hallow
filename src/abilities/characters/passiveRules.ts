@@ -289,21 +289,38 @@ export function passiveProtection(query: RulesQuery, target: ParticipantBinding,
   return rule.needsFunctioning ? functioning : { known: true, value: true };
 }
 
-/** Vortox's false-information rule includes impaired Townsfolk. Selecting
- * legal false information is not yet implemented; the ENTIRE action is Manual.
- * Actual character and functioning matter; script membership/shown identity do not.
+/**
+ * SV-5h: the Vortox's "Townsfolk abilities yield false info" (https://wiki.bloodontheclocktower.com/Vortox): known true while any Vortox
+ * in play is alive, canonical and functioning (sober and healthy), and `roleId` -- the ability being PERFORMED (a gained ability
+ * counts: a Philosopher who chose the Oracle performs the Oracle) -- is a canonical Townsfolk. The receiver's own drunkenness or poisoning
+ * does not lift it ("even if they are drunk or poisoned, it must be false"); whether the receiver really has the ability (a Drunk only
+ * shown a Townsfolk does not) is the caller's. Unknown when a living Vortox's functioning is unknown. Derived on every read, never
+ * stored: the Vortox dying, or becoming drunk or poisoned, ends it at once.
  */
-export function passiveInformationModifiers(query: RulesQuery, roleId: string): ModifierDefinition[] {
+export function townsfolkInformationFalse(query: RulesQuery, roleId: string): QueryAnswer<boolean> {
   const receiver = query.roleOf(roleId);
-  if (!receiver || !isCanonicalRole(receiver) || receiver.type !== "townsfolk") return [];
+  if (!receiver || !isCanonicalRole(receiver) || receiver.type !== "townsfolk") return { known: true, value: false };
+  let unknown: string | null = null;
   for (const source of query.inPlay("vortox")) {
     const player = query.participant(source)!;
     const role = query.roleOf(player.actualRole);
     if (!role || !isCanonicalRole(role) || !player.alive) continue;
     const functioning = query.abilityFunctions(source);
-    if (!functioning.known || functioning.value) return [{ id: "character:vortox", source: "character", label: "Vortox information", scopes: ["information"] }];
+    if (!functioning.known) { unknown ??= functioning.reason; continue; }
+    if (functioning.value) return { known: true, value: true };
   }
-  return [];
+  return unknown ? { known: false, reason: unknown } : { known: true, value: false };
+}
+
+/** The Vortox's information modifier. A Townsfolk ability whose descriptor declares its truth (`falseAnswersTaught`) is NOT gated: the
+ * ability coordinator applies the shared false-information rule to it (src/abilities/falseInformation.ts). Every other Townsfolk
+ * information step stays wholly Manual while the rule applies, and so does every step while a Vortox's functioning is unknown.
+ * Actual character and functioning matter; script membership and shown identity do not.
+ */
+export function passiveInformationModifiers(query: RulesQuery, roleId: string, falseAnswersTaught = false): ModifierDefinition[] {
+  const rule = townsfolkInformationFalse(query, roleId);
+  if (rule.known && (!rule.value || falseAnswersTaught)) return [];
+  return [{ id: "character:vortox", source: "character", label: "Vortox information", scopes: ["information"] }];
 }
 
 /** Bounded reviewed interaction envelope, NOT a character automation catalog.

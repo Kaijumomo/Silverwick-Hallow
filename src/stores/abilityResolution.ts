@@ -3,6 +3,7 @@ import {
   CANONICAL_ABILITY_SEMANTICS,
   resolveAbilitySemantics,
   type AbilityDescriptor,
+  type AbilityEvaluationContext,
   type AbilityInputRequirement,
   type AbilityInputs,
   type AbilityInputValue,
@@ -13,6 +14,7 @@ import {
 } from "@/abilities/semantics";
 import { invocationEligibility, isInvocationPath, nightTriggerStatus, type InvocationPath } from "@/abilities/invocation";
 import { automationEligibility } from "@/abilities/automationEligibility";
+import { falseInformationApplies, falseInformationRefusal } from "@/abilities/falseInformation";
 import { incompleteSuccessionReason } from "@/abilities/completeActionSafety";
 import { captureResolvedDemonDeath, automaticDemonDeathEvidenceMode } from "./victoryEvidence";
 import { activeModifiers, prospectiveJinxes, type ModifierDefinition } from "@/abilities/modifiers";
@@ -1011,8 +1013,14 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
     }
   }
   if (!descriptor.evaluator) return refuse("unsupported", "This ability's outcome is not modeled -- resolve it manually.");
-  const evaluation = descriptor.evaluator({ actor: { binding: actorBinding, player: actor }, roleId: request.roleId, simulated, functioning,
-    inputs, judgments, query, constraints, ...(consumeTrigger ? { trigger: { eventId: request.fingerprint.trigger!.eventId } } : {}) });
+  // SV-5h: the shared false-information rule (src/abilities/falseInformation.ts). Unknown is refused here; the Vortox's information
+  // modifier normally gates that case first.
+  const falseRule = falseInformationApplies(query, descriptor, request.roleId, simulated);
+  if (!falseRule.known) return refuse("unsupported", falseRule.reason);
+  const mustBeFalse = falseRule.value;
+  const evaluationContext: AbilityEvaluationContext = { actor: { binding: actorBinding, player: actor }, roleId: request.roleId, simulated, functioning,
+    inputs, judgments, query, constraints, ...(mustBeFalse ? { mustBeFalse } : {}), ...(consumeTrigger ? { trigger: { eventId: request.fingerprint.trigger!.eventId } } : {}) };
+  const evaluation = descriptor.evaluator(evaluationContext);
   switch (evaluation.kind) {
     case "needsInput": return evaluation.requirements.some(requirement => requirement.source === "judgment")
       ? refuse("unsupported", evaluation.message)
@@ -1066,6 +1074,11 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
         if (!constraint.allowed.some((allowed) => constraintAllows(allowed, value))) return refuse("illegal", constraint.reason);
       }
     }
+  }
+  // SV-5h: while a Vortox makes this Townsfolk information false, no delivered value may be one the descriptor's truth calls true.
+  if (mustBeFalse) {
+    const refusal = falseInformationRefusal(descriptor, evaluationContext, outcome);
+    if (refusal) return refuse(refusal.kind, refusal.message);
   }
   // SOL-10F-A4: a guided Actual Role change that would itself bring an
   // UNVERIFIED canonical jinx into play is never automated -- the WHOLE

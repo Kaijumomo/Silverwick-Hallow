@@ -95,3 +95,12 @@ export function possibleAnswers<F, A>(choices: readonly (readonly F[])[], answer
   walk(0, []);
   return answers;
 }
+
+/**
+ * SV-5h (the shared false-information rule, src/abilities/falseInformation.ts): the Storyteller picks the answer freely only when the
+ * actor has no working ability (a simulated wake, drunk, poisoned) AND no Vortox makes it false. Under a Vortox the truth is worked out
+ * as for a working ability, then removed: `asGiven` turns a Yes / No into its opposite; a number, token or pair is the Storyteller's
+ * choice among the answers that are not true.
+ */
+export const storytellerChooses = (context: AbilityEvaluationContext): boolean => !context.mustBeFalse && (context.simulated || !context.functioning);
+export const asGiven = (context: AbilityEvaluationContext, truth: boolean): boolean => context.mustBeFalse ? !truth : truth;

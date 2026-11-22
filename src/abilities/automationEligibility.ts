@@ -7,6 +7,7 @@ import { effectSemanticsOf } from "@/stores/rulesQuery";
 import { gainedRoleOf } from "@/stores/gainedAbility";
 import { incompleteSuccessionReason } from "./completeActionSafety";
 import { fortuneTellerSetupRefusal } from "./characters/fortuneTellerSetupFact";
+import { falseInformationApplies } from "./falseInformation";
 
 export type AutomationEligibility = { kind: "automated" } | { kind: "manual"; reason: string };
 export type AutomationContext = {
@@ -80,8 +81,11 @@ export function automationEligibility({ query, descriptor, actor, roleId, simula
     if (value.kind === "participant" && (!Array.isArray(value.participants) ||
       (!value.participants.length && !requirement.allowNone) || value.participants.some(binding => !query.participant(binding)))) return { kind: "automated" };
   }
+  // SV-5h: the same shared false-information rule the coordinator applies.
+  const falseRule = falseInformationApplies(query, descriptor, roleId, simulated);
+  if (!falseRule.known) return manual(falseRule.reason);
   const evaluation = descriptor.evaluator({ actor: { binding: actor, player }, roleId, simulated,
-    functioning: !simulated && functions.known && functions.value, inputs, judgments: {}, query, constraints });
+    functioning: !simulated && functions.known && functions.value, inputs, judgments: {}, query, constraints, ...(falseRule.value ? { mustBeFalse: true } : {}) });
   if (evaluation.kind === "unsupported") return manual(evaluation.message);
   if (evaluation.kind === "needsInput" && evaluation.requirements.some(requirement => requirement.source === "judgment")) return manual(evaluation.message);
   if (evaluation.kind === "outcome") {

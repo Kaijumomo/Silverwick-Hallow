@@ -1,4 +1,5 @@
 import { createElement as E, useEffect, useRef, type ReactNode } from "react";
+import { FALSE_INFORMATION_NOTE, falseInformationApplies } from "@/abilities/falseInformation";
 import type { NightInformationHandle } from "@/features/nightOrder/NightInformationAction";
 import { stepResolved } from "@/features/nightOrder/nightWork";
 import { hasEffect } from "@/stores/effects";
@@ -98,8 +99,12 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
     // The Marionette is shown the same pill, in the same style: the card names who they really are beside the name.
     const marionette = !!player && !!seat && current.isDeceived && current.actualRoleId === "marionette";
     const poisoned = !!seat && !drunk && !marionette && (hasEffect(seat, "poisoned") || seat.behaviorMode === "poisoned" || !!noDashii && noDashii.known && noDashii.value);
+    // SV-5h: a Vortox makes this Townsfolk's information false (the shared rule the coordinator enforces): one line, in the note style.
+    const falseInformation = player && !current.isDeceived && engine.ability?.kind === "guided" && !!engine.query
+      && (() => { const rule = falseInformationApplies(engine.query!, engine.ability.descriptor, current.effectiveRoleId, false); return rule.known && rule.value; })();
     const note = lines([
       player && current.isDeceived && !drunk && !marionette ? `Follow the shown character’s procedure. This player is actually the ${current.actualRoleName}.` : undefined,
+      falseInformation && !resolved ? FALSE_INFORMATION_NOTE : undefined,
       quietAdvisory(current.advisory),
     ]);
     const waiting = !engine.skipReason && canTarget && !resolved && !!picker && picker.owner === engine.owner || !!successorChoice;
