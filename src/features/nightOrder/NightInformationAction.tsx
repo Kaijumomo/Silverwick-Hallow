@@ -10,6 +10,7 @@ import type { NightStep } from "@/rules/night/nightOrder";
 import { chefMaximumPairs } from "@/abilities/characters/chef";
 import { CLOCKMAKER_POSSIBLE, clockmakerAnswers, clockmakerMaximumSteps } from "@/abilities/characters/clockmaker";
 import { SEAMSTRESS_SAME } from "@/abilities/characters/seamstress";
+import { oracleChoices } from "@/abilities/characters/oracle";
 import { FLOWERGIRL_DEMON_VOTED } from "@/abilities/characters/flowergirl";
 import { createRulesQuery } from "@/stores/rulesQuery";
 import { captureInfoContext, infoContextCurrent } from "@/features/info/infoCommands";
@@ -201,8 +202,11 @@ export const NightInformationAction = forwardRef<NightInformationHandle, Props>(
       const answers = requirement?.id.startsWith(CLOCKMAKER_POSSIBLE) ? clockmakerAnswers(query) : null;
       return answers?.kind === "answers" ? answers.steps : Array.from({ length: clockmakerMaximumSteps(query) }, (_, index) => index + 1);
     })()
+    // SV-5i: the Oracle offers 0 to the number of dead players (at least 0 to 2).
+    : step.effectiveRoleId === "oracle" ? oracleChoices(createRulesQuery(game, environment))
     : [0, 1, 2];
-  const choices = requirement?.kind === "boolean" ? [false, true] : numberChoices;
+  // SV-5h: answers the Storyteller may not give (a Vortox: the true one) are left out.
+  const choices = requirement?.kind === "boolean" ? [false, true] : numberChoices.filter((choice) => !requirement?.exclude?.includes(choice));
   return <div className="night-information">
     {characterInformation && (token?.kind === "role" || requirement?.kind === "character" || simulatedRavenkeeper && !resolved && !manualWake) &&
       (() => {

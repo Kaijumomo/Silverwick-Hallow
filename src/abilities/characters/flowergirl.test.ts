@@ -145,14 +145,15 @@ describe("SV-5d Flowergirl: impaired, the first night and by hand", () => {
     expect(next.players).toBe(g.players);
   });
 
-  it("no answer on the first night; by hand when the record is missing, from another Day or incomplete; a Vortox; homebrew", () => {
+  it("no answer on the first night; by hand when the record is missing, from another Day or incomplete, or homebrew; a Vortox makes it false (SV-5i)", () => {
     expect(learn(proofGame(ROLES, "night", 1))).toMatchObject({ ok: false });
     const base = night3();
     expect(learn(base)).toMatchObject({ ok: false, code: "unsupported" });
     expect(learn(withVoting(base, 1, []))).toMatchObject({ ok: false, code: "unsupported" });
     expect(learn(withVoting(base, 2, [], "unknown"))).toMatchObject({ ok: false, code: "unsupported" });
     const vortox = patchPlayer(withVoting(base, 2, []), "p1", { actualRole: "vortox" });
-    expect(learn(vortox)).toMatchObject({ ok: false });
+    // The page: "the Flowergirl ... learns 'yes'" on a day nobody voted.
+    expect(told(vortox)).toBe(true);
     expect(plan(base, request(base, "p0", "flowergirl"), homebrewEnv("flowergirl"))).toMatchObject({ ok: false, code: "unsupported" });
   });
 });

@@ -59,15 +59,17 @@ describe("SV-5a pairs: the Clockmaker against every other character of the scrip
       expect(valueOf(proofGame(["clockmaker", "imp", "chef", other, "monk", "empath"], "night", 1), "clockmaker")[0], other).toMatchObject({ value: 2 });
     }
   });
-  it("every Demon of the script is the Demon to count from; a No Dashii poisons its Clockmaker neighbour; a Vortox is by hand", () => {
+  it("every Demon of the script is the Demon to count from; a No Dashii poisons its Clockmaker neighbour; a Vortox makes it false (SV-5i)", () => {
     // p0 clockmaker, p1 <demon>, p2 chef, p3 monk, p4 poisoner, p5 empath: 3 steps either way.
     for (const demon of ["fanggu", "vigormortis"]) {
       expect(valueOf(proofGame(["clockmaker", demon, "chef", "monk", "poisoner", "empath"], "night", 1), "clockmaker")[0], demon).toMatchObject({ value: 3 });
     }
     const noDashii = proofGame(["clockmaker", "nodashii", "chef", "monk", "poisoner", "empath"], "night", 1);
     expect(plan(noDashii, request(noDashii, "p0", "clockmaker"))).toMatchObject({ ok: false, code: "needsInput", requirements: [{ id: "communicated" }] });
+    // SV-5i: the Vortox counts as the Demon (3 steps), and the Storyteller chooses 1 or 2 (a ring of 6 allows up to 3).
     const vortox = proofGame(["clockmaker", "vortox", "chef", "monk", "poisoner", "empath"], "night", 1);
-    byHand(plan(vortox, request(vortox, "p0", "clockmaker")));
+    expect(plan(vortox, request(vortox, "p0", "clockmaker"))).toMatchObject({ ok: false, code: "needsInput", requirements: [{ id: "communicated", exclude: [3] }] });
+    expect(valueOf(vortox, "clockmaker", { communicated: { kind: "number", value: 1 } })[0]).toMatchObject({ value: 1 });
   });
   it("Snake Charmer: a first-night swap with the Demon moves the Demon, and the count follows it", () => {
     // p0 clockmaker, p1 snakecharmer, p2 imp, p3 chef, p4 monk, p5 poisoner. Before: Imp p2 to Poisoner p5 = 3.
@@ -95,15 +97,16 @@ describe("SV-5a pairs: the Clockmaker against every other character of the scrip
 });
 
 describe("SV-5b pairs: the Seamstress against every other character of the script", () => {
-  it("YES with the Chef for every good character, NO for every evil one; a Vortox is by hand", () => {
+  it("YES with the Chef for every good character, NO for every evil one; a Vortox makes it false (SV-5i)", () => {
     // p0 seamstress, p1 imp, p2 chef, p3 <other>, p4 poisoner, p5 empath. The Seamstress's neighbours are the Imp and the Empath.
     for (const other of others("seamstress").filter((r) => r !== "vortox")) {
       const g = proofGame(["seamstress", "imp", "chef", other, "poisoner", "empath"], "night", 2);
       const values = valueOf(g, "seamstress", { targets: pick(g, "p2", "p3") });
       expect(values.find((v) => v.kind === "boolean"), other).toMatchObject({ value: GOOD.includes(other) });
     }
+    // SV-5i: the Chef and the Vortox are not the same alignment (true: NO), so the Seamstress learns YES.
     const vortox = proofGame(["seamstress", "imp", "chef", "vortox", "poisoner", "empath"], "night", 2);
-    byHand(plan(vortox, request(vortox, "p0", "seamstress", { targets: pick(vortox, "p2", "p3") })));
+    expect(valueOf(vortox, "seamstress", { targets: pick(vortox, "p2", "p3") }).find((v) => v.kind === "boolean")).toMatchObject({ value: true });
   });
   it("Evil Twin: choosing both Twins gives NO (opposing alignments)", () => {
     const g = proofGame(["seamstress", "imp", "chef", "eviltwin", "poisoner", "empath"], "night", 2);
@@ -158,14 +161,15 @@ describe("SV-5c pairs: the Dreamer against every other character of the script",
 });
 
 describe("SV-5d pairs: the Flowergirl against every other character of the script (Night 3, after Day 2)", () => {
-  it("only a Demon's vote is YES: every Demon of the script voting is YES, every other character NO; a Vortox is by hand", () => {
+  it("only a Demon's vote is YES: every Demon of the script voting is YES, every other character NO; a Vortox makes it false (SV-5i)", () => {
     // p0 flowergirl, p1 imp, p2 chef, p3 <other>, p4 poisoner, p5 empath. Only p3 voted, on the Empath.
     for (const other of others("flowergirl").filter((r) => r !== "vortox")) {
       const g = withVotes(proofGame(["flowergirl", "imp", "chef", other, "poisoner", "empath"], "night", 3), 2, "p5", ["p3"]);
       expect(valueOf(g, "flowergirl")[0], other).toMatchObject({ kind: "boolean", value: DEMONS.includes(other) });
     }
+    // SV-5i: the Vortox itself voted (true: YES), so the Flowergirl learns NO.
     const vortox = withVotes(proofGame(["flowergirl", "imp", "chef", "vortox", "poisoner", "empath"], "night", 3), 2, "p5", ["p3"]);
-    byHand(plan(vortox, request(vortox, "p0", "flowergirl")));
+    expect(valueOf(vortox, "flowergirl")[0]).toMatchObject({ kind: "boolean", value: false });
   });
   it("Snake Charmer: the Demon who voted swaps tonight; the app cannot tell who was the Demon then, so the Storyteller rules", () => {
     // p0 flowergirl, p1 snakecharmer, p2 imp, p3 chef, p4 monk, p5 poisoner. The Imp voted during Day 2; tonight the Snake Charmer charms it.

@@ -4,7 +4,8 @@ import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { RoleType } from "@/stores/types";
 import { answerOf, ask, nameOf, outcome, requireLivingActor, subjectId } from "./shared";
 import { ringOf } from "./chef";
-import { informationAbilityRefusal, possibleAnswers, possibleTypes } from "./informationSupport";
+import { informationAbilityRefusal, possibleAnswers, possibleTypes, storytellerChooses } from "./informationSupport";
+import { FALSE_INFORMATION_REFUSED, falseNumbers, numberTruth, unknownTruth } from "../falseInformation";
 
 /**
  * Clockmaker -- GUIDED (SV-5a, Sects & Violets). https://wiki.bloodontheclocktower.com/Clockmaker (saved 2026-11-11)
@@ -20,9 +21,10 @@ import { informationAbilityRefusal, possibleAnswers, possibleTypes } from "./inf
  * one of THOSE numbers (one question). Nothing is saved as a registration.
  * By hand (Manual) with the reason: a registration only the Storyteller can rule (a "registers falsely" Effect, a modifier), more
  * than one Demon, no Demon or no Minion to count, a Clockmaker step after the first night (a Pit-Hag or Barber made one: "start
- * knowing" is a first-night ability). A Vortox in play makes the whole step Manual through the shared information modifier
- * (passiveRules.ts) until the Vortox merge. Drunk or poisoned, or a Drunk shown the Clockmaker: the Storyteller chooses the number
- * (the information support rules of docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md, matrix Section 8).
+ * knowing" is a first-night ability). Drunk or poisoned, or a Drunk shown the Clockmaker: the Storyteller chooses the number
+ * (the information support rules of docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md, matrix Section 8). SV-5i: a Vortox makes the number
+ * false (src/abilities/falseInformation.ts): the numbers are worked out as above, for a drunk or poisoned Clockmaker too, and the
+ * Storyteller chooses any number of steps the table allows except the certainly true one.
  */
 export const CLOCKMAKER_COMMUNICATED = "communicated";
 export const CLOCKMAKER_POSSIBLE = "clockmaker:possibleSteps";
@@ -77,7 +79,7 @@ export const CLOCKMAKER: AbilityDescriptor = {
     const moment = context.query.moment();
     if (!moment || moment.phase !== "night" || moment.day !== 1)
       return { kind: "unsupported", message: "The Clockmaker starts knowing this on the first night only: a Clockmaker made later is yours, by hand." };
-    if (context.simulated || !context.functioning) {
+    if (storytellerChooses(context)) {
       const told = answerOf(context.inputs, CLOCKMAKER_COMMUNICATED, "number");
       if (!told) return ask(context.simulated ? "Simulated wake: this player has no Clockmaker ability. Choose the number to show."
         : "This Clockmaker's ability is not functioning. Choose the number to show.",
@@ -88,6 +90,18 @@ export const CLOCKMAKER: AbilityDescriptor = {
     }
     const answers = clockmakerAnswers(context.query);
     if (answers.kind === "manual") return { kind: "unsupported", message: answers.message };
+    if (context.mustBeFalse) {
+      // SV-5i: under a Vortox (a drunk or poisoned Clockmaker too) the Storyteller chooses any number the table allows but the true one.
+      // Where a Spy or Recluse makes two numbers possible, each is false under one registration, so every number is offered.
+      const all = Array.from({ length: clockmakerMaximumSteps(context.query) }, (_, index) => index + 1);
+      const choices = falseNumbers(all, answers.steps);
+      if (!choices.length) return { kind: "unsupported", message: "A Vortox is in play and this table allows no false number of steps: give the Clockmaker's number by hand." };
+      const told = answerOf(context.inputs, CLOCKMAKER_COMMUNICATED, "number");
+      if (!told) return ask("A Vortox is in play: choose a false number of steps to show.",
+        { id: CLOCKMAKER_COMMUNICATED, kind: "number", source: "storyteller", label: "Steps from the Demon to its nearest Minion shown", exclude: all.filter((value) => !choices.includes(value)) });
+      if (!choices.includes(told.value)) return { kind: "illegal", message: FALSE_INFORMATION_REFUSED };
+      return deliver(context, told.value);
+    }
     if (answers.steps.length === 1) return deliver(context, answers.steps[0]!);
     const id = subjectId(CLOCKMAKER_POSSIBLE, ...answers.doubtful);
     const told = answerOf(context.inputs, id, "number");
@@ -95,5 +109,9 @@ export const CLOCKMAKER: AbilityDescriptor = {
       { id, kind: "number", source: "storyteller", label: "Steps from the Demon to its nearest Minion shown" });
     if (!answers.steps.includes(told.value)) return { kind: "illegal", message: `Choose ${answers.steps.join(" or ")}: the numbers the registrations allow.` };
     return deliver(context, told.value);
+  },
+  truth: (context) => {
+    const answers = clockmakerAnswers(context.query);
+    return answers.kind === "manual" ? unknownTruth(answers.message) : numberTruth("steps", answers.steps);
   },
 };

@@ -2,7 +2,8 @@ import type { AbilityDescriptor, AbilityEvaluation, AbilityEvaluationContext } f
 import type { AbilityOperation, ParticipantBinding } from "@/stores/abilityResolution";
 import type { Alignment } from "@/stores/types";
 import { answerOf, ask, lifeOperation, nameOf, outcome, participantsOf, requireLivingActor, subjectId } from "./shared";
-import { informationAbilityRefusal, possibleAlignments, possibleAnswers } from "./informationSupport";
+import { asGiven, informationAbilityRefusal, possibleAlignments, possibleAnswers, storytellerChooses, yesNoTruth, type WorkedTruth } from "./informationSupport";
+import { unknownTruth } from "../falseInformation";
 
 /**
  * Seamstress -- GUIDED (SV-5b, Sects & Violets). https://wiki.bloodontheclocktower.com/Seamstress (saved 2026-11-11)
@@ -21,7 +22,8 @@ import { informationAbilityRefusal, possibleAlignments, possibleAnswers } from "
  * Drunk or poisoned, or a Drunk shown the Seamstress: pointing still uses the ability ("no ability" means it does nothing, not that it
  * is saved) and the Storyteller chooses YES or NO. Shared rules: docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md (matrix Section 8, the
  * information support rules; matrix Section 10, the Slayer's once-per-game use: an impaired choice still spends the use).
- * A Vortox in play makes the whole step Manual through the shared information modifier (passiveRules.ts) until the Vortox merge.
+ * SV-5i: a Vortox makes the answer false (src/abilities/falseInformation.ts): the truth is worked out as above, for a drunk or
+ * poisoned Seamstress too (the choice still uses the ability), and the opposite is given.
  */
 export const SEAMSTRESS_TARGETS = "targets";
 export const SEAMSTRESS_COMMUNICATED = "communicated";
@@ -35,6 +37,26 @@ function deliver(context: AbilityEvaluationContext, targets: ParticipantBinding[
     { requirementId: "players", kind: "player", participants: targets },
     { requirementId: "sameAlignment", kind: "boolean", value: same },
   ] }]);
+}
+
+/** Do the two players register as the same alignment to the Seamstress? A Spy or Recluse who could change the answer is one ruling.
+ * Shared by the evaluator and, under a Vortox, by the descriptor's truth (SV-5i). */
+function sameAlignment(context: AbilityEvaluationContext, targets: ParticipantBinding[]): WorkedTruth<boolean> {
+  const forms: (readonly Alignment[])[] = [];
+  const doubtful: ParticipantBinding[] = [];
+  for (const target of targets) {
+    const alignments = possibleAlignments(context.query, target, "seamstress");
+    if (!alignments.known) return { kind: "unsupported", message: alignments.reason };
+    if (alignments.forms.length > 1) doubtful.push(target);
+    forms.push(alignments.forms);
+  }
+  const answers = possibleAnswers(forms, ([first, second]) => [first === second]);
+  if (answers.length === 1) return { kind: "known", value: answers[0]! };
+  const id = subjectId(SEAMSTRESS_SAME, ...targets);
+  const ruled = answerOf(context.inputs, id, "boolean");
+  if (ruled) return { kind: "known", value: ruled.value };
+  return { kind: "ask", evaluation: ask(`${doubtful.map((who) => nameOf(context, who)).join(" and ")} may register as good or evil to the Seamstress. Do ${targets.map((who) => nameOf(context, who)).join(" and ")} register as the same alignment?`,
+    { id, kind: "boolean", source: "storyteller", label: "They register as the same alignment (Yes: the Seamstress learns YES; No: NO)" }) };
 }
 
 export const SEAMSTRESS: AbilityDescriptor = {
@@ -51,7 +73,7 @@ export const SEAMSTRESS: AbilityDescriptor = {
     if (refusal) return refusal;
     const targets = participantsOf(context.inputs, SEAMSTRESS_TARGETS)!;
     if (targets.length !== 2 || targets[0]!.participantId === targets[1]!.participantId) return { kind: "illegal", message: "Choose two different players." };
-    if (context.simulated || !context.functioning) {
+    if (storytellerChooses(context)) {
       const id = subjectId(SEAMSTRESS_COMMUNICATED, ...targets);
       const told = answerOf(context.inputs, id, "boolean");
       if (!told) return ask(context.simulated ? "Simulated wake: this player has no Seamstress ability. Choose the answer to show."
@@ -59,20 +81,15 @@ export const SEAMSTRESS: AbilityDescriptor = {
       { id, kind: "boolean", source: "storyteller", label: "Show YES (the same alignment)" });
       return deliver(context, targets, told.value);
     }
-    const forms: (readonly Alignment[])[] = [];
-    const doubtful: ParticipantBinding[] = [];
-    for (const target of targets) {
-      const alignments = possibleAlignments(context.query, target, "seamstress");
-      if (!alignments.known) return { kind: "unsupported", message: alignments.reason };
-      if (alignments.forms.length > 1) doubtful.push(target);
-      forms.push(alignments.forms);
-    }
-    const answers = possibleAnswers(forms, ([first, second]) => [first === second]);
-    if (answers.length === 1) return deliver(context, targets, answers[0]!);
-    const id = subjectId(SEAMSTRESS_SAME, ...targets);
-    const ruled = answerOf(context.inputs, id, "boolean");
-    if (!ruled) return ask(`${doubtful.map((who) => nameOf(context, who)).join(" and ")} may register as good or evil to the Seamstress. Do ${targets.map((who) => nameOf(context, who)).join(" and ")} register as the same alignment?`,
-      { id, kind: "boolean", source: "storyteller", label: "They register as the same alignment (Yes: the Seamstress learns YES; No: NO)" });
-    return deliver(context, targets, ruled.value);
+    // SV-5i: under a Vortox the truth is worked out the same way (a drunk or poisoned Seamstress too, the Spy / Recluse ruling included)
+    // and given as its opposite.
+    const truth = sameAlignment(context, targets);
+    if (truth.kind === "unsupported") return { kind: "unsupported", message: truth.message };
+    if (truth.kind === "ask") return truth.evaluation;
+    return deliver(context, targets, asGiven(context, truth.value));
+  },
+  truth: (context) => {
+    const targets = participantsOf(context.inputs, SEAMSTRESS_TARGETS) ?? [];
+    return targets.length === 2 ? yesNoTruth("sameAlignment", sameAlignment(context, targets)) : unknownTruth("Choose two different players.");
   },
 };

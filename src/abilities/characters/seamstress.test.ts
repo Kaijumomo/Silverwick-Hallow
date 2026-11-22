@@ -103,10 +103,11 @@ describe("SV-5b Seamstress: impaired and by hand", () => {
     expect(wakes({ ...next, day: 3, nightProgress: {} })).toBe(false);
   });
 
-  it("a dead Seamstress, a Vortox in play and a homebrew Seamstress are refused or by hand", () => {
+  it("a dead Seamstress and a homebrew Seamstress are refused or by hand; a Vortox makes the answer false (SV-5i)", () => {
     const g = proofGame(ROLES, "night", 2);
     expect(choose(patchPlayer(g, "p0", { alive: false }), "p1", "p2")).toMatchObject({ ok: false, code: "notApplicable" });
-    expect(choose(patchPlayer(g, "p3", { actualRole: "vortox" }), "p1", "p2")).toMatchObject({ ok: false });
+    // The Barber and the Clockmaker are both good (true: YES): under a Vortox the Seamstress learns NO.
+    expect(answer(patchPlayer(g, "p3", { actualRole: "vortox" }), "p1", "p2").value).toBe(false);
     expect(plan(g, request(g, "p0", "seamstress", { targets: pick(g, "p1", "p2") }), homebrewEnv("seamstress"))).toMatchObject({ ok: false, code: "unsupported" });
   });
 
