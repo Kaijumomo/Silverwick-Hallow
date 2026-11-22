@@ -28,8 +28,6 @@ const valueOf = (g: StorytellerLobbyRecord, roleId: string, inputs: AbilityInput
 };
 const rowsOf = (g: StorytellerLobbyRecord) => computeNightOrder(g.players, g.seatOrder, proofScript, g.day === 1, g)
   .flatMap((s) => s.kind === "player" && s.playerId === "p0" ? [s.effectiveRoleId] : []);
-/** By hand: refused without a question (the Vortox's shared information modifier, a second Demon, an unreadable record). */
-const byHand = (result: ReturnType<typeof plan>) => { expect(result.ok).toBe(false); expect(result.ok ? "" : result.code).not.toBe("needsInput"); };
 const ref = (g: StorytellerLobbyRecord, id: string) => ({ kind: "participant" as const, playerId: id, participantId: g.players[id]!.participantId!, nameAtTime: g.players[id]!.name });
 function withVotes(g: StorytellerLobbyRecord, day: number, nominee: string, voters: string[]): StorytellerLobbyRecord {
   const at = g.seatOrder.indexOf(nominee);
@@ -135,7 +133,7 @@ describe("SV-5b pairs: the Seamstress against every other character of the scrip
 });
 
 describe("SV-5c pairs: the Dreamer against every other character of the script", () => {
-  it("the true token is the chosen character itself; the false one is asked from the other team; a Vortox is by hand", () => {
+  it("the true token is the chosen character itself; the false one is asked from the other team; a Vortox makes both false (SV-5j)", () => {
     // p0 dreamer, p1 imp, p2 chef, p3 <other>, p4 poisoner, p5 empath. The Dreamer's neighbours are the Imp and the Empath.
     for (const other of others("dreamer").filter((r) => r !== "vortox")) {
       const g = proofGame(["dreamer", "imp", "chef", other, "poisoner", "empath"], "night", 2);
@@ -148,8 +146,15 @@ describe("SV-5c pairs: the Dreamer against every other character of the script",
       const values = valueOf(g, "dreamer", { target, [id]: character(good ? "witch" : "savant") });
       expect(values.filter((v) => v.kind === "role").map((v) => v.kind === "role" ? v.roleId : ""), other).toEqual(good ? [other, "witch"] : ["savant", other]);
     }
+    // SV-5j: the Vortox chosen: the Storyteller picks both tokens, and neither may be the Vortox.
     const vortox = proofGame(["dreamer", "imp", "chef", "vortox", "poisoner", "empath"], "night", 2);
-    byHand(plan(vortox, request(vortox, "p0", "dreamer", { target: pick(vortox, "p3") })));
+    const asked = plan(vortox, request(vortox, "p0", "dreamer", { target: pick(vortox, "p3") }));
+    expect(asked).toMatchObject({ ok: false, code: "needsInput", requirements: [{ exclude: ["vortox"] }] });
+    const goodId = asked.ok ? "" : asked.requirements![0]!.id;
+    const second = plan(vortox, request(vortox, "p0", "dreamer", { target: pick(vortox, "p3"), [goodId]: character("savant") }));
+    const evilId = second.ok ? "" : second.requirements![0]!.id;
+    expect(valueOf(vortox, "dreamer", { target: pick(vortox, "p3"), [goodId]: character("savant"), [evilId]: character("nodashii") })
+      .filter((v) => v.kind === "role").map((v) => v.kind === "role" ? v.roleId : "")).toEqual(["savant", "nodashii"]);
   });
   it("wakes every night, beside every other character", () => {
     for (const other of others("dreamer")) {

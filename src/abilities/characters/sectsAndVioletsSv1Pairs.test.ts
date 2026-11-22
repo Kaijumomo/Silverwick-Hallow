@@ -55,9 +55,9 @@ describe("SV-1 pairs: the reviewed-list gate", () => {
 });
 
 describe("SV-1 pairs: the Demons", () => {
-  it("Vortox: the Sage's step is the Storyteller's; the Sweetheart, Klutz and Barber (Outsiders) are unaffected", () => {
+  it("Vortox: the Sage's pair must be false (SV-5j: the Imp is refused); the Sweetheart, Klutz and Barber (Outsiders) are unaffected", () => {
     const result = actions("vortox");
-    expect(result.sage).toMatchObject({ ok: false, code: "unsupported" });
+    expect(result.sage).toMatchObject({ ok: false, code: "illegal" });
     for (const name of ["sweetheart", "sweetheartDay", "klutz", "barber"] as const) {
       expect(result[name], name).toMatchObject(name === "barber" ? { ok: false, code: "needsInput" } : { ok: true });
     }

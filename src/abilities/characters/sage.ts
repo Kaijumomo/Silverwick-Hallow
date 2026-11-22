@@ -4,7 +4,8 @@ import type { RulesQuery } from "@/stores/rulesQuery";
 import { recordedDeathCause, type RecordedDeathCause } from "../invocation";
 import { isDeathEvent } from "@/stores/lifeEvents";
 import { answerOf, ask, nameOf, nothing, outcome, participantsOf } from "./shared";
-import { informationAbilityRefusal } from "./informationSupport";
+import { informationAbilityRefusal, storytellerChooses } from "./informationSupport";
+import { knownTruth } from "../falseInformation";
 
 /**
  * Sage -- GUIDED triggered information (SV-1a, Sects & Violets).
@@ -20,7 +21,8 @@ import { informationAbilityRefusal } from "./informationSupport";
  *  - nothing recorded, or a night on which a Pit-Hag made deaths arbitrary ("Because the Sage died due to the Pit-Hag, not the
  *    Demon, the Sage does not wake"): one Yes or No first. No closes the step and delivers nothing.
  *  - drunk, poisoned or a simulated wake: any two players ("This information is incorrect").
- * A Vortox in play makes the whole step Manual through the shared information modifier (passiveRules.ts); its false pair is SV-5.
+ * SV-5j: a Vortox makes the pair false (src/abilities/falseInformation.ts), for a drunk or poisoned Sage too: neither player may be the
+ * Demon who killed the Sage (with no killer recorded, neither may certainly register as a Demon).
  * The Recluse jinx stays a Storyteller judgment through the modifier gate, as every unverified jinx does.
  * Shared rules: docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md (matrix Section 9, the verified Night trigger, as for the Ravenkeeper).
  */
@@ -28,6 +30,7 @@ export const SAGE_PLAYERS = "players";
 const SAGE_DEMON_KILLED = "sage:demonKilled";
 export const sageCauseId = (eventId: string | null) => `${SAGE_DEMON_KILLED}:${JSON.stringify(eventId)}`;
 const WRONG_PAIR = "One of them must be the Demon who killed the Sage.";
+const FALSE_PAIR = "A Vortox is in play: neither player may be the Demon who killed the Sage.";
 /** PO review 2026-11-15: the cause is unknown only for a death entered or resolved by hand (Silverwick records the cause of every
  * death it resolves itself), or on a night a Pit-Hag made deaths arbitrary. Each fact is said once: the rule is the ability line. */
 const HAND_NOTE = "Entered by hand, so the cause is not recorded. No: the Sage does not wake.";
@@ -84,7 +87,10 @@ export const SAGE: AbilityDescriptor = {
     const players = participantsOf(context.inputs, SAGE_PLAYERS) ?? [];
     if (players.length !== 2) return { kind: "illegal", message: "Tap two players." };
     // Drunk, poisoned or only shown the Sage: the Storyteller shows any two players.
-    if (context.simulated || !context.functioning) return inform(context, players);
+    if (storytellerChooses(context)) return inform(context, players);
+    // SV-5j: under a Vortox (a drunk or poisoned Sage too) the pair is false: neither player is the Demon who killed the Sage (the page:
+    // the Sage the Vortox kills "learns two players, both of which are not Demons").
+    if (context.mustBeFalse) return pairIsTrue(context, cause, players) ? { kind: "illegal", message: FALSE_PAIR } : inform(context, players);
     const killer = cause.kind === "demon" && cause.killer && context.query.participant(cause.killer) ? cause.killer : null;
     if (killer) {
       if (!players.some((player) => player.participantId === killer.participantId)) return { kind: "illegal", message: WRONG_PAIR };
@@ -95,4 +101,17 @@ export const SAGE: AbilityDescriptor = {
     })) return { kind: "illegal", message: WRONG_PAIR };
     return inform(context, players);
   },
+  truth: (context) => {
+    const cause = context.trigger ? deathCause(context.query, context.trigger.eventId) : null;
+    if (!cause || cause.kind === "other") return knownTruth(() => false);
+    return knownTruth((value) => value.requirementId === SAGE_PLAYERS && value.kind === "player" && pairIsTrue(context, cause, value.participants));
+  },
 };
+
+/** SV-5j: would this pair be TRUE information ("it is 1 of 2 players")? It holds the recorded killer; with no killer recorded, a player
+ * who certainly registers as a Demon to the Sage (one whose registration is the Storyteller's call may be shown). */
+function pairIsTrue(context: AbilityEvaluationContext, cause: RecordedDeathCause, players: readonly ParticipantBinding[]): boolean {
+  const killer = cause.kind === "demon" && cause.killer && context.query.participant(cause.killer) ? cause.killer : null;
+  if (killer) return players.some((player) => player.participantId === killer.participantId);
+  return players.some((player) => { const demon = context.query.registersAsType(player, "demon", "sage"); return demon.known && demon.value; });
+}
