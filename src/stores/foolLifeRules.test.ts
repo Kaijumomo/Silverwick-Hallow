@@ -73,7 +73,7 @@ describe("execution advice is Storyteller-only", () => {
       expect(LOADS_ADVICE.test(strip(line)), line).toBe(false);
   });
 
-  it("only the Storyteller day components (the nomination dock, the madness execution) and the voting plan import it; no phone, player or Public Display file does", () => {
+  it("only the Storyteller day components (the dock's Execute, the nomination dock, the madness execution) and the voting plan import it; no phone, player or Public Display file does", () => {
     const root = join(__dirname, "..");
     const hits: string[] = [];
     const walk = (dir: string) => {
@@ -84,7 +84,7 @@ describe("execution advice is Storyteller-only", () => {
       }
     };
     walk(root);
-    expect(hits.sort()).toEqual(["features/grimoire-v6/day/madnessExecution.ts", "features/grimoire-v6/day/nomination.tsx", "features/voting/VotingWorkspace.tsx", "stores/voting.ts"]);
+    expect(hits.sort()).toEqual(["features/grimoire-v6/day/advance.ts", "features/grimoire-v6/day/madnessExecution.ts", "features/grimoire-v6/day/nomination.tsx", "features/voting/VotingWorkspace.tsx", "stores/voting.ts"]);
   });
 
   it("barrel guard: no index file gathers the stores, and none of the three readers passes the advice on", () => {

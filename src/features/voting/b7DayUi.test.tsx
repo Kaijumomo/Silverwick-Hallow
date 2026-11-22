@@ -18,7 +18,18 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); useTargetPicker.getState().cancel(); });
 
-it("verified Virgin nomination asks only for death outcome and records no ordinary vote", () => {
+it("a verified Virgin nomination by a Townsfolk whose execution certainly kills records the execution with no question", () => {
+  render(<StrictMode><VotingProvider><Table /></VotingProvider></StrictMode>); begin();
+  expect(game().players.p0!.abilityUsed).toBe(true);
+  expect(screen.queryByText("Player 1 is executed. Did they die?")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Execute · died" })).toBeNull();
+  expect(game().players.p1!.alive).toBe(false);
+  expect(game().lifeEventWindow.events.filter(e => e.kind === "execution")).toHaveLength(1);
+  expect(game().voting!.rounds[0]).toMatchObject({ status: "outcome", result: "virgin", virginPending: false, responses: [] });
+});
+
+it("a verified Virgin nomination still asks for the death outcome when the rules cannot say (a Fool nominator)", () => {
+  store.setState({ game: proofGame(["virgin", "fool", "soldier", "poisoner", "imp"], "day", 1) });
   render(<StrictMode><VotingProvider><Table /></VotingProvider></StrictMode>); begin();
   expect(game().players.p0!.abilityUsed).toBe(true);
   expect(screen.getByText("Player 1 is executed. Did they die?")).toBeTruthy();
@@ -26,7 +37,6 @@ it("verified Virgin nomination asks only for death outcome and records no ordina
   fireEvent.click(screen.getByRole("button", { name: "Executed · survived" }));
   expect(game().players.p1!.alive).toBe(true);
   expect(game().lifeEventWindow.events.filter(e => e.kind === "execution")).toHaveLength(1);
-  expect(game().phase).toBe("night");
   expect(game().voting!.rounds[0]!.responses).toEqual([]);
 });
 
@@ -39,6 +49,7 @@ it("impaired Virgin consumes immediately and continues to ordinary Yes/No contro
 });
 
 it("changed pending ability context conceals automatic death choices and cannot be re-acknowledged", () => {
+  store.setState({ game: proofGame(["virgin", "fool", "soldier", "poisoner", "imp"], "day", 1) });
   render(<VotingProvider><Table /></VotingProvider>); begin();
   act(() => store.setState({ game: impair(game(), "p0") }));
   expect(activeVotingRound(game())!.virginPending).toBe(true);

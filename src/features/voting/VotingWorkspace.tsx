@@ -114,7 +114,7 @@ export function VotingProvider({ children }: { children: ReactNode }) {
     if (!game || !draft?.nominator || !draft.nominee) return false;
     const nominee = game.players[draft.nominee.playerId];
     if (run({ kind: "begin", roundId: historyId(), mode: nominee?.isTraveler ? "exile" : "nomination",
-      nominator: draft.nominator, nominee: draft.nominee, confirmUnknown: true }, draft.context)) { setDraft(null); return true; }
+      nominator: draft.nominator, nominee: draft.nominee, confirmUnknown: true, autoVirgin: true }, draft.context)) { setDraft(null); return true; }
     return false;
   };
   return <VotingInteraction.Provider value={{ surface, open: valid && surface !== "closed", draft, error, round, voter,
