@@ -813,7 +813,7 @@ it("the Professor's Not Tonight closes the step with the Completed pill, uses no
   expect(game().nightProgress[`3:${step}`]).toBeUndefined();
 });
 
-it("a Professor who said Not Tonight still wakes the next night, and the Dawn list does not hold last night's skip", () => {
+it("a Professor who said Not Tonight still wakes the next night", () => {
   const step = professorNight();
   render(<Guide />);
   fireEvent.click(screen.getByRole("button", { name: "Not Tonight" }));

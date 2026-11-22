@@ -244,6 +244,10 @@ describe("the Slayer's shot", () => {
     // PO 2026-11-21 (T30 cleanup): tapping the target records the shot at once; no Confirm step, one Undo.
     expect(m.result.current.day.vm.sv).toMatchObject({ open: false, status: "Used" });
     expect(useV6Ui.getState().toast).toBe("Hollis dies.");
+    // A second tap on the same (now stale) context records nothing more.
+    const staleCtx = m.result.current.ctx;
+    act(() => { dayTokenTap(staleCtx, town.ids.Kestrel!); });
+    expect(game().players[town.ids.Hollis!]!.alive).toBe(false);
     expect(game().players[town.ids.Hollis!]!.alive).toBe(false);
     expect(game().players[town.ids.Kestrel!]!.abilityUsed).toBe(true);
     expect(useV6Ui.getState().slay).toBeNull();
@@ -266,7 +270,7 @@ describe("the Slayer's shot", () => {
   it("a bluff by someone else records nothing", () => {
     const m = mount();
     shoot(m, "Ada", "Hollis");
-    expect(useV6Ui.getState().toast).toBe("Nothing happens.");
+    expect(useV6Ui.getState().toast).toBe("Nothing happens. Ada is not the Slayer.");
     expect(m.result.current.day.vm.sv).toMatchObject({ open: false });
     expect(game().players[town.ids.Hollis!]!.alive).toBe(true);
     expect(game().players[town.ids.Kestrel!]!.abilityUsed).toBe(false);
@@ -307,7 +311,7 @@ describe("the Slayer's shot", () => {
     expect(game().players[town.ids.Kestrel!]!.abilityUsed).toBe(true);
   });
 
-  it("a healthy real Slayer's shot is ruled by the rules alone: no override is offered, and a forced one is ignored", () => {
+  it("a healthy real Slayer's shot is ruled by the rules alone: no override is offered, and nothing is left open", () => {
     const m = mount();
     shoot(m, "Kestrel", "Hollis");
     // The rules alone decide: recorded by the tap, no ruling card, and a stray override call changes nothing.

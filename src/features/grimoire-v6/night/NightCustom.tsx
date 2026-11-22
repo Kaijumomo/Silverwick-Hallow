@@ -117,6 +117,7 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
   if (!engine.active || !script) return null;
   const { current, workspace, error, refused, pos } = engine;
   const rows: ReactNode[] = [];
+  const actionContext = captureCharacterActionContext();
 
   if (pos.kind === "dawn" && engine.unfinished && engine.unfinished.total > 0) {
     const { rows: open, customSteps, triggers, triggerChecks } = engine.unfinished;
@@ -196,8 +197,8 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
       if (current.effectiveRoleId === "professor" && !current.gainedFrom && !done && !engine.skipReason && engine.canTarget) {
         rows.push(<div key="not-tonight" className="gv-choice-actions" role="group" aria-label="The Professor's choice">
           <button className="gv-choice-pill" type="button" onClick={() => {
-            if (!engine.visible) return;
-            const result = useStorytellerStore.getState().setNightStepStatus(game.day, current.stepKey, "done", captureCharacterActionContext());
+            if (!engine.visible || useStorytellerStore.getState().game !== game) return;
+            const result = useStorytellerStore.getState().setNightStepStatus(game.day, current.stepKey, "done", actionContext);
             if (!result.ok) { flash(result.message); return; }
             useTargetPicker.getState().cancel();
             engine.finish(useStorytellerStore.getState().game!);

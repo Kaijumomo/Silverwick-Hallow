@@ -525,3 +525,5 @@
 .gv-night-custom .gv-you-are-text { display: flex; flex-direction: column; min-width: 0; }
 .gv-night-custom .gv-you-are-text strong { font-size: 14px; font-weight: 700; line-height: 1.25; }
 .gv-night-custom .gv-you-are-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.gv-night-custom .night-information > .gv-choice-pill { min-height: 44px; align-self: flex-start; }
