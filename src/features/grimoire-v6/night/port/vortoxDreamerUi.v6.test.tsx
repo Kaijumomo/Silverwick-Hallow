@@ -13,7 +13,6 @@ import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { participantStepKey } from "@/stores/nightProgress";
 import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/abilityUi";
 import { openInStore, proofGame, proofScript } from "@/test/proofFixtures";
-import { FALSE_INFORMATION_NOTE } from "@/abilities/falseInformation";
 
 const game = () => store.getState().game!;
 function Guide() { const g = store(s => s.game)!; return <ModernNightPanel game={g} script={proofScript} visible onClose={() => {}} />; }
@@ -29,9 +28,9 @@ const pickCharacter = (roleId: string) => { let refusal: string | undefined; act
 beforeEach(() => { localStorage.clear(); store.setState({ game: null, lobby: null, terminalClose: null, undoStack: [] }); useSessionRuntime.setState({ backend: null, status: "idle" }); useShellStore.getState().reset(); usePrivacyStore.setState({ enabled: false }); useTargetPicker.getState().cancel(); useV6Ui.getState().set({ picker: null }); useInfoShow.getState().clear(); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-it("the Savant chosen: the Vortox line, the Savant locked for the good pick, then the evil pick; one commit", () => {
+it("the Savant chosen: the Vortox pill, the Savant locked for the good pick, then the evil pick; one commit", () => {
   show();
-  expect(screen.getByText(FALSE_INFORMATION_NOTE)).toBeInTheDocument();
+  expect(screen.getByText(/· false info/)).toHaveTextContent(/^Vortox ?· false info$/);
   tap("p2");
   expect(picker()).toMatchObject({ title: "Choose the good character to show", types: ["townsfolk", "outsider"], exclude: ["savant"] });
   expect(screen.getByText("Neither token may be the Savant.")).toBeInTheDocument();

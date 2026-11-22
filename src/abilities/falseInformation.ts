@@ -21,7 +21,6 @@ import { townsfolkInformationFalse } from "./characters/passiveRules";
  *  - A Townsfolk ability with no `truth` stays wholly by hand while the rule applies (the Vortox's information modifier gates it).
  * It reads only information prompts: kills, protections and choices still work, and nothing is stored or shown as "poisoned".
  */
-export const FALSE_INFORMATION_NOTE = "A Vortox is in play: the answer is false.";
 export const FALSE_INFORMATION_REFUSED = "A Vortox is in play: this information must be false. Choose an answer that is not true.";
 
 export function falseInformationApplies(query: RulesQuery, descriptor: AbilityDescriptor, roleId: string, simulated: boolean): QueryAnswer<boolean> {

@@ -1,5 +1,5 @@
 import { createElement as E, useEffect, useRef, type ReactNode } from "react";
-import { FALSE_INFORMATION_NOTE, falseInformationApplies } from "@/abilities/falseInformation";
+import { falseInformationApplies } from "@/abilities/falseInformation";
 import type { NightInformationHandle } from "@/features/nightOrder/NightInformationAction";
 import { stepResolved } from "@/features/nightOrder/nightWork";
 import { hasEffect } from "@/stores/effects";
@@ -99,12 +99,13 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
     // The Marionette is shown the same pill, in the same style: the card names who they really are beside the name.
     const marionette = !!player && !!seat && current.isDeceived && current.actualRoleId === "marionette";
     const poisoned = !!seat && !drunk && !marionette && (hasEffect(seat, "poisoned") || seat.behaviorMode === "poisoned" || !!noDashii && noDashii.known && noDashii.value);
-    // SV-5h: a Vortox makes this Townsfolk's information false (the shared rule the coordinator enforces): one line, in the note style.
+    // SV-5h: a Vortox makes this Townsfolk's information false (the shared rule the coordinator enforces, read live). PO 2026-11-22: shown
+    // as the impairment pill beside the name ("Vortox · false info"), not a note line; it takes the pill's place when the player is also
+    // drunk or poisoned (their answer must be false all the same), and stays after Completed, as the Drunk pill does.
     const falseInformation = player && !current.isDeceived && engine.ability?.kind === "guided" && !!engine.query
       && (() => { const rule = falseInformationApplies(engine.query!, engine.ability.descriptor, current.effectiveRoleId, false); return rule.known && rule.value; })();
     const note = lines([
       player && current.isDeceived && !drunk && !marionette ? `Follow the shown character’s procedure. This player is actually the ${current.actualRoleName}.` : undefined,
-      falseInformation && !resolved ? FALSE_INFORMATION_NOTE : undefined,
       quietAdvisory(current.advisory),
     ]);
     const waiting = !engine.skipReason && canTarget && !resolved && !!picker && picker.owner === engine.owner || !!successorChoice;
@@ -139,7 +140,9 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
       role: stepLabel(current), who: stepWho(current, game),
       // PO review C09/C10: the Minion and Demon information steps carry only their title and the show row.
       verb: current.stepKey === "minionInfo" || current.stepKey === "demonInfo" ? "" : verb,
-      impOn: drunk || marionette || poisoned, impLabel: drunk ? "Drunk" : marionette ? "Marionette" : "Poisoned",
+      impOn: falseInformation || drunk || marionette || poisoned,
+      impLabel: falseInformation ? "Vortox" : drunk ? "Drunk" : marionette ? "Marionette" : "Poisoned",
+      impHint: falseInformation ? "false info" : "any info",
       waiting: waiting || !!notTonight, waitAction: notTonight ?? null, waitText: successorChoice?.replacement ? "Tap the player who dies instead"
         : successorChoice ? roleKey === "vigormortis" ? "Tap the neighbouring Townsfolk who is poisoned" : "Choose the new Imp on the board"
         : engine.needed > 1 ? engine.picks.length ? "Choose one more player on the board" : "Tap two players on the board" : "Tap a player on the board",

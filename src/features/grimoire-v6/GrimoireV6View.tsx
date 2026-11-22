@@ -2752,7 +2752,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                           <span style={S338}>
                             {T(vm.night?.cur?.impLabel)}
                           </span>
-                          · any info
+                          · {vm.night?.cur?.impHint ?? "any info"}
                         </span>
                         </>
                       )}
