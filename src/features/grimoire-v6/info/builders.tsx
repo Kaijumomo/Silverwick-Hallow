@@ -141,11 +141,14 @@ export function buildWinVm(ctx: V6Ctx, close: () => void, home: () => void): Rec
     const role = registry.get(p.actualRole);
     return { name: seatName(p), img: role ? iconUrlFor(role) : "", op: p.alive ? 1 : 0.55 };
   });
+  // The phase the game actually ended in, as the Storyteller declared it (the same moment the phones show).
+  const moment = game.result?.declaredAt;
+  const when = `${moment?.phase === "night" ? "Night" : "Day"} ${moment?.day ?? game.day}`;
   const common = { open: true, img: demonRole ? iconUrlFor(demonRole) : "", team, close, home };
   if (winner === "good") {
-    return { ...common, ...GOOD_SCENE, title: "Good Wins", kicker: `Day ${game.day} · Dawn over Silverwick Hollow`, slain,
+    return { ...common, ...GOOD_SCENE, title: "Good Wins", kicker: `${when} · Dawn over Silverwick Hollow`, slain,
       line1: `${slain ? `The ${demonRole?.name ?? "Demon"} has been found and slain. ` : ""}The town of Silverwick Hollow will see another dawn.` };
   }
-  return { ...common, ...EVIL_SCENE, title: "Evil Wins", kicker: `Night ${game.day} · The last candle gutters`, slain: false,
+  return { ...common, ...EVIL_SCENE, title: "Evil Wins", kicker: `${when} · The last candle gutters`, slain: false,
     line1: `${walks ? `The ${demonRole?.name ?? "Demon"} walks free and the town has fallen. ` : ""}Silverwick Hollow belongs to the dark.` };
 }

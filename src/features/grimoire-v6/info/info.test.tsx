@@ -283,8 +283,8 @@ describe("4F End game", () => {
 });
 
 describe("4F victory scene and the ended review", () => {
-  const ended = (winner: "good" | "evil", demonAlive: boolean) => {
-    const base = seatedGame(standardRoles(9), { phase: "ended", day: 3, result: { winner, declaredAt: { phase: winner === "good" ? "day" : "night", day: 3 } } });
+  const ended = (winner: "good" | "evil", demonAlive: boolean, declaredPhase: "day" | "night" = winner === "good" ? "day" : "night", day = 3) => {
+    const base = seatedGame(standardRoles(9), { phase: "ended", day, result: { winner, declaredAt: { phase: declaredPhase, day } } });
     const players = Object.fromEntries(Object.entries(base.players).map(([id, p]) => [id, p.actualRole === "imp" ? { ...p, alive: demonAlive } : p]));
     return { ...base, players };
   };
@@ -301,6 +301,19 @@ describe("4F victory scene and the ended review", () => {
     fireEvent.click(within(scene).getByRole("button", { name: "Review the Grimoire" }));
     expect(screen.queryByRole("dialog", { name: "Good Wins" })).toBeNull();
     expect(screen.getByRole("status")).toHaveTextContent("Good wins. Finished game, read-only review.");
+  });
+
+  it.each([
+    ["good", "day", 2, "Day 2 · Dawn over Silverwick Hollow"],
+    ["good", "night", 2, "Night 2 · Dawn over Silverwick Hollow"],
+    ["evil", "day", 2, "Day 2 · The last candle gutters"],
+    ["evil", "night", 2, "Night 2 · The last candle gutters"],
+  ] as const)("the title names the phase the game ended in: %s wins declared in %s %i", (winner, phase, day, kicker) => {
+    reset(ended(winner, winner === "evil", phase, day));
+    render(<GrimoireV6Screen />);
+    ui({ winScene: true });
+    const scene = screen.getByRole("dialog", { name: winner === "good" ? "Good Wins" : "Evil Wins" });
+    expect(within(scene).getByText(kicker)).toBeTruthy();
   });
 
   it("Return Home sits beside Review the Grimoire, keeps the finished game and leaves the Grimoire", () => {
