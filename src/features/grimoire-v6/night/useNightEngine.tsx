@@ -319,7 +319,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     const request = { mode: "guided" as const, invocationPath: "nightOrder" as const, fingerprint, roleId: current.effectiveRoleId, inputs, completeStep: true };
     // The Mayor: the Storyteller's "Mayor dies / another player dies" is asked before anything is planned (a protected Mayor never gets here
     // as a question: the death gate says nobody dies, and the plan below handles it).
-    if (current.effectiveRoleId === "imp" && !successorChoice && query && target.participantId !== actor?.participantId && mayorBounceOffered(query, target)) {
+    if (current.effectiveRoleId === "imp" && !successorChoice && query && target.participantId !== actor?.participantId && actor && (() => { const works = query.abilityFunctions(bindingOf(actor)); return works.known && works.value; })() && mayorBounceOffered(query, target)) {
       useTargetPicker.getState().cancel(); setError(null);
       setTapRuling({ game, stepKey: current.stepKey, inputs, id: subjectId(MAYOR_BOUNCE, target), kind: "mayor", target });
       return;

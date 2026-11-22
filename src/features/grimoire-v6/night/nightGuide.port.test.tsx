@@ -429,6 +429,19 @@ it("a Mayor protected by a Monk is no question at all: nobody dies and there is 
   expect(game().nightProgress[`2:${key("p2")}`]?.status).toBe("done");
 });
 
+it("a Mayor marked cannotDie, or a poisoned Imp, is never asked the Mayor question", () => {
+  mayorNight(undefined, (g) => patchPlayer(g, "p4", { effects: [{ id: "fx-cd", type: "cannotDie", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } } as never] }));
+  tap("p4");
+  expect(ruling()).toBeNull();
+  expect(game().players.p4!.alive).toBe(true);
+  cleanup();
+  useTargetPicker.getState().cancel();
+  mayorNight(undefined, (g) => impair(g, "p2"));
+  tap("p4");
+  expect(ruling()).toBeNull();
+  expect(game().players.p4!.alive).toBe(true);
+});
+
 it("a poisoned Mayor simply dies: their ability is not working, so there is no choice to make", () => {
   mayorNight(undefined, (g) => impair(g, "p4"));
   tap("p4");

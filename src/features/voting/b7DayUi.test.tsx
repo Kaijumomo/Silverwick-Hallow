@@ -28,6 +28,24 @@ it("a verified Virgin nomination by a Townsfolk whose execution certainly kills 
   expect(game().voting!.rounds[0]).toMatchObject({ status: "outcome", result: "virgin", virginPending: false, responses: [] });
 });
 
+it("one Undo reverses an automatic Virgin execution: the nominator lives, the ability is unused, no round remains", () => {
+  render(<StrictMode><VotingProvider><Table /></VotingProvider></StrictMode>); begin();
+  expect(game().players.p1!.alive).toBe(false);
+  act(() => store.getState().undo());
+  expect(game().players.p1!.alive).toBe(true);
+  expect(game().players.p0!.abilityUsed).toBe(false);
+  expect(game().lifeEventWindow.events.filter(e => e.kind === "execution")).toHaveLength(0);
+  expect(game().voting?.rounds ?? []).toHaveLength(0);
+});
+
+it("a living Pacifist keeps the question: the Storyteller decides whether the executed nominator dies", () => {
+  store.setState({ game: proofGame(["virgin", "chef", "soldier", "poisoner", "pacifist"], "day", 1) });
+  render(<StrictMode><VotingProvider><Table /></VotingProvider></StrictMode>); begin();
+  expect(screen.getByRole("button", { name: "Execute · died" })).toBeTruthy();
+  expect(game().players.p1!.alive).toBe(true);
+  expect(game().voting!.rounds[0]).toMatchObject({ status: "voting", virginPending: true });
+});
+
 it("a verified Virgin nomination still asks for the death outcome when the rules cannot say (a Fool nominator)", () => {
   store.setState({ game: proofGame(["virgin", "fool", "soldier", "poisoner", "imp"], "day", 1) });
   render(<StrictMode><VotingProvider><Table /></VotingProvider></StrictMode>); begin();

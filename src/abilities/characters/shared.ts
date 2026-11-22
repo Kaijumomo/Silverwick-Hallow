@@ -208,9 +208,16 @@ export function deathAttempt(
  * Whether the Storyteller's Mayor choice ("they die" or "another player dies instead") is open for a Demon attack on this player: the rules
  * layer says a certainly working, unprotected Mayor, and no Pit-Hag has made deaths arbitrary (those stay the Storyteller's own judgment).
  */
+/** The approved Effects with death-immunity, demon-protection or generic-protection meaning (rulesQuery APPROVED_EFFECT_SEMANTICS). */
+const MAYOR_PROTECTION_MARKERS: readonly string[] = ["safeFromDemon", "cannotDie", "protected"];
 export function mayorBounceOffered(query: RulesQuery, target: ParticipantBinding): boolean {
   const arbitrary = query.gameRuleFact(PIT_HAG_ARBITRARY_DEATHS);
-  return !(arbitrary.known && arbitrary.value) && mayorBounceApplies(query, target);
+  if (arbitrary.known && arbitrary.value) return false;
+  // The death gate stops at the Mayor's own "not modeled" answer, so it never reads the Mayor's markers: any death-immunity, demon-protection
+  // or generic Protected marker on the Mayor (applying, or not certain to be inapplicable) means nobody dies or the Storyteller decides, never a bounce.
+  const mayor = query.participant(target);
+  if (mayor?.effects.some((effect) => effect.state === "active" && MAYOR_PROTECTION_MARKERS.includes(effect.type))) return false;
+  return mayorBounceApplies(query, target);
 }
 
 /** For killers whose later steps depend on the Fool's ability state (Al-Hadikhia's rounds, the Harlot's pair): the survival would spend it,

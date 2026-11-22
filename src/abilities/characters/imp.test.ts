@@ -270,4 +270,13 @@ describe("Imp -- the Mayor's bounce", () => {
       expiry: { kind: "at", moment: { phase: "day", day: 2 } }, appliedAt: { phase: "night", day: 2 } } as EffectRecord] });
     expect(attack(safe, { [bounceId(safe)]: yes(true) })).toEqual({ ok: true, changed: false });
   });
+
+  it("a Mayor with a cannotDie or generic Protected marker is never offered the bounce: the whole action stays Manual", () => {
+    for (const type of ["cannotDie", "protected"]) {
+      const g = patchPlayer(town(), "p4", { effects: [{ id: `fx-${type}`, type, lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } } as EffectRecord] });
+      expect(attack(g, { [bounceId(g)]: yes(false) }), type).toMatchObject({ ok: false, code: "unsupported" });
+      expect(attack(g, { [bounceId(g)]: yes(true), [replacementId(g)]: pick(g, "p6") }), type).toMatchObject({ ok: false, code: "unsupported" });
+      expect(g.players.p4!.alive).toBe(true);
+    }
+  });
 });
