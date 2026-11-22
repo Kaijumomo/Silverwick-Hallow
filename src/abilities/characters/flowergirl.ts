@@ -102,7 +102,7 @@ function demonVoted(context: AbilityEvaluationContext, day: number): WorkedTruth
   const ruled = answerOf(context.inputs, id, "boolean");
   if (ruled) return { kind: "known", value: ruled.value };
   return { kind: "ask", evaluation: ask(`${why} Did a Demon vote today?`,
-    { id, kind: "boolean", source: "storyteller", label: "A Demon voted today (Yes: the Flowergirl learns YES; No: NO)" }) };
+    { id, kind: "boolean", source: "storyteller", label: `A Demon voted today (Yes: the Flowergirl learns ${context.mustBeFalse ? "NO" : "YES"}; No: ${context.mustBeFalse ? "YES" : "NO"})` }) };
 }
 
 export const FLOWERGIRL: AbilityDescriptor = {

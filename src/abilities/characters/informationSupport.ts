@@ -86,15 +86,19 @@ export function possibleAlignments(query: RulesQuery, binding: ParticipantBindin
  * Minion could be counted", gives none), without duplicates, in first-seen order. */
 export function possibleAnswers<F, A>(choices: readonly (readonly F[])[], answer: (forms: readonly F[]) => readonly A[]): A[] {
   const answers: A[] = [];
+  for (const combination of answersByCombination(choices, answer)) for (const value of combination) if (!answers.includes(value)) answers.push(value);
+  return answers;
+}
+
+/** The answers under each combination of forms, one list per combination (SV-5h: their intersection is the certainly true answer). */
+export function answersByCombination<F, A>(choices: readonly (readonly F[])[], answer: (forms: readonly F[]) => readonly A[]): (readonly A[])[] {
+  const combinations: (readonly A[])[] = [];
   const walk = (index: number, picked: F[]) => {
-    if (index === choices.length) {
-      for (const value of answer(picked)) if (!answers.includes(value)) answers.push(value);
-      return;
-    }
+    if (index === choices.length) { combinations.push(answer(picked)); return; }
     for (const form of choices[index]!) walk(index + 1, [...picked, form]);
   };
   walk(0, []);
-  return answers;
+  return combinations;
 }
 
 /**

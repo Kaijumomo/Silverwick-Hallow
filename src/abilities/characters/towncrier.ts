@@ -48,7 +48,7 @@ function minionNominated(context: AbilityEvaluationContext): WorkedTruth<boolean
   const ruled = answerOf(context.inputs, id, "boolean");
   if (ruled) return { kind: "known", value: ruled.value };
   return { kind: "ask", evaluation: ask(`${doubtful.map((who) => nameOf(context, who)).join(" and ")} nominated during the Day and may register as a Minion. Did a Minion nominate today?`,
-    { id, kind: "boolean", source: "storyteller", label: "A Minion nominated today (Yes: the Town Crier learns YES; No: NO)" }) };
+    { id, kind: "boolean", source: "storyteller", label: `A Minion nominated today (Yes: the Town Crier learns ${context.mustBeFalse ? "NO" : "YES"}; No: ${context.mustBeFalse ? "YES" : "NO"})` }) };
 }
 
 export const TOWN_CRIER: AbilityDescriptor = {

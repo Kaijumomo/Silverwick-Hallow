@@ -22,7 +22,8 @@ import { knownTruth } from "../falseInformation";
  *    Demon, the Sage does not wake"): one Yes or No first. No closes the step and delivers nothing.
  *  - drunk, poisoned or a simulated wake: any two players ("This information is incorrect").
  * SV-5j: a Vortox makes the pair false (src/abilities/falseInformation.ts), for a drunk or poisoned Sage too: neither player may be the
- * Demon who killed the Sage (with no killer recorded, neither may certainly register as a Demon).
+ * Demon who killed the Sage, nor any player who certainly registers as a Demon to the Sage (the approved proposal, section 22; the
+ * page's example: "both of which are not Demons"). A Spy or Recluse whose registration is the Storyteller's call may be shown.
  * The Recluse jinx stays a Storyteller judgment through the modifier gate, as every unverified jinx does.
  * Shared rules: docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md (matrix Section 9, the verified Night trigger, as for the Ravenkeeper).
  */
@@ -30,7 +31,7 @@ export const SAGE_PLAYERS = "players";
 const SAGE_DEMON_KILLED = "sage:demonKilled";
 export const sageCauseId = (eventId: string | null) => `${SAGE_DEMON_KILLED}:${JSON.stringify(eventId)}`;
 const WRONG_PAIR = "One of them must be the Demon who killed the Sage.";
-const FALSE_PAIR = "A Vortox is in play: neither player may be the Demon who killed the Sage.";
+const FALSE_PAIR = "A Vortox is in play: neither player may be a Demon.";
 /** PO review 2026-11-15: the cause is unknown only for a death entered or resolved by hand (Silverwick records the cause of every
  * death it resolves itself), or on a night a Pit-Hag made deaths arbitrary. Each fact is said once: the rule is the ability line. */
 const HAND_NOTE = "Entered by hand, so the cause is not recorded. No: the Sage does not wake.";
@@ -108,10 +109,11 @@ export const SAGE: AbilityDescriptor = {
   },
 };
 
-/** SV-5j: would this pair be TRUE information ("it is 1 of 2 players")? It holds the recorded killer; with no killer recorded, a player
- * who certainly registers as a Demon to the Sage (one whose registration is the Storyteller's call may be shown). */
+/** SV-5j: is this pair NOT false enough under a Vortox? It holds the recorded killer, or a player who certainly registers as a Demon to
+ * the Sage (independent check: the proposal excludes "any Demon the Storyteller treats as one", not only the killer). One whose
+ * registration is the Storyteller's call may be shown. */
 function pairIsTrue(context: AbilityEvaluationContext, cause: RecordedDeathCause, players: readonly ParticipantBinding[]): boolean {
   const killer = cause.kind === "demon" && cause.killer && context.query.participant(cause.killer) ? cause.killer : null;
-  if (killer) return players.some((player) => player.participantId === killer.participantId);
+  if (killer && players.some((player) => player.participantId === killer.participantId)) return true;
   return players.some((player) => { const demon = context.query.registersAsType(player, "demon", "sage"); return demon.known && demon.value; });
 }

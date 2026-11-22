@@ -2,7 +2,7 @@ import { isCanonicalRole } from "@/data/canonical";
 import { scarletWomanSuccession } from "@/abilities/characters/scarletWoman";
 import { bindingOf, createRulesQuery, effectSemanticsOf, type RulesQueryEnvironment } from "./rulesQuery";
 import { applyGameRuleFactPlan, planCapturedDayEndFact, planCapturedVictoryEvidence, planGameRuleFactTransaction } from "./gameRuleFacts";
-import { isVictoryEvidenceType, isSaintNonqualifyingEvidenceType, victoryEvidenceInvalidReason, victoryEvidenceCollectionInvalidReason, SAINT_EXECUTION_GOOD_TEAM_LOST, SAINT_EXECUTION_EVIL_TEAM_LOST, SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED, SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED, MAYOR_DAY_END_GOOD_TEAM_WON, MAYOR_DAY_END_EVIL_TEAM_WON, RESOLVED_DEMON_DEATH_NO_SUCCESSOR, VORTOX_NO_EXECUTION_EVIL_WON, VORTOX_NO_EXECUTION_RULING } from "./gameRuleFactRegistry";
+import { isVictoryEvidenceType, isSaintNonqualifyingEvidenceType, victoryEvidenceInvalidReason, victoryEvidenceCollectionInvalidReason, SAINT_EXECUTION_GOOD_TEAM_LOST, SAINT_EXECUTION_EVIL_TEAM_LOST, SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED, SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED, MAYOR_DAY_END_GOOD_TEAM_WON, MAYOR_DAY_END_EVIL_TEAM_WON, RESOLVED_DEMON_DEATH_NO_SUCCESSOR, VORTOX_DUSK_RULING, VORTOX_WORKING_AT_DUSK } from "./gameRuleFactRegistry";
 export { isSaintNonqualifyingEvidenceType } from "./gameRuleFactRegistry";
 import { executionsAt, momentOrdinal } from "./lifeEvents";
 import { sameSnapshot } from "./history";
@@ -104,17 +104,14 @@ export function captureMayorQualification(before: StorytellerLobbyRecord, after:
 
 /**
  * SV-5l: the Vortox's "Each day, if no-one is executed, evil wins" (https://wiki.bloodontheclocktower.com/Vortox), at the same exact
- * Day N -> Night N+1 boundary as the Mayor, but NOT behind the game-ending coverage list: it records a fact the End control shows as an
- * advisory line (never a winner, never an ending). Life, drunkenness and poisoning are read from the authoritative state at the end of
- * the Day (`before`), never from reminders. Every execution counts, whatever its outcome (an execution that did not kill, an
- * already-dead player, an execution by an ability: they are all execution records); an exile is not an execution. A dead, drunk or
- * poisoned Vortox, or a homebrew character reusing its id, records nothing. Unknown functioning, or a Day whose execution record is
- * incomplete with none recorded, records the ruling fact instead.
+ * Day N -> Night N+1 boundary as the Mayor, but NOT behind the game-ending coverage list. It records what cannot be read back later:
+ * a living canonical Vortox's state at the end of the Day (`before`: life, drunkenness and poisoning from the authoritative state,
+ * never reminders; a Poisoner's poison expires at dusk). Whether anyone was executed is read live by `vortoxAdvisory` from the Day's
+ * execution record. A dead, drunk or poisoned Vortox, or a homebrew character reusing its id, records nothing; unknown functioning
+ * records the ruling fact. Never a winner and never an ending.
  */
 export function captureVortoxNoExecution(before: StorytellerLobbyRecord, after: StorytellerLobbyRecord, environment: RulesQueryEnvironment): VictoryEvidenceResult {
   if (!sameGame(before, after) || before.phase !== "day" || after.phase !== "night" || after.day !== before.day + 1) return accepted(after);
-  const executions = executionsAt(before, { phase: "day", day: before.day });
-  if ((executions.status === "known" ? executions.events : executions.recorded).length) return accepted(after);
   const query = createRulesQuery(before, environment);
   let working: STPlayerRecord | undefined;
   let doubtful: STPlayerRecord | undefined;
@@ -127,9 +124,9 @@ export function captureVortoxNoExecution(before: StorytellerLobbyRecord, after: 
   }
   const source = working ?? doubtful;
   if (!source) return accepted(after);
-  const type = working && executions.status === "known" ? VORTOX_NO_EXECUTION_EVIL_WON : VORTOX_NO_EXECUTION_RULING;
   const result = planCapturedDayEndFact({ ...after, phase: "day", day: before.day }, {
-    intents: [{ kind: "apply", type }], context: { provenance: { sourcePlayer: source.id, sourceCharacter: source.actualRole } },
+    intents: [{ kind: "apply", type: working ? VORTOX_WORKING_AT_DUSK : VORTOX_DUSK_RULING }],
+    context: { provenance: { sourcePlayer: source.id, sourceCharacter: source.actualRole } },
   });
   if (!result.ok) return result;
   return accepted(result.changed ? applyGameRuleFactPlan(after, result.plan) : after);

@@ -56,7 +56,7 @@ function sameAlignment(context: AbilityEvaluationContext, targets: ParticipantBi
   const ruled = answerOf(context.inputs, id, "boolean");
   if (ruled) return { kind: "known", value: ruled.value };
   return { kind: "ask", evaluation: ask(`${doubtful.map((who) => nameOf(context, who)).join(" and ")} may register as good or evil to the Seamstress. Do ${targets.map((who) => nameOf(context, who)).join(" and ")} register as the same alignment?`,
-    { id, kind: "boolean", source: "storyteller", label: "They register as the same alignment (Yes: the Seamstress learns YES; No: NO)" }) };
+    { id, kind: "boolean", source: "storyteller", label: `They register as the same alignment (Yes: the Seamstress learns ${context.mustBeFalse ? "NO" : "YES"}; No: ${context.mustBeFalse ? "YES" : "NO"})` }) };
 }
 
 export const SEAMSTRESS: AbilityDescriptor = {

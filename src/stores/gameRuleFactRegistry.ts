@@ -52,13 +52,15 @@ export const KLUTZ_CHOICE_RULING = "klutzChoiceRuling";
  * 2026-11-12): the first Outsider a Fang Gu killed has become the Fang Gu. "This reminder stays there for the rest of the game. Don't
  * remove it, even if the Fang Gu dies or changes character." Recorded only inside the Fang Gu's resolution. */
 export const FANG_GU_ONCE = "fangGuOnce";
-/** SV-5l: the Vortox's "Each day, if no-one is executed, evil wins" (https://wiki.bloodontheclocktower.com/Vortox), captured only at
- * the Day-to-Night boundary with the Vortox as its source, recorded at the Day it names. Not game-ending evidence yet (the endings
- * part promotes it): the End control carries an advisory line through the following Night, and the Storyteller ends the game.
- * RULING: the Vortox's functioning, or the Day's execution record, is not known: the Storyteller rules. */
-export const VORTOX_NO_EXECUTION_EVIL_WON = "vortoxNoExecutionEvilWon";
-export const VORTOX_NO_EXECUTION_RULING = "vortoxNoExecutionRuling";
-export const VORTOX_DAY_END_TYPES = [VORTOX_NO_EXECUTION_EVIL_WON, VORTOX_NO_EXECUTION_RULING] as const;
+/** SV-5l: the Vortox's "Each day, if no-one is executed, evil wins" (https://wiki.bloodontheclocktower.com/Vortox). What cannot be read
+ * back later is the Vortox's state when the Day ended (poison from a Poisoner expires at dusk), so that is what is captured, only at
+ * the Day-to-Night boundary, with the Vortox as its source, recorded at the Day it names. Whether anyone was executed that Day is read
+ * live from the execution record (kept through the following Night), so a late-recorded or retracted execution counts either way.
+ * Not game-ending evidence yet (the endings part promotes it): the End control carries an advisory line, and the Storyteller ends the
+ * game. RULING: the Vortox's functioning at dusk was not known. */
+export const VORTOX_WORKING_AT_DUSK = "vortoxWorkingAtDusk";
+export const VORTOX_DUSK_RULING = "vortoxDuskRuling";
+export const VORTOX_DAY_END_TYPES = [VORTOX_WORKING_AT_DUSK, VORTOX_DUSK_RULING] as const;
 export const isVortoxDayEndType = (type: string): boolean => (VORTOX_DAY_END_TYPES as readonly string[]).includes(type);
 export const VICTORY_EVIDENCE_TYPES = [SAINT_EXECUTION_GOOD_TEAM_LOST, SAINT_EXECUTION_EVIL_TEAM_LOST, SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED, SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED, MAYOR_DAY_END_GOOD_TEAM_WON, MAYOR_DAY_END_EVIL_TEAM_WON, RESOLVED_DEMON_DEATH_NO_SUCCESSOR] as const;
 export const isVictoryEvidenceType = (type: string): boolean => (VICTORY_EVIDENCE_TYPES as readonly string[]).includes(type);
@@ -119,10 +121,10 @@ export const GAME_RULE_FACT_REGISTRY: ReadonlyMap<GameRuleFactType, GameRuleFact
     applicablePhases: ["night", "day"], expiry: "none",
   }],
   ...VORTOX_DAY_END_TYPES.map(type => [type, {
-    type, label: type === VORTOX_NO_EXECUTION_EVIL_WON ? "No execution with a Vortox" : "No execution with a Vortox: your ruling",
-    description: type === VORTOX_NO_EXECUTION_EVIL_WON
-      ? "The Day ended with no execution while a sober and healthy Vortox was alive: evil wins. The Storyteller ends the game."
-      : "The Day ended with no recorded execution, but the Vortox's ability or the Day's execution record is not known: the Storyteller rules.",
+    type, label: type === VORTOX_WORKING_AT_DUSK ? "A Vortox was alive, sober and healthy at dusk" : "A Vortox at dusk: your ruling",
+    description: type === VORTOX_WORKING_AT_DUSK
+      ? "When the Day ended, a sober and healthy Vortox was alive: if nobody was executed that Day, evil wins. The Storyteller ends the game."
+      : "When the Day ended, a Vortox was alive but whether its ability worked is the Storyteller's ruling.",
     applicablePhases: ["day"] as const, expiry: "nextDay" as const, captureOnly: true as const,
   }] as const),
 ]);

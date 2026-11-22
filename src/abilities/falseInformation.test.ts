@@ -9,7 +9,7 @@ import { CANONICAL_ABILITY_SEMANTICS, type AbilityDescriptor, type AbilitySemant
 import { createRulesQuery } from "@/stores/rulesQuery";
 import { passiveInformationModifiers, townsfolkInformationFalse } from "./characters/passiveRules";
 import { answerOf, ask, outcome } from "./characters/shared";
-import { FALSE_INFORMATION_REFUSED, booleanTruth, falseNumbers, numberTruth, unknownTruth } from "./falseInformation";
+import { FALSE_INFORMATION_REFUSED, booleanTruth, certainValues, falseNumbers, numberTruth, unknownTruth } from "./falseInformation";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
 /** An Oracle-shaped test ability: the truth is a fixed 2; the Storyteller gives the number while the rule applies. */
@@ -48,6 +48,12 @@ describe("SV-5h: when information must be false", () => {
     for (const next of [patchPlayer(g, "p1", { alive: false }), impair(g, "p1"), impair(g, "p1", "drunk"), patchPlayer(g, "p1", { actualRole: "imp" })])
       expect(townsfolkInformationFalse(proofQuery(next), "oracle")).toEqual({ known: true, value: false });
     expect(townsfolkInformationFalse(proofQuery(impair(g, "p1", "soberHealthy")), "oracle").known).toBe(false);
+  });
+
+  it("a Townsfolk made evil still has a Townsfolk ability: its information is false too (the rule reads the character, not the team)", () => {
+    const g = patchPlayer(base(), "p0", { actualAlignment: "evil" });
+    expect(townsfolkInformationFalse(proofQuery(g), "oracle")).toEqual({ known: true, value: true });
+    expect(give(g, TRUE_VALUE)).toMatchObject({ ok: false, code: "illegal" });
   });
 
   it("two Vortoxes: any one working is enough", () => {
@@ -134,11 +140,17 @@ describe("SV-5h: the truth helpers", () => {
     expect(open.known && open.isTrue({ requirementId: "x", kind: "boolean", value: true })).toBe(false);
   });
 
-  it("a number is certainly true only when it is the one possible answer", () => {
-    expect(falseNumbers([1, 2, 3, 4], [2])).toEqual([1, 3, 4]);
+  it("a number is certainly true only when every registration the Storyteller may rule gives it (the intersection)", () => {
+    expect(falseNumbers([1, 2, 3, 4], certainValues([[2]]))).toEqual([1, 3, 4]);
     // A Spy or Recluse could make 1 or 3 true: each is false under one of the registrations the Storyteller may rule.
-    expect(falseNumbers([1, 2, 3, 4], [1, 3])).toEqual([1, 2, 3, 4]);
-    const truth = numberTruth("n", [1, 3]);
+    expect(certainValues([[1], [3]])).toEqual([]);
+    expect(falseNumbers([1, 2, 3, 4], certainValues([[1], [3]]))).toEqual([1, 2, 3, 4]);
+    // Independent check: a Recluse who may register as a second Demon adds 1 to one ruling; 2 is true under both, so it is refused.
+    expect(certainValues([[2, 1], [2]])).toEqual([2]);
+    expect(falseNumbers([1, 2, 3, 4], certainValues([[2, 1], [2]]))).toEqual([1, 3, 4]);
+    // A ruling that gives no answer at all leaves nothing certainly true.
+    expect(certainValues([[2], []])).toEqual([]);
+    const truth = numberTruth("n", certainValues([[1], [3]]));
     expect(truth.known && truth.isTrue({ requirementId: "n", kind: "number", value: 1 })).toBe(false);
   });
 });

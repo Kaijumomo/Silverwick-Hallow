@@ -78,13 +78,14 @@ describe("SV-5j Sage", () => {
   const ROLES = ["sage", "vortox", "chef", "witch", "dreamer", "mutant"];
   it("the page: the Sage the Vortox kills learns two players, neither of them the Demon", () => {
     const g = killedBy(proofGame(ROLES, "night", 2), "p1");
-    expect(sage(g, "p1", "p2")).toMatchObject({ ok: false, code: "illegal", message: "A Vortox is in play: neither player may be the Demon who killed the Sage." });
+    expect(sage(g, "p1", "p2")).toMatchObject({ ok: false, code: "illegal", message: "A Vortox is in play: neither player may be a Demon." });
     expect(planned(sage(g, "p2", "p3")).informationDeliveries.at(-1)).toMatchObject({ informationActionId: "sage-triggered" });
   });
-  it("killed by another Demon while a Vortox lives: neither may be that Demon; the Vortox, who did not kill, may be shown", () => {
+  it("killed by another Demon while a Vortox lives: neither the killer nor the Vortox may be shown (independent check: no Demon at all)", () => {
     const g = killedBy(proofGame(["sage", "vortox", "chef", "fanggu", "dreamer", "mutant"], "night", 2), "p3");
     expect(sage(g, "p3", "p2")).toMatchObject({ ok: false, code: "illegal" });
-    expect(sage(g, "p1", "p2")).toMatchObject({ ok: true, changed: true });
+    expect(sage(g, "p1", "p2")).toMatchObject({ ok: false, code: "illegal" });
+    expect(sage(g, "p2", "p4")).toMatchObject({ ok: true, changed: true });
   });
   it("a drunk Sage: still false", () => {
     const g = impair(killedBy(proofGame(ROLES, "night", 2), "p1"), "p0", "drunk");

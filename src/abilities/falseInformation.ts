@@ -50,16 +50,15 @@ export const unknownTruth = (reason: string): InformationTruth => ({ known: fals
 export const booleanTruth = (requirementId: string, value: boolean | undefined): InformationTruth =>
   knownTruth((given) => value !== undefined && given.requirementId === requirementId && given.kind === "boolean" && given.value === value);
 
-/** A number whose possible true values are `possible` (every value the allowed registrations could give). A value is certainly true
- * only when it is the one possible answer: with two or more, each is false under some registration the Storyteller may rule. */
-export const certainNumber = (possible: readonly number[]): number | undefined => new Set(possible).size === 1 ? possible[0] : undefined;
-export const numberTruth = (requirementId: string, possible: readonly number[]): InformationTruth => {
-  const certain = certainNumber(possible);
-  return knownTruth((given) => certain !== undefined && given.requirementId === requirementId && given.kind === "number" && given.value === certain);
-};
+/** The answers true under EVERY registration the Storyteller may rule: the intersection of each registration combination's answers.
+ * A value some combination does not give is false under that ruling, so it is not certainly true. */
+export const certainValues = <T>(perCombination: readonly (readonly T[])[]): T[] =>
+  perCombination.length ? perCombination[0]!.filter((value, index, first) => first.indexOf(value) === index && perCombination.every((answers) => answers.includes(value))) : [];
 
-/** The numbers the Storyteller may give as false: `candidates` without the certainly true one. */
-export const falseNumbers = (candidates: readonly number[], possible: readonly number[]): number[] => {
-  const certain = certainNumber(possible);
-  return candidates.filter((value) => value !== certain);
-};
+/** A number whose certainly true values are `certain` (see `certainValues`): only those are refused. */
+export const numberTruth = (requirementId: string, certain: readonly number[]): InformationTruth =>
+  knownTruth((given) => given.requirementId === requirementId && given.kind === "number" && certain.includes(given.value));
+
+/** The numbers the Storyteller may give as false: `candidates` without the certainly true ones. */
+export const falseNumbers = (candidates: readonly number[], certain: readonly number[]): number[] =>
+  candidates.filter((value) => !certain.includes(value));

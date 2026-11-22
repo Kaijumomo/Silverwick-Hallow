@@ -7,6 +7,7 @@ import { impair, num, patchPlayer, pick, plan, planned, proofGame, request, yes 
 import { PHILOSOPHER_CHARACTER } from "./philosopher";
 import { SEAMSTRESS_SAME } from "./seamstress";
 import { FALSE_INFORMATION_REFUSED } from "../falseInformation";
+import { StorytellerGamePersistedSchema } from "@/stores/schemas";
 import type { AbilityInputs } from "@/abilities/semantics";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import type { VotingRound } from "@/stores/votingTypes";
@@ -112,6 +113,13 @@ describe("SV-5i Clockmaker (Night 1)", () => {
     const g = proofGame(["clockmaker", "vortox", "spy", "witch", "sage", "mutant", "dreamer", "seamstress"], "night", 1);
     expect(question(g, "clockmaker")).toMatchObject({ id: "communicated", exclude: [] });
   });
+  it("independent check: a Recluse who may register as a second Demon adds 1 under one ruling, but 2 is true under every ruling: refused", () => {
+    // p4 recluse: as a Demon it is 1 step from the Witch; as a Minion or an Outsider, the Vortox is still 2 from its nearest Minion.
+    const g = proofGame(["clockmaker", "vortox", "chef", "witch", "recluse", "sage", "dreamer", "seamstress"], "night", 1);
+    expect(question(g, "clockmaker")).toMatchObject({ id: "communicated", exclude: [2] });
+    expect(result(g, "clockmaker", { communicated: num(2) })).toMatchObject({ ok: false, code: "illegal" });
+    expect(told(g, "clockmaker", { communicated: num(1) }).value).toBe(1);
+  });
   it("a Drunk shown the Clockmaker: free choice", () => {
     const g = patchPlayer(proofGame(ROLES, "night", 1), "p0", { actualRole: "drunk", shownRole: "clockmaker", behaviorMode: "drunk_fake_role_behavior" });
     expect(told(g, "clockmaker", { communicated: num(2) }).value).toBe(2);
@@ -152,10 +160,13 @@ describe("SV-5i Flowergirl", () => {
 });
 
 describe("SV-5i the answer given is the answer recorded", () => {
-  it("the delivery keeps the false answer, so Undo and reload show what was told", () => {
+  it("the delivery keeps the false answer and a reload keeps it (Undo: vortoxInformationUi.v6.test.tsx); the step is not recomputed", () => {
     const g = withDay(proofGame(["towncrier", "vortox", "witch", "chef", "sage", "mutant"], "night", 2), 1, []);
     const { next, delivery } = told(g, "towncrier");
     expect(delivery.values).toEqual([{ requirementId: "minionNominated", kind: "boolean", value: true }]);
+    const reloaded = JSON.parse(JSON.stringify(next));
+    expect(StorytellerGamePersistedSchema.safeParse(reloaded).success).toBe(true);
+    expect(reloaded.informationDeliveries.at(-1).values).toEqual([{ requirementId: "minionNominated", kind: "boolean", value: true }]);
     // The step is complete: asking again is refused rather than recomputed.
     expect(plan(next, request(next, "p0", "towncrier", {}, step))).toMatchObject({ ok: false, code: "notApplicable" });
   });

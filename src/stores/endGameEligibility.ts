@@ -5,7 +5,7 @@ import { bindingOf, createRulesQuery } from "./rulesQuery";
 import { executionsAt } from "./lifeEvents";
 import { twinPairOf } from "./twinPair";
 import { SAINT_EXECUTION_GOOD_TEAM_LOST, SAINT_EXECUTION_EVIL_TEAM_LOST, MAYOR_DAY_END_GOOD_TEAM_WON, RESOLVED_DEMON_DEATH_NO_SUCCESSOR as DEMON_DEATH_NO_SUCCESSOR, isSaintNonqualifyingEvidenceType,
-  KLUTZ_CHOICE_RULING, KLUTZ_EVIL_TEAM_LOST, KLUTZ_GOOD_TEAM_LOST, VORTOX_NO_EXECUTION_EVIL_WON, VORTOX_NO_EXECUTION_RULING } from "./gameRuleFactRegistry";
+  KLUTZ_CHOICE_RULING, KLUTZ_EVIL_TEAM_LOST, KLUTZ_GOOD_TEAM_LOST, VORTOX_DUSK_RULING, VORTOX_WORKING_AT_DUSK } from "./gameRuleFactRegistry";
 
 export type EndGameEligibility = { kind: "verified"; team: "good" | "evil"; reason: "saint" | "mayor" | "demonDeath" | "twoAlive" }
   | { kind: "none" } | { kind: "unknown"; reason: string };
@@ -164,24 +164,26 @@ export function klutzAdvisory(game: Pick<StorytellerLobbyRecord, "phase" | "day"
   return null;
 }
 
-export const VORTOX_NO_EXECUTION_LINE = "No one was executed today and the Vortox is alive. Evil wins. Check before ending the game";
-export const VORTOX_NO_EXECUTION_RULING_LINE = "No execution was recorded today and a Vortox is alive, but its ability or today’s record is in doubt. Your ruling";
+export const VORTOX_NO_EXECUTION_LINE = "No one was executed today and the Vortox was alive at dusk. Evil wins. Check before ending the game";
+export const VORTOX_NO_EXECUTION_RULING_LINE = "No one was executed today and a Vortox was alive at dusk, but its ability or today’s record is in doubt. Your ruling";
 
 /**
  * SV-5l: a reminder only (it records nothing and ends nothing), carried on the End control's "!" like the Klutz's line. The Vortox's
- * "Each day, if no-one is executed, evil wins", captured at the Day-to-Night boundary (`captureVortoxNoExecution`). Shown through the
- * Night that follows that Day; an execution recorded since for that Day (a correction) takes it away. https://wiki.bloodontheclocktower.com/Vortox
+ * "Each day, if no-one is executed, evil wins": the Vortox's state at dusk is the captured fact (`captureVortoxNoExecution`); the
+ * Day's executions are read live from the record, so an execution recorded late takes the line away and a retracted one brings it
+ * back. Shown through the Night that follows that Day. What happens to the Vortox after dusk does not matter: the ending was at dusk.
+ * https://wiki.bloodontheclocktower.com/Vortox
  */
 export function vortoxAdvisory(game: Pick<StorytellerLobbyRecord, "phase" | "day" | "gameRuleFacts" | "lifeEventWindow" | "players">): string | null {
   if (game.phase !== "night") return null;
   const day = game.day - 1;
-  const fact = (game.gameRuleFacts ?? []).find((fact) => (fact.type === VORTOX_NO_EXECUTION_EVIL_WON || fact.type === VORTOX_NO_EXECUTION_RULING) && fact.recordedAt?.phase === "day" && fact.recordedAt.day === day);
+  const fact = (game.gameRuleFacts ?? []).find((fact) => (fact.type === VORTOX_WORKING_AT_DUSK || fact.type === VORTOX_DUSK_RULING) && fact.recordedAt?.phase === "day" && fact.recordedAt.day === day);
   if (!fact) return null;
   const source = fact.provenance?.sourceParticipant;
   if (source?.kind !== "participant") return null;
   const player = game.players[source.playerId];
-  if (!player || player.isEmpty || player.participantId !== source.participantId || player.actualRole !== "vortox") return null;
+  if (!player || player.isEmpty || player.participantId !== source.participantId) return null;
   const executions = executionsAt(game, { phase: "day", day });
   if ((executions.status === "known" ? executions.events : executions.recorded).length) return null;
-  return fact.type === VORTOX_NO_EXECUTION_EVIL_WON ? VORTOX_NO_EXECUTION_LINE : VORTOX_NO_EXECUTION_RULING_LINE;
+  return fact.type === VORTOX_WORKING_AT_DUSK && executions.status === "known" ? VORTOX_NO_EXECUTION_LINE : VORTOX_NO_EXECUTION_RULING_LINE;
 }

@@ -8,7 +8,7 @@ import { usePrivacyStore } from "./privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { captureVortoxNoExecution } from "./victoryEvidence";
 import { endGameEligibility, vortoxAdvisory, VORTOX_NO_EXECUTION_LINE, VORTOX_NO_EXECUTION_RULING_LINE } from "./endGameEligibility";
-import { VORTOX_NO_EXECUTION_EVIL_WON, VORTOX_NO_EXECUTION_RULING } from "./gameRuleFactRegistry";
+import { VORTOX_DUSK_RULING, VORTOX_WORKING_AT_DUSK } from "./gameRuleFactRegistry";
 import { planGameRuleFactTransaction } from "./gameRuleFacts";
 import { StorytellerGamePersistedSchema } from "./schemas";
 import { participantRefOf } from "./participants";
@@ -41,7 +41,7 @@ describe("SV-5l: the Day-to-Night capture", () => {
     openInStore(day());
     const night = advance();
     expect(night).toMatchObject({ phase: "night", day: 3 });
-    expect(night.gameRuleFacts).toEqual([expect.objectContaining({ type: VORTOX_NO_EXECUTION_EVIL_WON, recordedAt: { phase: "day", day: 2 }, expiresAt: { phase: "day", day: 3 },
+    expect(night.gameRuleFacts).toEqual([expect.objectContaining({ type: VORTOX_WORKING_AT_DUSK, recordedAt: { phase: "day", day: 2 }, expiresAt: { phase: "day", day: 3 },
       provenance: expect.objectContaining({ sourceCharacter: "vortox", sourceParticipant: expect.objectContaining({ playerId: "p0" }) }) })]);
     expect(vortoxAdvisory(night)).toBe(VORTOX_NO_EXECUTION_LINE);
     expect(endHint(ctx(night))).toBe(VORTOX_NO_EXECUTION_LINE);
@@ -55,27 +55,27 @@ describe("SV-5l: the Day-to-Night capture", () => {
     expect(endGameEligibility(night, env)).not.toMatchObject({ kind: "verified" });
   });
 
-  it.each(["died", "survived", "alreadyDead"] as const)("an execution that %s counts: no fact, no line", (outcome) => {
+  it.each(["died", "survived", "alreadyDead"] as const)("an execution that %s counts: no line (the Vortox's state at dusk is still recorded)", (outcome) => {
     openInStore(executed(day(), "p1", outcome));
     advance();
-    expect(facts()).toEqual([]);
+    expect(facts()).toEqual([VORTOX_WORKING_AT_DUSK]);
     expect(vortoxAdvisory(game())).toBeNull();
   });
 
   it("the Mutant's execution counts, and so does an execution by an ability (the same execution record, with its resolution)", () => {
     openInStore(executed(day(), "p5", "died"));
     advance();
-    expect(facts()).toEqual([]);
+    expect(vortoxAdvisory(game())).toBeNull();
     openInStore(executed(day(), "p4", "survived", { resolutionId: "ability-resolution" }));
     advance();
-    expect(facts()).toEqual([]);
+    expect(vortoxAdvisory(game())).toBeNull();
   });
 
   it("an execution recorded through the Execute command counts", () => {
     openInStore(day());
     expect(state().recordExecution("p1", "died")).toMatchObject({ ok: true });
     advance();
-    expect(facts()).toEqual([]);
+    expect(vortoxAdvisory(game())).toBeNull();
   });
 
   it("an exile is not an execution", () => {
@@ -83,7 +83,15 @@ describe("SV-5l: the Day-to-Night capture", () => {
     state().exileTraveler("p6");
     expect(game().lifeEventWindow.events.at(-1)).toMatchObject({ kind: "exile" });
     advance();
-    expect(facts()).toEqual([VORTOX_NO_EXECUTION_EVIL_WON]);
+    expect(facts()).toEqual([VORTOX_WORKING_AT_DUSK]);
+    expect(vortoxAdvisory(game())).toBe(VORTOX_NO_EXECUTION_LINE);
+  });
+
+  it("two Vortoxes: any one alive, sober and healthy at dusk is enough", () => {
+    openInStore(impair(day(["vortox", "chef", "empath", "vortox", "saint", "mutant"]), "p0"));
+    advance();
+    expect(game().gameRuleFacts).toEqual([expect.objectContaining({ type: VORTOX_WORKING_AT_DUSK, provenance: expect.objectContaining({ sourceParticipant: expect.objectContaining({ playerId: "p3" }) }) })]);
+    expect(vortoxAdvisory(game())).toBe(VORTOX_NO_EXECUTION_LINE);
   });
 
   it.each([
@@ -111,11 +119,13 @@ describe("SV-5l: the Day-to-Night capture", () => {
   it("a Vortox whose ability is in doubt, or a Day without a complete execution record, is the Storyteller's ruling", () => {
     openInStore(impair(day(), "p0", "soberHealthy"));
     advance();
-    expect(facts()).toEqual([VORTOX_NO_EXECUTION_RULING]);
+    expect(facts()).toEqual([VORTOX_DUSK_RULING]);
     expect(vortoxAdvisory(game())).toBe(VORTOX_NO_EXECUTION_RULING_LINE);
+    // The Day's execution record does not cover Day 2 (an older save): the working Vortox is recorded, the line is a ruling.
     const g: StorytellerLobbyRecord = { ...day(), lifeEventWindow: { coverageFrom: { phase: "night", day: 3 }, events: [] } };
     const result = captureVortoxNoExecution(g, { ...g, phase: "night", day: 3 }, env);
-    expect(result.ok && result.game.gameRuleFacts.map((fact) => fact.type)).toEqual([VORTOX_NO_EXECUTION_RULING]);
+    expect(result.ok && result.game.gameRuleFacts.map((fact) => fact.type)).toEqual([VORTOX_WORKING_AT_DUSK]);
+    expect(result.ok && vortoxAdvisory(result.game)).toBe(VORTOX_NO_EXECUTION_RULING_LINE);
   });
 
   it("a homebrew character reusing the Vortox id brings no rule", () => {
@@ -136,7 +146,7 @@ describe("SV-5l: the Day-to-Night capture", () => {
   });
 
   it("the fact cannot be applied by hand: only the boundary captures it", () => {
-    const result = planGameRuleFactTransaction(day(), { intents: [{ kind: "apply", type: VORTOX_NO_EXECUTION_EVIL_WON }] });
+    const result = planGameRuleFactTransaction(day(), { intents: [{ kind: "apply", type: VORTOX_WORKING_AT_DUSK }] });
     expect(result).toMatchObject({ ok: false });
   });
 });
@@ -145,7 +155,7 @@ describe("SV-5l: the line's lifetime", () => {
   it("Undo of the advance removes the fact and the line with everything else", () => {
     openInStore(day());
     advance();
-    expect(facts()).toEqual([VORTOX_NO_EXECUTION_EVIL_WON]);
+    expect(facts()).toEqual([VORTOX_WORKING_AT_DUSK]);
     state().undo();
     expect(game()).toMatchObject({ phase: "day", day: 2, gameRuleFacts: [] });
     expect(vortoxAdvisory(game())).toBeNull();
@@ -164,6 +174,23 @@ describe("SV-5l: the line's lifetime", () => {
     advance();
     expect(state().lateRecordLifeEvent({ kind: "execution", outcome: "survived", playerId: "p1" }).ok).toBe(true);
     expect(vortoxAdvisory(game())).toBeNull();
+  });
+
+  it("independent check: a retracted execution brings the line back (executions are read live from the record)", () => {
+    openInStore(day());
+    expect(state().recordExecution("p1", "survived")).toMatchObject({ ok: true });
+    const eventId = game().lifeEventWindow.events.at(-1)!.id;
+    advance();
+    expect(vortoxAdvisory(game())).toBeNull();
+    expect(state().retractLifeEvent(eventId).ok).toBe(true);
+    expect(vortoxAdvisory(game())).toBe(VORTOX_NO_EXECUTION_LINE);
+  });
+
+  it("what happens to the Vortox after dusk does not matter (the ending was at dusk): killed, poisoned or changed that Night, the line stays", () => {
+    openInStore(day());
+    const night = advance();
+    for (const later of [patchPlayer(night, "p0", { alive: false }), impair(night, "p0"), patchPlayer(night, "p0", { actualRole: "imp" })])
+      expect(vortoxAdvisory(later)).toBe(VORTOX_NO_EXECUTION_LINE);
   });
 
   it("the line shows only through that Night; the fact expires on entering the next Day", () => {

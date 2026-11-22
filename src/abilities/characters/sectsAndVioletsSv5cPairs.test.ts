@@ -39,7 +39,7 @@ describe("SV-5c pairs: the Vortox with the other Sects & Violets characters", ()
       expect(townsfolkInformationFalse(q, role), role).toEqual({ known: true, value: false });
   });
 
-  it("Savant, Artist, Juggler, Mathematician and Philosopher's gained abilities stay the Storyteller's (by hand) under a Vortox", () => {
+  it("Savant, Artist, Juggler and Mathematician information stays the Storyteller's (by hand) under a Vortox", () => {
     const q = proofQuery(proofGame(["vortox", "savant", "artist", "juggler", "mathematician", "philosopher"], "night", 2));
     for (const role of ["savant", "artist", "juggler", "mathematician"]) expect(q.modifierGate(role, ["information"]).kind, role).toBe("gated");
   });

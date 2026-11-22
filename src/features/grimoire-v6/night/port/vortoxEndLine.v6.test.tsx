@@ -13,7 +13,7 @@ import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { proofGame, proofScript } from "@/test/proofFixtures";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
-const LINE = "No one was executed today and the Vortox is alive. Evil wins. Check before ending the game";
+const LINE = "No one was executed today and the Vortox was alive at dusk. Evil wins. Check before ending the game";
 const game = () => store.getState().game!;
 function open(g: StorytellerLobbyRecord) {
   store.setState({ game: g, lobby: null, undoStack: [], localSeq: 0, customScripts: { [proofScript.id]: proofScript } });
