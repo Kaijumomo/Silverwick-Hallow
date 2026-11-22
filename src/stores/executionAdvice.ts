@@ -51,6 +51,8 @@ export function executionDeathKnown(game: StorytellerLobbyRecord, playerId: Play
   if (!environment || !player || player.isEmpty || !player.participantId || !player.alive) return false;
   const query = createRulesQuery(game, environment);
   if (interactionCoverageEligibility(query, [...lifeRuleCreditedRoles]).kind === "manual") return false;
+  // A Fabled or Loric rule that touches death (the Ventriloquist) is the Storyteller's to apply: never a certain death.
+  if (query.modifierGate(player.actualRole, ["death"]).kind !== "clear") return false;
   const outcome = query.deathOutcome({ playerId, participantId: player.participantId }, "execution");
   return outcome.known && outcome.value.kind === "dies";
 }
