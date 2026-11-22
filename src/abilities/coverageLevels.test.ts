@@ -52,7 +52,8 @@ describe("coverage level and evidence (Stage 5A-1)", () => {
     // SV-5b moved the Seamstress from reviewed to guided (a wake until used: two players, YES / NO, the use and NO ABILITY in one resolution).
     // SV-5c moved the Dreamer from reviewed to guided (a wake: a player tapped, the false token picked, two tokens in one delivery).
     // SV-5d moved the Flowergirl from reviewed to guided (YES / NO read from the Day's votes; the official tokens derived from them).
-    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 38, reviewed: 24, partial: 59, generic: 60 });
+    // SV-5k moved the Vortox from reviewed to guided (a wake: the Demon kill; false Townsfolk information and the no-execution line are rules).
+    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 39, reviewed: 23, partial: 59, generic: 60 });
   });
 
   it("level follows the facts the gates read", () => {
