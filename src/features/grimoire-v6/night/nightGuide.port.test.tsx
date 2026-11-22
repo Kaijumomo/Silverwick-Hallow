@@ -15,7 +15,7 @@ import { clearNightActionCorrections } from "@/stores/nightActionCorrection";
 import { participantScopedStepKey, participantStepKey, travelerArrivalStepKey } from "@/stores/nightProgress";
 import { newTravelerArrival } from "@/stores/travelers";
 import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/abilityUi";
-import { patchPlayer, pick, plan, planned, proofGame, proofScript, request } from "@/test/proofFixtures";
+import { impair, patchPlayer, pick, plan, planned, proofGame, proofScript, request } from "@/test/proofFixtures";
 import { deriveNightWork, unfinishedNightWork } from "@/features/nightOrder/nightWork";
 import { captureFingerprint } from "@/stores/abilityResolution";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
@@ -341,25 +341,113 @@ it("Vortox and Empath remain wholly manual: official text and Next complete only
   act(() => store.getState().undo()); expect(game().nightProgress).toEqual(before.nightProgress);
 });
 
-it("an Imp selecting a functioning Mayor becomes wholly manual with no partial death", () => {
-  store.setState({ game: proofGame(["poisoner", "monk", "imp", "empath", "mayor"]) });
+/** Night 2, the Imp (p2) about to choose; the Mayor is p4. */
+const mayorNight = (roles = ["poisoner", "monk", "imp", "empath", "mayor"], patch?: (g: ReturnType<typeof game>) => ReturnType<typeof game>) => {
+  const g = proofGame(roles);
+  store.setState({ game: patch ? patch(g) : g });
   useShellStore.getState().setNightCursor({ day: 2, stepKey: key("p2") });
-  render(<Guide />); const before = game();
+  render(<Guide />);
+};
+const ruling = () => screen.queryByText("Player 4 is the Mayor. What happens?");
+
+it("an Imp attack on a working Mayor asks 'Mayor Dies / Another Player Dies' on the Imp's own card; nothing is planned until the answer", () => {
+  mayorNight();
+  const before = game();
   expect(useTargetPicker.getState().active).not.toBeNull();
   tap("p4");
-  expect(game()).toBe(before); expect(useTargetPicker.getState().active).toBeNull();
+  expect(game()).toBe(before);
   expect(store.getState().undoStack).toHaveLength(0);
+  expect(ruling()).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Mayor Dies" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Another Player Dies" })).toBeInTheDocument();
   expect(screen.queryByRole("dialog")).toBeNull();
-  expect(screen.getByText(proofScript.characters.find(role => role.id === "imp")!.ability!)).toBeVisible();
   expect(screen.queryByRole("button", { name: "Continue action" })).toBeNull();
-  act(() => { store.getState().resolveReminders({ intents: [{ kind: "place", target: { playerId: "p0", participantId: game().players.p0!.participantId! },
-    reminder: { label: "Chosen" } }] }); });
-  expect(useTargetPicker.getState().active).toBeNull();
-  const manuallyAdjusted = game();
-  fireEvent.click(screen.getByRole("button", { name: "Next" }));
-  expect(game().players).toEqual(manuallyAdjusted.players);
+  fireEvent.click(screen.getByRole("button", { name: "Choose again" }));
+  expect(ruling()).toBeNull();
+  expect(useTargetPicker.getState().active).not.toBeNull();
+  expect(game()).toBe(before);
+});
+
+it("'Mayor Dies' kills the Mayor like any Demon death: one Undo, a Dead reminder, the step completed", () => {
+  mayorNight();
+  tap("p4");
+  fireEvent.click(screen.getByRole("button", { name: "Mayor Dies" }));
+  expect(game().players.p4!.alive).toBe(false);
+  expect(game().players.p4!.reminders).toMatchObject([{ label: "Dead", sourceCharacter: "imp" }]);
+  expect(store.getState().undoStack).toHaveLength(1);
+  expect(ruling()).toBeNull();
+  expect(screen.getByText("Completed")).toBeInTheDocument();
   expect(game().nightProgress[`2:${key("p2")}`]?.status).toBe("done");
-  expect(game().lifeEventWindow).toEqual(before.lifeEventWindow);
+  act(() => store.getState().undo());
+  expect(game().players.p4!.alive).toBe(true);
+});
+
+it("'Another Player Dies': the Storyteller taps who dies instead; the Mayor lives; one Undo reverses it", () => {
+  mayorNight();
+  tap("p4");
+  fireEvent.click(screen.getByRole("button", { name: "Another Player Dies" }));
+  expect(game().players.p4!.alive).toBe(true);
+  expect(useTargetPicker.getState().active?.label).toBe("Choose who dies instead");
+  expect(screen.getByText("Choose the player who dies instead of Player 4.")).toBeInTheDocument();
+  expect(screen.queryByText("Choose the Minion who becomes the new Imp.")).toBeNull();
+  tap("p4");
+  expect(game().players.p4!.alive).toBe(true);
+  tap("p3");
+  expect(game().players.p3!.alive).toBe(false);
+  expect(game().players.p4!.alive).toBe(true);
+  expect(game().players.p3!.reminders).toMatchObject([{ label: "Dead", sourceCharacter: "imp" }]);
+  expect(store.getState().undoStack).toHaveLength(1);
+  expect(screen.getByText("Completed")).toBeInTheDocument();
+  act(() => store.getState().undo());
+  expect(game().players.p3!.alive).toBe(true);
+  expect(game().players.p4!.alive).toBe(true);
+});
+
+it("a protected replacement survives: the reason is shown and the Storyteller picks again", () => {
+  mayorNight(["poisoner", "soldier", "imp", "empath", "mayor"]);
+  tap("p4");
+  fireEvent.click(screen.getByRole("button", { name: "Another Player Dies" }));
+  const before = game();
+  tap("p1");
+  expect(game()).toBe(before);
+  expect(screen.getByText(/Player 1 is protected and does not die\. Choose another player\./)).toBeInTheDocument();
+  expect(useTargetPicker.getState().active?.label).toBe("Choose who dies instead");
+  tap("p3");
+  expect(game().players.p3!.alive).toBe(false);
+  expect(game().players.p1!.alive).toBe(true);
+});
+
+it("a Mayor protected by a Monk is no question at all: nobody dies and there is no bounce", () => {
+  mayorNight(undefined, (g) => patchPlayer(g, "p4", { effects: [{
+    id: "safe-p4", type: "safeFromDemon", sourceCharacter: "monk", lifetime: { kind: "untilDawn" }, state: "active",
+    sourceParticipant: { kind: "participant", participantId: g.players.p1!.participantId!, playerId: "p1", nameAtTime: "Player 1" },
+    expiry: { kind: "at", moment: { phase: "day", day: 2 } }, appliedAt: { phase: "night", day: 2 } } as never] }));
+  tap("p4");
+  expect(ruling()).toBeNull();
+  expect(game().players.p4!.alive).toBe(true);
+  expect(game().players.p3!.alive).toBe(true);
+  expect(game().nightProgress[`2:${key("p2")}`]?.status).toBe("done");
+});
+
+it("a Mayor marked cannotDie, or a poisoned Imp, is never asked the Mayor question", () => {
+  mayorNight(undefined, (g) => patchPlayer(g, "p4", { effects: [{ id: "fx-cd", type: "cannotDie", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } } as never] }));
+  tap("p4");
+  expect(ruling()).toBeNull();
+  expect(game().players.p4!.alive).toBe(true);
+  cleanup();
+  useTargetPicker.getState().cancel();
+  mayorNight(undefined, (g) => impair(g, "p2"));
+  tap("p4");
+  expect(ruling()).toBeNull();
+  expect(game().players.p4!.alive).toBe(true);
+});
+
+it("a poisoned Mayor simply dies: their ability is not working, so there is no choice to make", () => {
+  mayorNight(undefined, (g) => impair(g, "p4"));
+  tap("p4");
+  expect(ruling()).toBeNull();
+  expect(game().players.p4!.alive).toBe(false);
+  expect(store.getState().undoStack).toHaveLength(1);
 });
 
 it("the first-night Minion and Demon info steps carry the official night-sheet icons", () => {

@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import type { V6Ctx } from "../ctx";
 import { flash } from "../v6Store";
-import { advanceToNight, blockNominee } from "../day/advance";
+import { advanceToNight, blockNominee, executeBlockIfKnown } from "../day/advance";
 import { buildDayCard, buildNominationArt } from "../day/dayCard";
 import { buildNominations } from "../day/nomination";
 import { buildSlayer } from "../day/slayer";
@@ -52,7 +52,7 @@ export function useDayVm(ctx: V6Ctx): SliceResult {
 
   const execute = () => {
     if (privacy) { flash("Show tokens to continue."); return; }
-    if (block) { ui.set({ slay: null, klutz: null, panel: null, card: false }); voting?.show("finish"); return; }
+    if (block) { ui.set({ slay: null, klutz: null, panel: null, card: false }); if (!executeBlockIfKnown(ctx)) voting?.show("finish"); return; }
     advanceToNight(ctx);
   };
 

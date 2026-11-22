@@ -1,6 +1,6 @@
 import { applyLifePlan, planLifeTransaction, type LifeIntent, type LifeRefusal } from "./lifeResolution";
 import { planRecordedLifeOutcome } from "./deathResolution";
-import { executionSpendsAbility } from "./executionAdvice";
+import { executionAdvice, executionChoiceNames, executionDeathKnown, executionSpendsAbility } from "./executionAdvice";
 import { participantRefOf } from "./participants";
 import { boundParticipant, createRulesQuery, type QueryAnswer, type RulesQueryEnvironment } from "./rulesQuery";
 import type { CurrentParticipantRef, StorytellerLobbyRecord } from "./types";
@@ -298,6 +298,14 @@ export function planVoting(game: StorytellerLobbyRecord, intent: VotingIntent, e
         if (!planned.ok) return planned;
         next = planned.game;
         if (outcome.kind === "noExecution") round.virginPending = false;
+        // The Storyteller screens ask for this: when the rules positively establish that the execution kills the Townsfolk nominator (no Fool,
+        // sober Sailor, Pacifist in play or unknown protection), the execution is recorded in this same commit, so nothing is left to ask and
+        // one Undo reverses everything. A planner confirmation (an additional execution) or a manual reason keeps the explicit Virgin question.
+        if (intent.autoVirgin && outcome.kind === "trigger" && !executionAdvice(next, intent.nominator.playerId, environment)
+          && !executionChoiceNames(next.players).length && executionDeathKnown(next, intent.nominator.playerId, environment)) {
+          const executed = life(next, [{ kind: "execution", playerId: intent.nominator.playerId, outcome: "died" }], environment);
+          if (executed.ok && !executed.manualReason) { next = executed.game; round.virginPending = false; round.status = "outcome"; round.result = "virgin"; }
+        }
       }
     }
     state.rounds.push(round); state.activeRoundId = round.id;

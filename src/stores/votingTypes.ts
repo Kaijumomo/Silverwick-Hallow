@@ -46,7 +46,9 @@ export type VotingDayState = {
 };
 export type VotingScope = { code: string; day: number; expectedRevision: number };
 export type VotingIntent = VotingScope & (
-  | { kind: "begin"; roundId: string; mode: "nomination" | "exile"; nominator: VotingBinding; nominee: VotingBinding; confirmUnknown?: boolean }
+  | { kind: "begin"; roundId: string; mode: "nomination" | "exile"; nominator: VotingBinding; nominee: VotingBinding; confirmUnknown?: boolean;
+    /** Storyteller UI only: record a Virgin's execution in this same commit when the rules positively establish that it kills. */
+    autoVirgin?: boolean }
   | { kind: "respond"; roundId: string; voter: VotingBinding; choice: VoteChoice; weightOverride?: number }
   | { kind: "undoLast"; roundId: string }
   | { kind: "correctResponse"; roundId: string; voter: VotingBinding; choice: VoteChoice; weightOverride?: number }

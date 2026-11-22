@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { CANONICAL_ABILITY_SEMANTICS, type AbilityDescriptor, type AbilityInputValue } from "@/abilities/semantics";
 import { automationEligibility } from "@/abilities/automationEligibility";
 import { captureCharacterActionContext, useStorytellerStore } from "@/stores/storytellerStore";
@@ -13,6 +13,8 @@ import { CERENOVUS_CHARACTER } from "@/abilities/characters/cerenovus";
 import type { WorkspaceTarget } from "@/features/abilities/AbilityWorkspace";
 import { bindingOf, pathAbility, seatedParticipants, triggerAbility, useTargetPicker, type StepAbility } from "@/features/abilities/abilityUi";
 import { runsGainedAbility } from "@/abilities/characters/passiveRules";
+import { mayorBounceOffered, subjectId } from "@/abilities/characters/shared";
+import { MAYOR_BOUNCE } from "@/abilities/characters/imp";
 import { participantAllowed } from "@/features/abilities/RequirementInput";
 import { pendingMoonchildChoice } from "@/abilities/characters/moonchild";
 import { deriveNightWork, stepResolved, unfinishedNightWork, type NightWork, type TriggeredNightWork, type UnfinishedNightWork } from "@/features/nightOrder/nightWork";
@@ -61,9 +63,12 @@ export type NightWorkspace = { target: WorkspaceTarget; ability: StepAbility; in
 const TAP_RULINGS = [
   { prefix: "snakecharmer:registersAsDemon:", kind: "demon" as const },
   { prefix: "fanggu:registersAsOutsider:", kind: "outsider" as const },
+  // TB: a Demon attack on a certainly working, unprotected Mayor ("another player might die instead"): asked as soon as the Mayor is tapped.
+  { prefix: `${MAYOR_BOUNCE}:`, kind: "mayor" as const },
 ];
-export type TapRuling = { game: StorytellerLobbyRecord; stepKey: string; inputs: Record<string, AbilityInputValue>; id: string; kind: "demon" | "outsider"; target: ParticipantBinding };
-export type SuccessorChoice = { game: StorytellerLobbyRecord; stepKey: string; inputs: Record<string, AbilityInputValue>; id: string; eligible: Set<string> };
+export type TapRuling = { game: StorytellerLobbyRecord; stepKey: string; inputs: Record<string, AbilityInputValue>; id: string; kind: "demon" | "outsider" | "mayor"; target: ParticipantBinding };
+/** `replacement`: the Mayor's bounce is waiting for the player who dies instead (any living player may be tapped; a protected one is refused with the reason). */
+export type SuccessorChoice = { game: StorytellerLobbyRecord; stepKey: string; inputs: Record<string, AbilityInputValue>; id: string; eligible: Set<string>; replacement?: boolean; target?: string };
 type Success = { key: string; game: StorytellerLobbyRecord; step: NightStep };
 
 /**
@@ -97,6 +102,8 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   const [manualAction, setManualAction] = useScoped<string | null>(scope, null);
   const [successorChoice, setSuccessorChoice] = useScoped<SuccessorChoice | null>(scope, null);
   const [tapRuling, setTapRuling] = useScoped<TapRuling | null>(scope, null);
+  // A refused replacement (a protected player) puts the picker back, so the Storyteller chooses again.
+  const [pickNonce, setPickNonce] = useState(0);
   // Players tapped so far for a step that takes several (Innkeeper, Shabaloth), and the player the Gambler chose
   // while the guess is being picked.
   const [picks, setPicks] = useScoped<ParticipantBinding[]>(scope, EMPTY_PICKS);
@@ -310,8 +317,19 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     const fingerprint = captureFingerprint(game, current.playerId, { day: game.day, stepKey: current.stepKey });
     if (!fingerprint) { setError("This player is no longer seated."); return; }
     const request = { mode: "guided" as const, invocationPath: "nightOrder" as const, fingerprint, roleId: current.effectiveRoleId, inputs, completeStep: true };
+    // The Mayor: the Storyteller's "Mayor dies / another player dies" is asked before anything is planned (a protected Mayor never gets here
+    // as a question: the death gate says nobody dies, and the plan below handles it).
+    if (current.effectiveRoleId === "imp" && !successorChoice && query && target.participantId !== actor?.participantId && actor && (() => { const works = query.abilityFunctions(bindingOf(actor)); return works.known && works.value; })() && mayorBounceOffered(query, target)) {
+      useTargetPicker.getState().cancel(); setError(null);
+      setTapRuling({ game, stepKey: current.stepKey, inputs, id: subjectId(MAYOR_BOUNCE, target), kind: "mayor", target });
+      return;
+    }
     const plan = planAbilityResolution(game, request, { script, registry, semantics });
     if (!plan.ok && plan.code === "unsupported") { stopAutomation(plan.message); return; }
+    if (!plan.ok && successorChoice?.replacement && plan.code !== "needsInput") {
+      // "Say they survive, pick again": a protected replacement does not die; the reason is shown and the board is tappable again.
+      setError(plan.message); setPickNonce((n) => n + 1); return;
+    }
     if (!plan.ok && plan.code === "needsInput") {
       if (current.effectiveRoleId === "imp" || current.effectiveRoleId === "vigormortis") {
         const requirement = plan.requirements?.[0];
@@ -358,7 +376,17 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     const request = { mode: "guided" as const, invocationPath: "nightOrder" as const, fingerprint, roleId: current.effectiveRoleId, inputs, completeStep: true };
     const plan = planAbilityResolution(game, request, { script, registry, semantics });
     if (!plan.ok && plan.code === "unsupported") { stopAutomation(plan.message); return; }
-    if (!plan.ok && plan.code === "needsInput") { openWorkspace(inputs); return; }
+    if (!plan.ok && plan.code === "needsInput") {
+      const requirement = plan.requirements?.length === 1 ? plan.requirements[0] : undefined;
+      // "Another player dies": the player who dies instead is tapped on the board. Any living player but the Mayor may be tapped.
+      if (held.kind === "mayor" && value && requirement?.source === "storyteller" && requirement.kind === "participant") {
+        setSuccessorChoice({ game, stepKey: current.stepKey, inputs, id: requirement.id, replacement: true, target: held.target.playerId,
+          eligible: new Set(seatedParticipants(game).filter((p) => p.alive && p.participantId !== held.target.participantId).map((p) => p.participantId!)) });
+        setPaused(false); return;
+      }
+      if (held.kind === "mayor") { stopAutomation(plan.message); return; }
+      openWorkspace(inputs); return;
+    }
     if (!plan.ok) { setError(plan.message); return; }
     const result = useStorytellerStore.getState().resolveAbility(request, semantics, actionContext);
     if (!result.ok) { setError(result.message); return; }
@@ -435,10 +463,10 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     const input = ability.descriptor.inputs[0]!;
     const eligibleTargets = successorChoice?.eligible ?? new Set(seatedParticipants(game).filter((p) => participantAllowed(p, input, bindingOf(actor))
       && !picks.some((chosen) => chosen.participantId === p.participantId)).map((p) => p.participantId!));
-    useTargetPicker.getState().start(successorChoice ? current?.effectiveRoleId === "vigormortis" ? "Choose the poisoned neighbour" : "Choose the new Imp" : resolved ? "Correct target" : needed > 1 ? `Choose player ${picks.length + 1} of ${needed}` : ability.descriptor.presentation.action, choose, { owner, eligible: eligibleTargets });
+    useTargetPicker.getState().start(successorChoice ? successorChoice.replacement ? "Choose who dies instead" : current?.effectiveRoleId === "vigormortis" ? "Choose the poisoned neighbour" : "Choose the new Imp" : resolved ? "Correct target" : needed > 1 ? `Choose player ${picks.length + 1} of ${needed}` : ability.descriptor.presentation.action, choose, { owner, eligible: eligibleTargets });
     return () => { if (useTargetPicker.getState().active?.owner === owner) useTargetPicker.getState().cancel(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game, current?.stepKey, visible, paused, workspace, canTarget, successorChoice, picks, guessFor, skipReason]);
+  }, [game, current?.stepKey, visible, paused, workspace, canTarget, successorChoice, picks, guessFor, skipReason, pickNonce]);
   // The Moonchild chose publicly during the Day: the death is resolved by itself when the wake is reached. An Undo of it while the
   // step stays open leaves it for the Storyteller; the guard lasts only while this step is current, so reaching the step again
   // (an Undo back to the start of the Night and a replay) resolves the choice again.

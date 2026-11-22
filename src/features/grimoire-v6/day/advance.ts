@@ -1,4 +1,5 @@
 import { captureVotingContext, useStorytellerStore } from "@/stores/storytellerStore";
+import { executionAdvice, executionChoiceNames, executionDeathKnown } from "@/stores/executionAdvice";
 import { executionsAt } from "@/stores/lifeEvents";
 import { currentVotingState } from "@/stores/voting";
 import type { StorytellerLobbyRecord } from "@/stores/types";
@@ -35,5 +36,24 @@ export function advanceToNight(ctx: V6Ctx): boolean {
   const ui = useV6Ui.getState();
   ui.set({ panel: "night", slay: null, card: false, popMode: "main" });
   showVeil(`Night ${roman(game.day + 1)}`, "The town sleeps", false);
+  return true;
+}
+
+/**
+ * The dock's "Execute <name>": when the rules positively establish that the execution kills the nominee on the block (no Fool, sober
+ * Sailor, Pacifist in play or unknown protection), it is recorded as "died" right away and the dock offers Begin Night, as after any
+ * execution. Anything less certain returns false and the existing "Did they die?" card opens instead.
+ */
+export function executeBlockIfKnown(ctx: V6Ctx): boolean {
+  const { game, voting } = ctx;
+  const block = blockNominee(game);
+  if (!block || !voting || !ctx.script) return false;
+  const player = game.players[block.nominee.playerId];
+  if (!player || player.isEmpty || !player.alive || !player.participantId || player.participantId !== block.nominee.participantId) return false;
+  const env = { script: ctx.script, registry: ctx.registry };
+  if (executionAdvice(game, player.id, env) || executionChoiceNames(game.players).length || !executionDeathKnown(game, player.id, env)) return false;
+  if (!voting.run({ kind: "execution", target: { playerId: player.id, participantId: player.participantId }, outcome: "died" }, captureVotingContext())) return false;
+  voting.close();
+  flash(`${player.name} is executed. Begin the night when ready.`);
   return true;
 }

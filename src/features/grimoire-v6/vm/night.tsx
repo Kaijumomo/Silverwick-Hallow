@@ -82,7 +82,8 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
         : !inlineInformation ? T30_VERBS[roleKey] : undefined
       : undefined;
     const verb = player
-      ? successorChoice ? roleKey === "vigormortis" ? "Which neighbouring Townsfolk is poisoned? The Minion keeps their ability." : "Choose the Minion who becomes the new Imp."
+      ? successorChoice?.replacement ? `Choose the player who dies instead of ${game.players[successorChoice.target ?? ""]?.name || "the Mayor"}.`
+        : successorChoice ? roleKey === "vigormortis" ? "Which neighbouring Townsfolk is poisoned? The Minion keeps their ability." : "Choose the Minion who becomes the new Imp."
         : idleVerb ?? t30Verb ?? (engine.manual || inlineInformation ? engine.role?.ability ?? current.prompt
         : engine.ability?.kind === "guided" ? engine.ability.descriptor.presentation.action : current.prompt)
       : current.prompt;
@@ -134,7 +135,8 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
       // PO review C09/C10: the Minion and Demon information steps carry only their title and the show row.
       verb: current.stepKey === "minionInfo" || current.stepKey === "demonInfo" ? "" : verb,
       impOn: drunk || marionette || poisoned, impLabel: drunk ? "Drunk" : marionette ? "Marionette" : "Poisoned",
-      waiting: waiting || !!notTonight, waitAction: notTonight ?? null, waitText: successorChoice ? roleKey === "vigormortis" ? "Tap the neighbouring Townsfolk who is poisoned" : "Choose the new Imp on the board"
+      waiting: waiting || !!notTonight, waitAction: notTonight ?? null, waitText: successorChoice?.replacement ? "Tap the player who dies instead"
+        : successorChoice ? roleKey === "vigormortis" ? "Tap the neighbouring Townsfolk who is poisoned" : "Choose the new Imp on the board"
         : engine.needed > 1 ? engine.picks.length ? "Choose one more player on the board" : "Tap two players on the board" : "Tap a player on the board",
       picks: engine.picks.map((pick) => ({ name: game.players[pick.playerId]?.name ?? "" })),
       hasNumber: false, numberOpts: [], hasToken: false,
