@@ -128,6 +128,15 @@ describe("SV-5p: the Demon-death proof for the four Sects & Violets Demons (Day 
     expect(endHint(ctx(game()))).toBe("The Demon is dead. Check whether the game has ended");
   });
 
+  it.each(DEMONS)("the %s dying on the Day by anything but an execution or the Slayer's shot (a Witch's curse) is not proved", (demon) => {
+    const g = proofGame([demon, "witch", "oracle", "sage", "dreamer"], "day", 2);
+    expect(capture(g, "recordedDay", false).gameRuleFacts).toEqual([]);
+    openInStore(g);
+    expect(state().recordDeath("p0")).toMatchObject({ ok: true });
+    expect(game().gameRuleFacts).toEqual([]);
+    expect(endHint(ctx(game()))).toBe("The Demon is dead. Check whether the game has ended");
+  });
+
   it("a forged night proof for a Sects & Violets Demon is refused on load", () => {
     const day = capture(proofGame(["fanggu", "sage", "oracle", "witch"], "day", 2), "recordedDay");
     const fact = day.gameRuleFacts[0]!;

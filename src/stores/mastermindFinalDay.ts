@@ -2,7 +2,7 @@ import { isCanonicalRole } from "@/data/canonical";
 import { bindingOf, createRulesQuery, type RulesQueryEnvironment } from "./rulesQuery";
 import { applyGameRuleFactPlan, planCapturedMastermindFact, planGameRuleFactTransaction } from "./gameRuleFacts";
 import { MASTERMIND_FINAL_DAY, MASTERMIND_FINAL_DAY_RULING, isMastermindFinalDayType } from "./gameRuleFactRegistry";
-import { twinGoodWinBlock } from "./endGameEligibility";
+import { twinGoodWinBlock, TWINS_BLOCK_GOOD_WIN } from "./endGameEligibility";
 import { executionsAt, lifeEventCoverageAt, momentOrdinal } from "./lifeEvents";
 import type { GameRuleFactRecord, STPlayerRecord, StorytellerLobbyRecord } from "./types";
 
@@ -117,7 +117,9 @@ export function reconcileMastermindFinalDay(game: StorytellerLobbyRecord): Maste
     const event = game.lifeEventWindow.events.find((event) => event.id === fact.resolutionId);
     if (!event || event.kind !== "execution" || event.outcome !== "died" || event.moment.day !== fact.recordedAt.day) return true;
     const subject = game.players[event.subject.playerId];
-    return !subject || subject.isEmpty || subject.participantId !== event.subject.participantId || subject.alive;
+    // A correction of the executed player's character (they were not the Demon after all) takes it away too.
+    return !subject || subject.isEmpty || subject.participantId !== event.subject.participantId || subject.alive
+      || (!!event.actualRoleAtEvent && subject.actualRole !== event.actualRoleAtEvent);
   });
   if (!remove.length) return accepted(game);
   const result = planGameRuleFactTransaction(game, { intents: remove.map((fact) => ({ kind: "remove", type: fact.type })), correction: true });
@@ -134,10 +136,14 @@ export function activeMastermindFact(game: Pick<StorytellerLobbyRecord, "phase" 
 }
 
 /** SV-5n (Q13 B): the Day card heading's "Mastermind's final day": the Day after a certain trigger. Not for the ruling fact. */
-export function isMastermindFinalDay(game: Pick<StorytellerLobbyRecord, "phase" | "day" | "gameRuleFacts">): boolean {
+export function isMastermindFinalDay(game: Pick<StorytellerLobbyRecord, "phase" | "day" | "gameRuleFacts" | "players">, environment: Pick<RulesQueryEnvironment, "registry">): boolean {
   const fact = activeMastermindFact(game);
-  return !!fact && fact.type === MASTERMIND_FINAL_DAY && game.phase === "day" && game.day === fact.recordedAt.day + 1;
+  return !!fact && fact.type === MASTERMIND_FINAL_DAY && game.phase === "day" && game.day === fact.recordedAt.day + 1 && !livingDemon(game, environment);
 }
+
+/** A living, non-Traveller Demon (a Pit-Hag's new Demon, or a correction): the final day's rule no longer reads plainly. */
+const livingDemon = (game: Pick<StorytellerLobbyRecord, "players">, environment: Pick<RulesQueryEnvironment, "registry">) =>
+  Object.values(game.players).some((player) => !player.isEmpty && !!player.participantId && !player.isTraveler && player.alive && environment.registry.get(player.actualRole)?.type === "demon");
 
 export const MASTERMIND_TRIGGER_LINE = "The Demon was executed and died, but the Mastermind’s ability keeps the game going for one more day";
 export const MASTERMIND_TRIGGER_RULING_LINE = "The Demon was executed and died, and the Mastermind may keep the game going for one more day. Your ruling";
@@ -148,6 +154,7 @@ export const MASTERMIND_EVIL_EXECUTED_LINE = "An evil player was executed on the
 export const MASTERMIND_NOBODY_EXECUTED_LINE = "Nobody was executed on the Mastermind’s final day. Good wins. Check before ending the game";
 export const MASTERMIND_EXECUTION_RULING_LINE = "The player executed on the Mastermind’s final day may count as good or evil. Your ruling";
 export const MASTERMIND_NO_RECORD_LINE = "Whether anyone was executed on the Mastermind’s final day is not on record. Your ruling";
+export const MASTERMIND_DEMON_ALIVE_LINE = "A Demon is alive again during the Mastermind’s extra day. Your ruling";
 export const MASTERMIND_NIGHT_DEATH_LINE = "The Demon died at night, and the Mastermind is alive. Your ruling";
 
 /**
@@ -166,13 +173,22 @@ export function mastermindAdvisory(game: StorytellerLobbyRecord, environment: Ru
   if (!owner || owner.isEmpty || owner.participantId !== source.participantId) return null;
   const ruling = fact.type === MASTERMIND_FINAL_DAY_RULING;
   const trigger = fact.recordedAt.day;
+  if (livingDemon(game, environment)) return MASTERMIND_DEMON_ALIVE_LINE;
   if ((game.phase === "day" && game.day === trigger) || (game.phase === "night" && game.day === trigger + 1))
     return ruling ? MASTERMIND_TRIGGER_RULING_LINE : MASTERMIND_TRIGGER_LINE;
   const finalDay = trigger + 1;
   if (!(game.phase === "day" && game.day === finalDay) && !(game.phase === "night" && game.day === finalDay + 1)) return null;
   const record = executionsAt(game, { phase: "day", day: finalDay });
   const executions = record.status === "known" ? record.events : record.recorded;
-  const result = (line: string) => ruling ? line.replace(" Check before ending the game", " Your ruling") : line;
+  const block = twinGoodWinBlock(game, environment)?.kind ?? null;
+  const result = (line: string) => {
+    // The Evil Twin's "good cannot win" while both Twins live and the Evil Twin works (as the Klutz's good-win line reads it).
+    const good = line === MASTERMIND_EVIL_EXECUTED_LINE || line === MASTERMIND_NOBODY_EXECUTED_LINE;
+    const lead = line.slice(0, line.indexOf(". ") + 1);
+    if (good && block === "blocked") return `${lead} ${TWINS_BLOCK_GOOD_WIN}. ${ruling ? "Your ruling" : "Check before ending the game"}`;
+    if (good && block === "unknown") return `${lead} Good may win, but the Twins need your ruling`;
+    return ruling ? line.replace(" Check before ending the game", " Your ruling") : line;
+  };
   if (!executions.length) {
     if (game.phase === "day") return ruling ? MASTERMIND_FINAL_DAY_RULING_LINE : MASTERMIND_FINAL_DAY_LINE;
     return record.status === "known" ? result(MASTERMIND_NOBODY_EXECUTED_LINE) : MASTERMIND_NO_RECORD_LINE;

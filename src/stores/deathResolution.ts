@@ -62,9 +62,9 @@ export function planRecordedLifeOutcome(
   if (decision.kind === "manual") {
     const refused = mastermind();
     if (refused) return { ok: false, code: "refused", message: refused };
+    return { ok: true, changed: true, game: next, eventIds: result.plan.addedEventIds,
+      manualReason: `Outcome recorded. Resolve any character consequences using the official instructions and existing game controls. ${decision.reason}` };
   }
-  if (decision.kind === "manual") return { ok: true, changed: true, game: next, eventIds: result.plan.addedEventIds,
-    manualReason: `Outcome recorded. Resolve any character consequences using the official instructions and existing game controls. ${decision.reason}` };
   if (decision.kind === "successor") {
     const successor = next.players[decision.target.playerId];
     if (!successor || successor.participantId !== decision.target.participantId)

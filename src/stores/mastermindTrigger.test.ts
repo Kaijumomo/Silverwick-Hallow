@@ -208,10 +208,13 @@ describe("SV-5m: the trigger", () => {
   });
 
   it("a Demon's execution recorded late, through the correction path, never triggers", () => {
-    openInStore(proofGame(ROLES, "night", 3));
+    openInStore(dead(proofGame(ROLES, "night", 3), "p0"));
     const g = game();
-    const result = captureMastermindFinalDay(g, { ...g }, "nope", env);
-    expect(result.ok && result.game.gameRuleFacts).toEqual([]);
+    expect(captureMastermindFinalDay(g, { ...g }, "nope", env)).toEqual({ ok: true, game: g });
+    const late = state().lateRecordLifeEvent({ kind: "execution", playerId: "p0", outcome: "died", moment: { phase: "day", day: 2 } } as never, [] as never);
+    expect(late).toMatchObject({ ok: true });
+    expect(game().lifeEventWindow.events.some((event) => event.kind === "execution")).toBe(true);
+    expect(facts()).toEqual([]);
   });
 });
 

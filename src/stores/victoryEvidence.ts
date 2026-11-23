@@ -174,7 +174,8 @@ export function captureResolvedDemonDeath(before: StorytellerLobbyRecord, after:
   // SV-5p: the Imp, and on the Day only (an execution or a Slayer's shot, Q20 A) the four Sects & Violets Demons.
   const demon = event.actualRoleAtEvent;
   if (!(event.kind === "death" || event.kind === "execution" && event.outcome === "died") || !isProvedDemon(demon) || event.moment.phase !== before.phase || event.moment.day !== before.day) return accepted(after);
-  if (isDayOnlyProvedDemon(demon) && (before.phase !== "day" || (mode !== "recordedDay" && mode !== "automaticSlayer"))) return accepted(after);
+  // Q20 A: an execution recorded on the Day, or the Slayer's shot -- never another Day death recorded by hand (a Witch's curse, say).
+  if (isDayOnlyProvedDemon(demon) && (before.phase !== "day" || !(mode === "recordedDay" && event.kind === "execution" || mode === "automaticSlayer"))) return accepted(after);
   const demonRole = environment.registry.get(demon!);
   if (!demonRole || !isCanonicalRole(demonRole)) return accepted(after);
   const source = before.players[event.subject.playerId];

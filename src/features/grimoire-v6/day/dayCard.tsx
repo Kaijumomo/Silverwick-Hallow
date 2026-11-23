@@ -91,7 +91,7 @@ export function buildDayCard(ctx: V6Ctx): Record<string, unknown> {
     on: true,
     w: Math.round(Math.max(360, Math.min(520, 2 * (layout.rx - layout.S / 2 - 60)))),
     // SV-5n (Q13 B): the Mastermind's final day names itself in the existing heading, never in Privacy Mode.
-    kicker: !ctx.privacy && isMastermindFinalDay(game) ? `Day ${roman(game.day)} · Mastermind’s final day` : `Day ${roman(game.day)}`, sub: `${nominated} nominated today`,
+    kicker: !ctx.privacy && isMastermindFinalDay(game, ctx) ? `Day ${roman(game.day)} · Mastermind’s final day` : `Day ${roman(game.day)}`, sub: `${nominated} nominated today`,
     hasBlock: !!holder, blockImg: def ? iconUrlFor(def) : "",
     title: holder ? `${holder.name} is on the block` : "No one is on the block", titleColor: holder ? "#ff8a78" : "#f2ece0",
     text: (block ? `${block.tally} votes. More votes on a later nomination replaces them; a tie clears the block.` : `${toExecute(game)} votes are needed to put a nominee on the block.`),

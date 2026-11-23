@@ -2587,7 +2587,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!drunkNotation.ok) return { ok: false, code: "invalid", message: drunkNotation.message };
         const evidence = reconcileVictoryEvidence(game, drunkNotation.game, { correction: result.plan.actualRoleChanges.some(change => change.correction) });
         if (!evidence.ok) return { ok: false, code: "invalid", message: evidence.message };
-        set({ undoStack: pushUndo(game, undoStack), game: evidence.game });
+        // SV-5m: a character correction showing the executed player was not the Demon takes the Mastermind's fact away.
+        const mastermind = reconcileMastermindFinalDay(evidence.game);
+        if (!mastermind.ok) return { ok: false, code: "invalid", message: mastermind.message };
+        set({ undoStack: pushUndo(game, undoStack), game: mastermind.game });
         return { ok: true, changed: true };
       },
 
