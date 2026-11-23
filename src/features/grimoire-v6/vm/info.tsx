@@ -11,6 +11,7 @@ import { INFO_TOKENS, SETUP_ICON, SETUP_LABEL, SETUP_ORDER } from "../info/token
 import { EMPTY, type SliceResult } from "./types";
 import { endHint } from "./chrome";
 import { klutzAdvisory, twinAdvisory, twinGoodWinBlock, vortoxAdvisory } from "@/stores/endGameEligibility";
+import { mastermindAdvisory, mastermindNightDeathLine } from "@/stores/mastermindFinalDay";
 
 const SETUP_SUB: Record<SetupView, string> = {
   traveler: "Demon only",
@@ -97,7 +98,8 @@ export function useInfoVm(ctx: V6Ctx): SliceResult {
   // A verified ending takes the "!" over the Klutz's line; the box keeps both, as the dialog did before.
   // SV-4d: the Evil Twin's block and the Good Twin's execution join the box (the Klutz's good-win line carries the block).
   const twinEnv = script ? { registry, script } : null;
-  const lines = !privacy && !recovery ? [endHint(ctx), klutzAdvisory(game, (twinEnv && twinGoodWinBlock(game, twinEnv)?.kind) || null) ?? "", (twinEnv && twinAdvisory(game, twinEnv)) || "", vortoxAdvisory(game) ?? ""] : [];
+  const lines = !privacy && !recovery ? [endHint(ctx), klutzAdvisory(game, (twinEnv && twinGoodWinBlock(game, twinEnv)?.kind) || null) ?? "", (twinEnv && twinAdvisory(game, twinEnv)) || "", vortoxAdvisory(game) ?? "",
+    (twinEnv && (mastermindAdvisory(game, twinEnv) ?? mastermindNightDeathLine(game, twinEnv))) || ""] : [];
   const possibleEnd = [...new Set(lines.filter(Boolean))].map((line) => `${line}.`).join(" ");
   const notice = recovery
     ? terminal?.confirmedRecovery ? "The online game has ended. Save its confirmed result here to finish." : "An ending was interrupted. Retry to recover the recorded result."

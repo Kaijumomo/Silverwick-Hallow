@@ -4,6 +4,7 @@ import { useStorytellerStore } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { formatCode } from "@/firebase/lobby";
 import { buildPlayerJoinLink, qrModules } from "@/features/newgame/qr";
+import { mastermindAdvisory, mastermindNightDeathLine } from "@/stores/mastermindFinalDay";
 import { demonGoneAdvisory, endGameEligibility, klutzAdvisory, twinAdvisory, twinGoodWinBlock, vortoxAdvisory, withheldGoodWinLine } from "@/stores/endGameEligibility";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
@@ -36,6 +37,10 @@ export function endHint(ctx: V6Ctx): string {
       // SV-5l: the Vortox's no-execution ending, hidden in Privacy Mode (it names a character and who wins).
       const vortox = vortoxAdvisory(game);
       if (vortox) return vortox;
+      // SV-5n: the Mastermind's final day (the trigger, the rule, then who wins), and a Demon's death at night with a Mastermind alive
+      // (Q15 A: the Storyteller's ruling), hidden in Privacy Mode (they name a character and who wins).
+      const mastermind = mastermindAdvisory(game, environment) ?? mastermindNightDeathLine(game, environment);
+      if (mastermind) return mastermind;
       const withheld = withheldGoodWinLine(game, environment);
       if (withheld) return withheld;
     }

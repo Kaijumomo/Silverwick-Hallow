@@ -11,6 +11,7 @@ import { klutzAwaitingChoice, startKlutzChoice } from "./klutz";
 import { ARTIST_ANSWERS, answerArtist, artistMayAsk, markSavantTold, savantMayVisit, savantToldToday, visitFalseInformation } from "./privateVisit";
 import { jugglerMayGuess, jugglerToday, markJugglerDone, startJugglerGuess } from "./juggler";
 import type { STPlayerRecord } from "@/stores/types";
+import { isMastermindFinalDay } from "@/stores/mastermindFinalDay";
 
 /** One Day actions row in the Moonchild row's markup: a dead character's public or Storyteller choice still to make (SV-1). */
 export type DayActionRow = { key: string; name: string; img: string; text: string; status: string; button: string; act: () => void;
@@ -89,7 +90,8 @@ export function buildDayCard(ctx: V6Ctx): Record<string, unknown> {
   return {
     on: true,
     w: Math.round(Math.max(360, Math.min(520, 2 * (layout.rx - layout.S / 2 - 60)))),
-    kicker: `Day ${roman(game.day)}`, sub: `${nominated} nominated today`,
+    // SV-5n (Q13 B): the Mastermind's final day names itself in the existing heading, never in Privacy Mode.
+    kicker: !ctx.privacy && isMastermindFinalDay(game) ? `Day ${roman(game.day)} · Mastermind’s final day` : `Day ${roman(game.day)}`, sub: `${nominated} nominated today`,
     hasBlock: !!holder, blockImg: def ? iconUrlFor(def) : "",
     title: holder ? `${holder.name} is on the block` : "No one is on the block", titleColor: holder ? "#ff8a78" : "#f2ece0",
     text: (block ? `${block.tally} votes. More votes on a later nomination replaces them; a tie clears the block.` : `${toExecute(game)} votes are needed to put a nominee on the block.`),

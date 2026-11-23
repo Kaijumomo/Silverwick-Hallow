@@ -3,8 +3,8 @@ import { bindingOf, createRulesQuery, type RulesQueryEnvironment } from "./rules
 import { applyGameRuleFactPlan, planCapturedMastermindFact, planGameRuleFactTransaction } from "./gameRuleFacts";
 import { MASTERMIND_FINAL_DAY, MASTERMIND_FINAL_DAY_RULING, isMastermindFinalDayType } from "./gameRuleFactRegistry";
 import { twinGoodWinBlock } from "./endGameEligibility";
-import { lifeEventCoverageAt } from "./lifeEvents";
-import type { STPlayerRecord, StorytellerLobbyRecord } from "./types";
+import { executionsAt, lifeEventCoverageAt, momentOrdinal } from "./lifeEvents";
+import type { GameRuleFactRecord, STPlayerRecord, StorytellerLobbyRecord } from "./types";
 
 /**
  * SV-5m / SV-5n: the Mastermind (https://wiki.bloodontheclocktower.com/Mastermind).
@@ -125,3 +125,80 @@ export function reconcileMastermindFinalDay(game: StorytellerLobbyRecord): Maste
   return accepted(result.changed ? applyGameRuleFactPlan(game, result.plan) : game);
 }
 
+/** The Mastermind's fact in force now (recorded on a Day, before its expiry), or null. */
+export function activeMastermindFact(game: Pick<StorytellerLobbyRecord, "phase" | "day" | "gameRuleFacts">): GameRuleFactRecord | null {
+  if (game.phase !== "day" && game.phase !== "night") return null;
+  const now = momentOrdinal({ phase: game.phase, day: game.day });
+  return (game.gameRuleFacts ?? []).find((fact) => isMastermindFinalDayType(fact.type) && fact.recordedAt.phase === "day"
+    && momentOrdinal(fact.recordedAt) <= now && (!fact.expiresAt || now < momentOrdinal(fact.expiresAt))) ?? null;
+}
+
+/** SV-5n (Q13 B): the Day card heading's "Mastermind's final day": the Day after a certain trigger. Not for the ruling fact. */
+export function isMastermindFinalDay(game: Pick<StorytellerLobbyRecord, "phase" | "day" | "gameRuleFacts">): boolean {
+  const fact = activeMastermindFact(game);
+  return !!fact && fact.type === MASTERMIND_FINAL_DAY && game.phase === "day" && game.day === fact.recordedAt.day + 1;
+}
+
+export const MASTERMIND_TRIGGER_LINE = "The Demon was executed and died, but the Mastermind’s ability keeps the game going for one more day";
+export const MASTERMIND_TRIGGER_RULING_LINE = "The Demon was executed and died, and the Mastermind may keep the game going for one more day. Your ruling";
+export const MASTERMIND_FINAL_DAY_LINE = "Mastermind’s final day: if a good player is executed today, evil wins; if an evil player or nobody is executed, good wins";
+export const MASTERMIND_FINAL_DAY_RULING_LINE = "If the Mastermind’s ability worked, today is the final day: a good player executed means evil wins; otherwise good wins. Your ruling";
+export const MASTERMIND_GOOD_EXECUTED_LINE = "A good player was executed on the Mastermind’s final day. Evil wins. Check before ending the game";
+export const MASTERMIND_EVIL_EXECUTED_LINE = "An evil player was executed on the Mastermind’s final day. Good wins. Check before ending the game";
+export const MASTERMIND_NOBODY_EXECUTED_LINE = "Nobody was executed on the Mastermind’s final day. Good wins. Check before ending the game";
+export const MASTERMIND_EXECUTION_RULING_LINE = "The player executed on the Mastermind’s final day may count as good or evil. Your ruling";
+export const MASTERMIND_NO_RECORD_LINE = "Whether anyone was executed on the Mastermind’s final day is not on record. Your ruling";
+export const MASTERMIND_NIGHT_DEATH_LINE = "The Demon died at night, and the Mastermind is alive. Your ruling";
+
+/**
+ * SV-5n: the Mastermind's line for the End control (a reminder only; it records nothing and ends nothing). On the Day of the trigger and
+ * the Night after it: the game goes on. On the final Day: the rule, then, the moment an execution is recorded (Q14 A), who wins by the
+ * executed player's team, whatever the execution's outcome. "Nobody executed" waits for dusk (the Night after the final Day). The final
+ * Day's executions are read live from the record, so Undo or a correction of that execution changes the line. A player who may register
+ * either way, or whose character changed since the execution, is the Storyteller's ruling. The ruling fact gives ruling lines throughout.
+ */
+export function mastermindAdvisory(game: StorytellerLobbyRecord, environment: RulesQueryEnvironment): string | null {
+  const fact = activeMastermindFact(game);
+  if (!fact) return null;
+  const source = fact.provenance?.sourceParticipant;
+  if (source?.kind !== "participant") return null;
+  const owner = game.players[source.playerId];
+  if (!owner || owner.isEmpty || owner.participantId !== source.participantId) return null;
+  const ruling = fact.type === MASTERMIND_FINAL_DAY_RULING;
+  const trigger = fact.recordedAt.day;
+  if ((game.phase === "day" && game.day === trigger) || (game.phase === "night" && game.day === trigger + 1))
+    return ruling ? MASTERMIND_TRIGGER_RULING_LINE : MASTERMIND_TRIGGER_LINE;
+  const finalDay = trigger + 1;
+  if (!(game.phase === "day" && game.day === finalDay) && !(game.phase === "night" && game.day === finalDay + 1)) return null;
+  const record = executionsAt(game, { phase: "day", day: finalDay });
+  const executions = record.status === "known" ? record.events : record.recorded;
+  const result = (line: string) => ruling ? line.replace(" Check before ending the game", " Your ruling") : line;
+  if (!executions.length) {
+    if (game.phase === "day") return ruling ? MASTERMIND_FINAL_DAY_RULING_LINE : MASTERMIND_FINAL_DAY_LINE;
+    return record.status === "known" ? result(MASTERMIND_NOBODY_EXECUTED_LINE) : MASTERMIND_NO_RECORD_LINE;
+  }
+  if (executions.length > 1) return MASTERMIND_EXECUTION_RULING_LINE;
+  const event = executions[0]!;
+  const subject = game.players[event.subject.playerId];
+  if (!subject || subject.isEmpty || subject.participantId !== event.subject.participantId || (event.actualRoleAtEvent && subject.actualRole !== event.actualRoleAtEvent))
+    return MASTERMIND_EXECUTION_RULING_LINE;
+  const team = createRulesQuery(game, environment).registration(bindingOf(subject), "mastermind").alignment;
+  if (!team.known) return MASTERMIND_EXECUTION_RULING_LINE;
+  return result(team.value === "good" ? MASTERMIND_GOOD_EXECUTED_LINE : MASTERMIND_EVIL_EXECUTED_LINE);
+}
+
+/**
+ * SV-5n (Q15 A): with no trigger recorded, a Demon who died at night (an ordinary night death, or a night "execution" such as the
+ * Mutant's, which the app records as a death) while a Mastermind is alive: the Storyteller's ruling. The app never starts a final day by
+ * itself. Read from the Life Event record (the current and previous phase); null otherwise.
+ */
+export function mastermindNightDeathLine(game: StorytellerLobbyRecord, environment: RulesQueryEnvironment): string | null {
+  if (activeMastermindFact(game)) return null;
+  const players = ordinary(game);
+  const isDemonRole = (role: string | undefined) => !!role && environment.registry.get(role)?.type === "demon";
+  if (players.some((player) => player.alive && isDemonRole(player.actualRole))) return null;
+  if (!players.some((player) => player.alive && player.actualRole === "mastermind")) return null;
+  const night = game.lifeEventWindow.events.some((event) => event.kind === "death" && event.moment.phase === "night"
+    && isDemonRole(event.actualRoleAtEvent ?? game.players[event.subject.playerId]?.actualRole));
+  return night ? MASTERMIND_NIGHT_DEATH_LINE : null;
+}
