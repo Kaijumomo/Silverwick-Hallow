@@ -104,6 +104,11 @@ export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>
   /** SV-4c: the Evil Twin's TWIN reminder on the player the Storyteller chose as the other Twin (no source; it names the Evil Twin). It is a
    * recorded Storyteller fact: whether the pair stands is derived from the two players' alignments (stores/twinPair.ts), never stored. */
   twin: "storytellerFact",
+  /** SV-5f: one Juggler guess, recorded on the Juggler during their first Day (the guessed participant and character, and whether it was
+   * correct, judged then and frozen). The official CORRECT token is drawn from the correct ones; the Juggler's Night step counts them. */
+  jugglerGuess: "storytellerFact",
+  /** SV-5f: the Juggler's guesses are finished for that Day (zero allowed); without it the Night step's number is the Storyteller's. */
+  jugglerGuessesDone: "storytellerFact",
 };
 export const effectSemanticsOf = (type: string): EffectSemantics | undefined =>
   Object.prototype.hasOwnProperty.call(APPROVED_EFFECT_SEMANTICS, type) ? APPROVED_EFFECT_SEMANTICS[type] : undefined;

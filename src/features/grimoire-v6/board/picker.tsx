@@ -215,6 +215,7 @@ export function buildPicker(env: PickerEnv): Record<string, unknown> {
 
   return {
     open: true, isDist: dist, isChoose: mode === "choose", isShow: mode === "show", isBluff: mode === "bluff", rows,
+    showHint: mode === "show" ? (picker as Extract<PickerState, { mode: "show" }>).hint ?? "Tap a character to show it full screen. Nothing on the board changes." : "",
     canClearBluff: mode === "bluff" && !!bluffs[slot], clearBluff: () => {
       if (!bluffHolder) return;
       store().setBluffs(bluffHolder, bluffs.filter((_, i) => i !== slot));

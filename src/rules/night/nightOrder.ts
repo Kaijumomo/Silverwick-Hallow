@@ -344,7 +344,7 @@ function diedTodayOrTonight(player: STPlayerRecord, context: NightContext): bool
 }
 
 /** The Day number of this player's first Day with their current character, or null when that is not known. */
-function jugglerFirstDay(player: STPlayerRecord, context: NightContext): number | null {
+export function jugglerFirstDay(player: STPlayerRecord, context: NightContext): number | null {
   if (player.characterSince) return player.characterSince.day;
   const from = context.characterSinceFrom;
   // Recorded from Night 1 (a game started with character timing): no change means since the deal, so Day 1.

@@ -173,6 +173,19 @@ export const INFORMATION_ACTIONS: Record<RoleId, InformationAction[]> = {
     },
   ],
 
+  // "On your 1st day, publicly guess up to 5 players' characters. That night, you learn how many you got correct." (SV-5f) -- Number,
+  // the night after the Juggler's first Day.
+  juggler: [
+    {
+      id: "juggler-other-night",
+      timing: { kind: "otherNight" },
+      instruction: "Show fingers equaling the number of correct guesses.",
+      requirements: [
+        { id: "correct", kind: "number", label: "How many guesses were correct" },
+      ],
+    },
+  ],
+
   // "Each night*, you learn how many dead players are evil." -- Number, other nights only.
   // Treacherous 30th (owner-authorized Silverwick-authored metadata; no pinned action existed).
   oracle: [

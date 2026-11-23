@@ -41,6 +41,8 @@ const EFFECT_TOKENS = [
   { source: "fortuneteller", type: "fortuneTellerRedHerring", label: "Red Herring" },
   // SV-4c: the Evil Twin's TWIN reminder on the other Twin. A source-free Storyteller fact (the Red Herring's pattern): it names the Evil Twin.
   { source: "eviltwin", type: "twin", label: "Twin" },
+  // SV-5f: the Juggler's CORRECT token, one per correct guess (an incorrect guess, and the Done record, draw nothing).
+  { source: "juggler", type: "jugglerGuess", label: "Correct" },
 ] as const;
 
 export function officialEffectPresentation(player: Pick<STPlayerRecord, "effects">, context?: { query: RulesQuery; target: ParticipantBinding }): {
@@ -54,6 +56,7 @@ export function officialEffectPresentation(player: Pick<STPlayerRecord, "effects
     const mapping = EFFECT_TOKENS.find(item => item.type === effect.type &&
       (item.type === "fortuneTellerRedHerring" || item.type === "twin" || item.source === effect.sourceCharacter));
     if (!mapping) { remaining.push(effect); continue; }
+    if (effect.type === "jugglerGuess" && !(effect.parameters?.correct?.kind === "boolean" && effect.parameters.correct.value)) continue;
     const sourceRole = context?.query.roleOf(mapping.source);
     if (context && (!sourceRole || !isCanonicalRole(sourceRole))) { remaining.push(effect); continue; }
     const role = canonicalRoles([mapping.source])[0]!;

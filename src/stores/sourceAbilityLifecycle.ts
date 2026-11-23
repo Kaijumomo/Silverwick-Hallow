@@ -92,7 +92,10 @@ export function planSourceAbilityLoss(
         characterChange && effect.sourceCharacter === "sweetheart" && effect.type === "drunk" ||
         // SV-3a: a Philosopher who changes character no longer has what it gained ("They do not become that character"; a new
         // Philosopher starts fresh). Death does not end it: a gained ability that works while dead still works.
-        characterChange && effect.sourceCharacter === "philosopher" && effect.type === "gainedAbility";
+        characterChange && effect.sourceCharacter === "philosopher" && effect.type === "gainedAbility" ||
+        // SV-5f: a Juggler who changes character before their Night has no ability to learn the count, so the guesses (and their CORRECT
+        // tokens) go. Death does not end them: the dead Juggler simply does not wake, and they expire at dawn (the Cannibal jinx may read them).
+        characterChange && effect.sourceCharacter === "juggler" && (effect.type === "jugglerGuess" || effect.type === "jugglerGuessesDone");
       const definition = effect.sourceCharacter ? environment?.registry.get(effect.sourceCharacter) : undefined;
       if (!supported || !definition || !isCanonicalRole(definition)) continue;
       const result = planEffectTransaction(working, { intents: [{ kind: "remove", target: { playerId: player.id, participantId: player.participantId }, effectId: effect.id }],

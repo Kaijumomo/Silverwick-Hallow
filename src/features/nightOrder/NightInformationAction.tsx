@@ -12,13 +12,14 @@ import { CLOCKMAKER_POSSIBLE, clockmakerAnswers, clockmakerMaximumSteps } from "
 import { SEAMSTRESS_SAME } from "@/abilities/characters/seamstress";
 import { oracleChoices } from "@/abilities/characters/oracle";
 import { FLOWERGIRL_DEMON_VOTED } from "@/abilities/characters/flowergirl";
+import { JUGGLER_MAX_GUESSES, JUGGLER_UNRECORDED } from "@/abilities/characters/juggler";
 import { createRulesQuery } from "@/stores/rulesQuery";
 import { captureInfoContext, infoContextCurrent } from "@/features/info/infoCommands";
 import { isDeathEvent } from "@/stores/lifeEvents";
 import { QuestionBlock } from "@/features/grimoire-v6/day/NominationExtras";
 import { SAGE, SAGE_PLAYERS, sageCauseQuestion } from "@/abilities/characters/sage";
 
-export const CALCULATED_INFORMATION_ROLES = new Set(["chef", "empath", "fortuneteller", "towncrier", "oracle", "clockmaker", "seamstress", "flowergirl"]);
+export const CALCULATED_INFORMATION_ROLES = new Set(["chef", "empath", "fortuneteller", "towncrier", "oracle", "clockmaker", "seamstress", "flowergirl", "juggler"]);
 export const NIGHT_INFORMATION_ROLES = new Set([...CALCULATED_INFORMATION_ROLES, "undertaker", "ravenkeeper", "sage"]);
 const EMPTY_INPUTS: AbilityInputs = {};
 export type NightInformationHandle = { next: () => boolean };
@@ -204,6 +205,8 @@ export const NightInformationAction = forwardRef<NightInformationHandle, Props>(
     })()
     // SV-5i: the Oracle offers 0 to the number of dead players (at least 0 to 2).
     : step.effectiveRoleId === "oracle" ? oracleChoices(createRulesQuery(game, environment))
+    // SV-5f: the Juggler learns 0 to 5.
+    : step.effectiveRoleId === "juggler" ? Array.from({ length: JUGGLER_MAX_GUESSES + 1 }, (_, index) => index)
     : [0, 1, 2];
   // SV-5h: answers the Storyteller may not give (a Vortox: the true one) are left out.
   const choices = requirement?.kind === "boolean" ? [false, true] : numberChoices.filter((choice) => !requirement?.exclude?.includes(choice));
@@ -246,6 +249,9 @@ export const NightInformationAction = forwardRef<NightInformationHandle, Props>(
     {!resolved && requirement?.source === "storyteller" && requirement.kind === "boolean" && requirement.id.startsWith(FLOWERGIRL_DEMON_VOTED) && preview && !preview.ok &&
       <QuestionBlock heading="Did a Demon vote today?" note={preview.message.replace(/\s*Did a Demon vote today\?$/, "")}
         actions={[true, false].map((choice) => ({ label: choice ? "Yes" : "No", onClick: () => { commit({ ...inputs, [requirement.id]: { kind: "boolean", value: choice } }); } }))} />}
+    {/* SV-5f: the Juggler's guesses were not marked done on the Day card, so the number is the Storyteller's: say why. */}
+    {!resolved && requirement?.source === "storyteller" && requirement.id === JUGGLER_UNRECORDED && preview && !preview.ok &&
+      <p className="night-information-why">{preview.message.replace(/\s*Choose the number to show\.$/, "")}</p>}
     {!resolved && requirement?.source === "storyteller" && requirement.id.startsWith(CLOCKMAKER_POSSIBLE) && preview && !preview.ok &&
       <p className="night-information-why">{preview.message.replace(/\s*Choose the number to show\.$/, "")}</p>}
     {!resolved && requirement?.source === "storyteller" && ["number", "boolean"].includes(requirement.kind) && !requirement.id.startsWith("towncrier:minionNominated")
