@@ -195,6 +195,17 @@ it("Privacy Mode or the Night while the board waits for the guessed player: the 
   expect(records()).toEqual([]);
   expect(toast()).toBe("The game changed. Guess again.");
   act(() => { usePrivacyStore.setState({ enabled: false }); useV6Ui.getState().set({ picker: null }); });
+  // The Spy's Yes / No is open when Privacy Mode turns on: it is dismissed and nothing is recorded.
+  fireEvent.click(guessPill()!);
+  act(() => { pickSeatIfPicking(game(), "p3"); });
+  const again = useV6Ui.getState().picker;
+  await act(async () => { if (again?.mode === "show") again.onPick?.("chef"); await Promise.resolve(); });
+  expect(useV6Ui.getState().ask).toMatchObject({ title: "Does Player 3 register as the Chef?" });
+  await act(async () => { usePrivacyStore.setState({ enabled: true }); await Promise.resolve(); await Promise.resolve(); });
+  expect(useV6Ui.getState().ask).toBeNull();
+  expect(records()).toEqual([]);
+  expect(toast()).toBe("Nothing was recorded.");
+  act(() => { usePrivacyStore.setState({ enabled: false }); });
   // Begin Night while waiting: the wait ends too.
   fireEvent.click(guessPill()!);
   act(() => { expect(store.getState().advancePhase()).toMatchObject({ ok: true }); });

@@ -103,7 +103,15 @@ async function judgeAndRecord(ctx: V6Ctx, player: STPlayerRecord, target: Partic
   const guessed = open.game.players[target.playerId];
   const character = ctx.registry.get(roleId)?.name ?? roleId;
   const who = guessed ? nameOf(guessed, `Seat ${guessed.seat + 1}`) : "That player";
-  const answer = await chooseAsk(`Does ${who} register as the ${character}?`, `${verdict.reason} Your ruling decides whether this guess is correct.`, "Yes", "No");
+  const asking = chooseAsk(`Does ${who} register as the ${character}?`, `${verdict.reason} Your ruling decides whether this guess is correct.`, "Yes", "No");
+  // The question names who might register as what: Privacy Mode turned on while it is open dismisses it, and nothing is recorded.
+  const ours = useV6Ui.getState().ask;
+  const off = usePrivacyStore.subscribe((privacy) => {
+    if (!privacy.enabled || useV6Ui.getState().ask !== ours) return;
+    ours?.cancel?.();
+    useV6Ui.getState().set({ ask: null });
+  });
+  const answer = await asking.finally(off);
   if (answer === null) { flash("Nothing was recorded."); return; }
   recordGuess(player, target, roleId, answer === "first");
 }
