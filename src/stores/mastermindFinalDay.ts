@@ -182,7 +182,7 @@ export function mastermindAdvisory(game: StorytellerLobbyRecord, environment: Ru
   const subject = game.players[event.subject.playerId];
   if (!subject || subject.isEmpty || subject.participantId !== event.subject.participantId || (event.actualRoleAtEvent && subject.actualRole !== event.actualRoleAtEvent))
     return MASTERMIND_EXECUTION_RULING_LINE;
-  const team = createRulesQuery(game, environment).registration(bindingOf(subject), "mastermind").alignment;
+  const team = createRulesQuery(game, environment).registration(bindingOf(subject)).alignment;
   if (!team.known) return MASTERMIND_EXECUTION_RULING_LINE;
   return result(team.value === "good" ? MASTERMIND_GOOD_EXECUTED_LINE : MASTERMIND_EVIL_EXECUTED_LINE);
 }
