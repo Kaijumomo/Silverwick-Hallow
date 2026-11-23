@@ -11,7 +11,7 @@ import type { V6Ctx } from "@/features/grimoire-v6/ctx";
 import { useStorytellerStore as store } from "./storytellerStore";
 import { endGameEligibility } from "./endGameEligibility";
 import { victoryCoverageEligibility } from "./victoryEvidence";
-import { RESOLVED_DEMON_DEATH_NO_SUCCESSOR, FANG_GU_ONCE, KLUTZ_CHOICE_RULING, MASTERMIND_FINAL_DAY, PIT_HAG_ARBITRARY_DEATHS, VORTOX_WORKING_AT_DUSK } from "./gameRuleFactRegistry";
+import { RESOLVED_DEMON_DEATH_NO_SUCCESSOR, FANG_GU_ONCE, KLUTZ_CHOICE_RULING, KLUTZ_EVIL_TEAM_LOST, KLUTZ_GOOD_TEAM_LOST, MASTERMIND_FINAL_DAY, PIT_HAG_ARBITRARY_DEATHS, VORTOX_WORKING_AT_DUSK } from "./gameRuleFactRegistry";
 import { ENDING_EVIDENCE_ROLES } from "@/abilities/coverageEvidence";
 import type { CurrentParticipantRef, GameRuleFactRecord, StorytellerLobbyRecord } from "./types";
 
@@ -64,7 +64,7 @@ describe("SV-5o: all 25 Sects & Violets characters on the game-ending list", () 
       const night = patchPlayer(patchPlayer(proofGame(["vortox", "sage", "oracle", "witch"], "night", 3), "p2", { alive: false }), "p1", { alive: false });
       expect(endGameEligibility(withFact(night, VORTOX_WORKING_AT_DUSK, { phase: "day", day: 2 }), env)).toMatchObject({ kind: "verified", team: "evil" });
     });
-    it("the Pit-Hag's arbitrary deaths, the Klutz's choice and the Mastermind's final day keep it manual", () => {
+    it("the Pit-Hag's arbitrary deaths and the Mastermind's final day keep it manual; the Klutz's ruling withholds it on its Day", () => {
       expect(endGameEligibility(withFact({ ...two(), phase: "night" }, PIT_HAG_ARBITRARY_DEATHS), env)).toMatchObject({ kind: "unknown" });
       expect(endGameEligibility(withFact(two(), KLUTZ_CHOICE_RULING), env)).toMatchObject({ kind: "unknown" });
       expect(endGameEligibility(withFact(two(), MASTERMIND_FINAL_DAY), env)).toMatchObject({ kind: "unknown" });
@@ -147,5 +147,38 @@ describe("SV-5p: the Demon-death proof for the four Sects & Violets Demons (Day 
   it("the Imp keeps its Day and Night proof unchanged", () => {
     expect(capture(proofGame(["imp", "chef", "oracle"], "night", 2), "recordedNight", false).gameRuleFacts).toHaveLength(1);
     expect(capture(proofGame(["imp", "chef", "oracle"], "day", 2), "recordedDay").gameRuleFacts).toHaveLength(1);
+  });
+});
+
+describe("SV-5q: the advisory lines beside a verified ending, and the Mastermind's withhold", () => {
+  const two = () => patchPlayer(patchPlayer(proofGame(["nodashii", "klutz", "oracle", "witch"], "day", 3), "p2", { alive: false }), "p1", { alive: false });
+  it("the Klutz's choice on its Day: a proposal it agrees with stays, one it contradicts (or a ruling) is withheld", () => {
+    expect(endGameEligibility(withFact(two(), KLUTZ_GOOD_TEAM_LOST), env)).toEqual({ kind: "verified", team: "evil", reason: "twoAlive" });
+    expect(endGameEligibility(withFact(two(), KLUTZ_EVIL_TEAM_LOST), env)).toMatchObject({ kind: "unknown" });
+    expect(endGameEligibility(withFact(two(), KLUTZ_CHOICE_RULING), env)).toMatchObject({ kind: "unknown" });
+  });
+  it("the Klutz's choice from an earlier Day (play went on) no longer holds anything back", () => {
+    for (const type of [KLUTZ_GOOD_TEAM_LOST, KLUTZ_EVIL_TEAM_LOST, KLUTZ_CHOICE_RULING])
+      expect(endGameEligibility(withFact(two(), type, { phase: "day", day: 2 }), env), type).toEqual({ kind: "verified", team: "evil", reason: "twoAlive" });
+  });
+  it("the Vortox's no-execution line withholds a good-win proposal it contradicts", () => {
+    const g = proofGame(["vortox", "slayer", "oracle", "witch", "sage"], "day", 2);
+    const shot = { ...patchPlayer(g, "p0", { alive: false }), lifeEventWindow: { ...g.lifeEventWindow, events: [{ id: "shot", kind: "death" as const, moment: { phase: "day" as const, day: 2 }, subject: participantRefOf(g, "p0") as CurrentParticipantRef, actualRoleAtEvent: "vortox" }] } };
+    const result = captureResolvedDemonDeath(g, shot, "shot", env, "automaticSlayer");
+    if (!result.ok) throw new Error(result.message);
+    const night = { ...result.game, phase: "night" as const, day: 3 };
+    expect(endGameEligibility(night, env)).toMatchObject({ kind: "verified", team: "good" });
+    const source = participantRefOf(g, "p0") as CurrentParticipantRef;
+    const withLine = { ...night, gameRuleFacts: [...night.gameRuleFacts, { type: VORTOX_WORKING_AT_DUSK, recordedAt: { phase: "day" as const, day: 2 }, expiresAt: { phase: "day" as const, day: 3 }, provenance: { sourceParticipant: source, sourceCharacter: "vortox" } }] };
+    expect(endGameEligibility(withLine, env)).toMatchObject({ kind: "unknown" });
+  });
+  it("the Mastermind's final day withholds every ordinary proposal, whatever the list says", () => {
+    expect(endGameEligibility(withFact(two(), MASTERMIND_FINAL_DAY, { phase: "day", day: 2 }), env)).toMatchObject({ kind: "unknown" });
+  });
+  it("the Evil Twin, Klutz and Vortox lines keep \"Check before ending the game\" (Q19 A); nothing is ended or preselected", () => {
+    const g = withFact(proofGame(["nodashii", "klutz", "oracle", "witch", "sage"], "day", 3), KLUTZ_GOOD_TEAM_LOST);
+    const ctx = { game: g, script: env.script, registry: env.registry, privacy: false } as unknown as V6Ctx;
+    expect(endHint(ctx)).toBe("The Klutz chose an evil player. Evil wins. Check before ending the game");
+    expect(g.result).toBeUndefined();
   });
 });

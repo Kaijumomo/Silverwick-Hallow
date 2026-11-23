@@ -2,7 +2,7 @@ import { isCanonicalRole } from "@/data/canonical";
 import { scarletWomanSuccession } from "@/abilities/characters/scarletWoman";
 import { bindingOf, createRulesQuery, effectSemanticsOf, type RulesQueryEnvironment } from "./rulesQuery";
 import { applyGameRuleFactPlan, planCapturedDayEndFact, planCapturedVictoryEvidence, planGameRuleFactTransaction } from "./gameRuleFacts";
-import { isVictoryEvidenceType, isSaintNonqualifyingEvidenceType, victoryEvidenceInvalidReason, victoryEvidenceCollectionInvalidReason, SAINT_EXECUTION_GOOD_TEAM_LOST, SAINT_EXECUTION_EVIL_TEAM_LOST, SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED, SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED, MAYOR_DAY_END_GOOD_TEAM_WON, MAYOR_DAY_END_EVIL_TEAM_WON, RESOLVED_DEMON_DEATH_NO_SUCCESSOR, VORTOX_DUSK_RULING, VORTOX_WORKING_AT_DUSK, VORTOX_DAY_END_TYPES, FANG_GU_ONCE, isProvedDemon, isDayOnlyProvedDemon } from "./gameRuleFactRegistry";
+import { isVictoryEvidenceType, isSaintNonqualifyingEvidenceType, victoryEvidenceInvalidReason, victoryEvidenceCollectionInvalidReason, SAINT_EXECUTION_GOOD_TEAM_LOST, SAINT_EXECUTION_EVIL_TEAM_LOST, SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED, SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED, MAYOR_DAY_END_GOOD_TEAM_WON, MAYOR_DAY_END_EVIL_TEAM_WON, RESOLVED_DEMON_DEATH_NO_SUCCESSOR, VORTOX_DUSK_RULING, VORTOX_WORKING_AT_DUSK, VORTOX_DAY_END_TYPES, FANG_GU_ONCE, KLUTZ_GOOD_TEAM_LOST, KLUTZ_EVIL_TEAM_LOST, KLUTZ_CHOICE_RULING, isProvedDemon, isDayOnlyProvedDemon } from "./gameRuleFactRegistry";
 import { gainedRoleOf } from "./gainedAbility";
 export { isSaintNonqualifyingEvidenceType } from "./gameRuleFactRegistry";
 import { executionsAt, momentOrdinal } from "./lifeEvents";
@@ -18,8 +18,10 @@ const supportedRoles = new Set(["washerwoman", "librarian", "investigator", "che
 /** SV-5o: game-rule facts reviewed against the ending rules, which do not by themselves make the ending manual. The Fang Gu's ONCE only
  * records that a jump happened (no ending meaning); the Vortox's dusk facts carry their own advisory line and never contradict a verified
  * route (a Vortox alive at dusk cannot have died by a proved route, and two alive is evil's either way). Every other fact keeps the game
- * manual (the Pit-Hag's arbitrary deaths, the Toymaker, the Klutz until SV-5q, the Mastermind's final day). */
-const endingReviewedFactTypes = new Set<string>([FANG_GU_ONCE, ...VORTOX_DAY_END_TYPES]);
+ * manual (the Pit-Hag's arbitrary deaths, the Toymaker, the Mastermind's final day). */
+const endingReviewedFactTypes = new Set<string>([FANG_GU_ONCE, ...VORTOX_DAY_END_TYPES,
+  // SV-5q: the Klutz's choice, with its guard in endGameEligibility (on the Klutz's Day, a verified proposal it contradicts is withheld).
+  KLUTZ_GOOD_TEAM_LOST, KLUTZ_EVIL_TEAM_LOST, KLUTZ_CHOICE_RULING]);
 /** SV-5o: a gained ability (the Philosopher) of a character whose game-ending rule is read from the seat's own character (the Saint, the
  * Mayor), or of a character not on the list, is not covered: manual. */
 const gainedEndingRoles = new Set(["saint", "mayor"]);

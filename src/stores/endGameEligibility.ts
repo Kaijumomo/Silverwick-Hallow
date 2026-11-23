@@ -5,7 +5,7 @@ import { bindingOf, createRulesQuery } from "./rulesQuery";
 import { executionsAt } from "./lifeEvents";
 import { twinPairOf } from "./twinPair";
 import { SAINT_EXECUTION_GOOD_TEAM_LOST, SAINT_EXECUTION_EVIL_TEAM_LOST, MAYOR_DAY_END_GOOD_TEAM_WON, RESOLVED_DEMON_DEATH_NO_SUCCESSOR as DEMON_DEATH_NO_SUCCESSOR, isSaintNonqualifyingEvidenceType,
-  KLUTZ_CHOICE_RULING, KLUTZ_EVIL_TEAM_LOST, KLUTZ_GOOD_TEAM_LOST, VORTOX_DUSK_RULING, VORTOX_WORKING_AT_DUSK } from "./gameRuleFactRegistry";
+  KLUTZ_CHOICE_RULING, KLUTZ_EVIL_TEAM_LOST, KLUTZ_GOOD_TEAM_LOST, VORTOX_DUSK_RULING, VORTOX_WORKING_AT_DUSK, isMastermindFinalDayType } from "./gameRuleFactRegistry";
 
 export type EndGameEligibility = { kind: "verified"; team: "good" | "evil"; reason: "saint" | "mayor" | "demonDeath" | "twoAlive" }
   | { kind: "none" } | { kind: "unknown"; reason: string };
@@ -16,7 +16,18 @@ const unknown = (reason: string): EndGameEligibility => ({ kind: "unknown", reas
  * Twin's block holds ("Good can't win if both Twins live"): that proposal becomes the Storyteller's call. */
 export function endGameEligibility(game: StorytellerLobbyRecord, environment: RulesQueryEnvironment): EndGameEligibility {
   const result = baseEligibility(game, environment);
-  if (result.kind !== "verified" || result.team !== "good") return result;
+  if (result.kind !== "verified") return result;
+  // SV-5q: the Mastermind's final day. While its fact stands (the Demon's execution, the final Day, the Night after it) no proposal is
+  // made from the ordinary routes: "evil does not win from two players being alive, and good did not win by killing the Demon". Its own
+  // lines say who wins. (A Mastermind is not on the reviewed list either; this holds whatever the list says.)
+  if ((game.gameRuleFacts ?? []).some((fact) => isMastermindFinalDayType(fact.type))) return unknown("The Mastermind’s final day decides the game.");
+  // SV-5q: an advisory line that names the other team, or asks for a ruling, withholds the verified proposal (Q19 A: those lines keep
+  // "Check before ending the game"; they must never sit beside a plain winner they contradict).
+  const klutzToday = (type: string) => game.phase === "day" && (game.gameRuleFacts ?? []).some((fact) => fact.type === type && fact.recordedAt?.phase === "day" && fact.recordedAt.day === game.day);
+  if (klutzToday(KLUTZ_CHOICE_RULING) || klutzToday(result.team === "good" ? KLUTZ_GOOD_TEAM_LOST : KLUTZ_EVIL_TEAM_LOST))
+    return unknown("The Klutz’s choice needs the Storyteller’s ruling beside this ending.");
+  if (result.team === "good" && vortoxAdvisory(game)) return unknown("The Vortox’s no-execution ending needs the Storyteller’s ruling beside this ending.");
+  if (result.team !== "good") return result;
   const block = twinGoodWinBlock(game, environment);
   if (block) return unknown(block.reason);
   // The Good Twin was executed today with a functioning Evil Twin: evil wins, so no route may propose good (the block above no longer
