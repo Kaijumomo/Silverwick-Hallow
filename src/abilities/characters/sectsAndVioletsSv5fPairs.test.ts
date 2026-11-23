@@ -12,7 +12,8 @@ import { useV6Ui } from "@/features/grimoire-v6/v6Store";
 import { dayActionRows, dayVisitRows } from "@/features/grimoire-v6/day/dayCard";
 import { jugglerMayGuess } from "@/features/grimoire-v6/day/juggler";
 import { changeRoleIntent } from "@/stores/roleResolution";
-import { bind, num, openInStore, patchPlayer, pick, plan, planned, proofGame, proofQuery, request } from "@/test/proofFixtures";
+import { bind, impair, num, openInStore, patchPlayer, pick, plan, planned, proofGame, proofQuery, request } from "@/test/proofFixtures";
+import { ABNORMAL_IMPAIRED, ABNORMAL_VORTOX, abnormalMarksOf, abnormalReasons } from "@/stores/abnormalMarks";
 import { BARBER_PLAYERS } from "./barber";
 import { withGuesses } from "@/test/jugglerFixtures";
 import type { AbilityInputValue } from "@/abilities/semantics";
@@ -129,8 +130,20 @@ describe("SV-5f pairs: impairment tonight", () => {
     expect(night(g)).toMatchObject({ ok: false, code: "needsInput", requirements: [{ id: JUGGLER_COMMUNICATED }] });
   });
 
-  it("Mathematician / Juggler: the Mathematician is not built yet; a Juggler who gets the Storyteller's number reads nothing of it", () => {
-    const g = withGuesses(proofGame(["juggler", "mathematician", "chef", "fanggu", "witch"], "night", 2), "p0", [{ who: "p1", role: "mathematician", correct: true }]);
-    expect(planned(night(g)).informationDeliveries.at(-1)!.values).toEqual([{ requirementId: "correct", kind: "number", value: 1 }]);
+  it("Mathematician / Juggler: a correct guess on the Mathematician counts like any other; a wrong number the app proves false marks the Juggler ABNORMAL (SV-5g)", () => {
+    const guesses = [{ who: "p1", role: "mathematician", correct: true }];
+    const g = withGuesses(proofGame(["juggler", "mathematician", "chef", "fanggu", "witch"], "night", 2), "p0", guesses);
+    const plain = planned(night(g));
+    expect(plain.informationDeliveries.at(-1)!.values).toEqual([{ requirementId: "correct", kind: "number", value: 1 }]);
+    expect(abnormalReasons(abnormalMarksOf(plain.players.p0!))).toEqual([]);
+    // Poisoned: a wrong number (true: 1) is marked, the true one not.
+    const poisoned = impair(g, "p0");
+    expect(abnormalReasons(abnormalMarksOf(planned(night(poisoned, { [JUGGLER_COMMUNICATED]: num(0) })).players.p0!))).toEqual([ABNORMAL_IMPAIRED]);
+    expect(abnormalReasons(abnormalMarksOf(planned(night(poisoned, { [JUGGLER_COMMUNICATED]: num(1) })).players.p0!))).toEqual([]);
+    // A Vortox: the false number marks the Juggler, in the same commit that removes the guesses.
+    const vortox = withGuesses(proofGame(["juggler", "mathematician", "chef", "vortox", "witch"], "night", 2), "p0", guesses);
+    const told = planned(night(vortox, { [JUGGLER_COMMUNICATED]: num(3) }));
+    expect(abnormalReasons(abnormalMarksOf(told.players.p0!))).toEqual([ABNORMAL_VORTOX]);
+    expect(jugglerTally(told.players.p0!, 1).guesses).toEqual([]);
   });
 });

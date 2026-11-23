@@ -152,8 +152,7 @@ export function playerMarks(env: MarkEnv, player: STPlayerRecord): Mark[] {
   for (const token of effects.tokens) {
     const label = times(token.label, token.instances.length);
     // SV-4a: the MAD token's tooltip names the character ("Cerenovus: Mad about being the Sage"); every other token keeps "Character: Label".
-    // SV-5g: the ABNORMAL token's tooltip says why ("Mathematician: Abnormal (Vortox: false
-    // information)"), Storyteller-only like the seat.
+    // SV-5g: the ABNORMAL token's tooltip says why ("Mathematician: Abnormal (Vortox: false information)"), Storyteller-only like the seat.
     const reasons = token.key === "mathematician:abnormal" ? abnormalReasons(token.instances) : [];
     const title = token.about ? `${token.role.name}: ${token.label} about being the ${token.about}`
       : reasons.length ? `${token.role.name}: ${label} (${reasons.join("; ")})` : `${token.role.name}: ${label}`;
