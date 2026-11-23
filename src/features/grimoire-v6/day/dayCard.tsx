@@ -8,10 +8,15 @@ import { nominationsToday, toExecute } from "./dayModel";
 import { moonchildAwaitingChoice, startMoonchildChoice } from "./moonchild";
 import { startSweetheartChoice, sweetheartAwaitingChoice } from "./sweetheart";
 import { klutzAwaitingChoice, startKlutzChoice } from "./klutz";
+import { ARTIST_ANSWERS, answerArtist, artistMayAsk, visitFalseInformation } from "./privateVisit";
 import type { STPlayerRecord } from "@/stores/types";
 
 /** One Day actions row in the Moonchild row's markup: a dead character's public or Storyteller choice still to make (SV-1). */
-export type DayActionRow = { key: string; name: string; img: string; text: string; status: string; button: string; act: () => void };
+export type DayActionRow = { key: string; name: string; img: string; text: string; status: string; button: string; act: () => void;
+  /** SV-5 part 2a: a private visit's answer pills (the Artist's Yes / No / I don't know), drawn instead of the one button. */
+  answers?: { label: string; act: () => void }[];
+  /** SV-5 part 2a: the existing "Vortox · false info" pill beside the name. */
+  falseInfo?: boolean };
 
 /** Every character waiting on a Day action, in seat order. The Day button's "!" reads the same list. */
 export function dayActionRows(ctx: V6Ctx): DayActionRow[] {
@@ -31,6 +36,26 @@ export function dayActionRows(ctx: V6Ctx): DayActionRow[] {
   return rows;
 }
 
+/**
+ * SV-5 part 2a: the optional private visits (the Artist's question), in seat order, in the same row markup. They are NOT in
+ * dayActionRows, so they never raise the Day button's "!" (PO Q12 A): an optional visit must not nag all game.
+ */
+export function dayVisitRows(ctx: V6Ctx): DayActionRow[] {
+  const { game, registry } = ctx;
+  const rows: DayActionRow[] = [];
+  const base = (player: STPlayerRecord, roleId: "artist", text: string) => {
+    const def = registry.get(roleId);
+    return { key: `${roleId}:${player.id}`, name: def?.name ?? roleId, img: def ? iconUrlFor(def) : "", text, status: "", button: "", act: () => {},
+      falseInfo: visitFalseInformation(ctx, roleId) };
+  };
+  for (const id of game.seatOrder) {
+    const player = game.players[id];
+    if (artistMayAsk(ctx, player)) rows.push({ ...base(player!, "artist", `${player!.name || "The Artist"} may ask 1 yes/no question`),
+      answers: ARTIST_ANSWERS.map((label) => ({ label, act: () => answerArtist(ctx, player!, label) })) });
+  }
+  return rows;
+}
+
 /** The Day card (Day I / "N nominated today" / who is on the block), opened from the dock's Day button. */
 export function buildDayCard(ctx: V6Ctx): Record<string, unknown> {
   if (!ctx.cards.day) return { on: false };
@@ -41,7 +66,7 @@ export function buildDayCard(ctx: V6Ctx): Record<string, unknown> {
   const nominated = nominationsToday(currentVotingState(game)).length;
   const moonchild = Object.values(game.players).find((p) => moonchildAwaitingChoice(ctx, p));
   const moonDef = registry.get("moonchild");
-  const rows = dayActionRows(ctx);
+  const rows = [...dayActionRows(ctx), ...dayVisitRows(ctx)];
   return {
     on: true,
     w: Math.round(Math.max(360, Math.min(520, 2 * (layout.rx - layout.S / 2 - 60)))),
@@ -53,7 +78,8 @@ export function buildDayCard(ctx: V6Ctx): Record<string, unknown> {
     moonOn: !!moonchild, moonImg: moonDef ? iconUrlFor(moonDef) : "",
     moonText: moonchild ? `${moonchild.name || "The Moonchild"} learned they died` : "", moonStatus: "Awaiting choice",
     moonAct: () => { if (!moonchild) return; ctx.ui.set({ panel: ctx.ui.panel === "night" ? "night" : null }); startMoonchildChoice(ctx, moonchild); },
-    // SV-1: the Day actions rows (the Moonchild's, the Sweetheart's, the Klutz's), each drawn with the Moonchild row's markup.
+    // SV-1: the Day actions rows (the Moonchild's, the Sweetheart's, the Klutz's), each drawn with the Moonchild row's markup; then
+    // SV-5 part 2a's optional private visits (the Artist's), in the same markup.
     rows,
   };
 }

@@ -346,6 +346,8 @@ const S335: React.CSSProperties = { "color": "rgba(222,216,204,.35)", "letterSpa
 const S336: React.CSSProperties = { "alignSelf": "center", "display": "inline-flex", "alignItems": "center", "gap": "6px", "padding": "3px 10px", "borderRadius": "99px", "border": "1px solid rgba(180,140,224,.55)", "background": "rgba(120,80,170,.2)", "fontSize": "13px", "color": "rgba(222,216,204,.7)" };
 // PO 2026-11-21: the shared Night status pill (Completed / Not waking), the Drunk pill's shape in the grimoire's silver line colour.
 const NIGHT_STATE_PILL: React.CSSProperties = { "alignSelf": "center", "display": "inline-flex", "alignItems": "center", "gap": "6px", "padding": "3px 10px", "borderRadius": "99px", "border": "1px solid rgba(176,186,204,.4)", "background": "rgba(176,186,204,.1)", "fontSize": "13px", "fontWeight": "600", "color": "rgba(222,216,204,.78)" };
+// SV-5 part 2a: the Artist's answer pills, side by side at the Day actions row's right end (no extra height).
+const DAY_VISIT_PILLS: React.CSSProperties = { "flex": "none", "display": "flex", "alignItems": "center", "gap": "8px" };
 const NIGHT_STATE_GLYPH: React.CSSProperties = { "width": "12px", "height": "12px", "fill": "none", "stroke": "currentColor", "strokeWidth": "2.2", "strokeLinecap": "round", "strokeLinejoin": "round" };
 const S337: React.CSSProperties = { "width": "7px", "height": "7px", "borderRadius": "50%", "background": "#b48ce0" };
 const S338: React.CSSProperties = { "fontWeight": "700", "color": "#efe6fa" };
@@ -3012,17 +3014,36 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                           <span style={S298}>
                             {T(row.name)}
                           </span>
+                          {row.status && (
                           <span style={css(`font-size:12px; font-weight:600; color:#f2c46a;`)}>
                             {T(row.status)}
                           </span>
+                          )}
+                          {/* SV-5 part 2a: the Night card's "Vortox · false info" pill, as is. */}
+                          {row.falseInfo && (
+                          <span style={S336}>
+                            <span style={S337} />
+                            <span style={S338}>Vortox</span>
+                            · false info
+                          </span>
+                          )}
                         </div>
                         <span style={S352}>
                           {T(row.text)}
                         </span>
                       </div>
+                      {row.answers ? (
+                      // SV-5 part 2a: the Artist's answers, the choice language's quiet pills on the right (one tap records it).
+                      <div role="group" aria-label={`${row.name}: the answer you whispered`} style={DAY_VISIT_PILLS}>
+                        {row.answers.map((answer: any) => (
+                          <button key={answer.label} type="button" className="gv-choice-pill is-small" onClick={answer.act}>{T(answer.label)}</button>
+                        ))}
+                      </div>
+                      ) : (
                       <button onClick={row.act} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S373}>
                         {T(row.button)}
                       </button>
+                      )}
                     </div>
                   ))}
                 </div>
