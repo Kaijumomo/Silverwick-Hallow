@@ -2,7 +2,7 @@ import { isCanonicalRole } from "@/data/canonical";
 import { scarletWomanSuccession } from "@/abilities/characters/scarletWoman";
 import { bindingOf, createRulesQuery, effectSemanticsOf, type RulesQueryEnvironment } from "./rulesQuery";
 import { applyGameRuleFactPlan, planCapturedDayEndFact, planCapturedVictoryEvidence, planGameRuleFactTransaction } from "./gameRuleFacts";
-import { isVictoryEvidenceType, isSaintNonqualifyingEvidenceType, victoryEvidenceInvalidReason, victoryEvidenceCollectionInvalidReason, SAINT_EXECUTION_GOOD_TEAM_LOST, SAINT_EXECUTION_EVIL_TEAM_LOST, SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED, SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED, MAYOR_DAY_END_GOOD_TEAM_WON, MAYOR_DAY_END_EVIL_TEAM_WON, RESOLVED_DEMON_DEATH_NO_SUCCESSOR, VORTOX_DUSK_RULING, VORTOX_WORKING_AT_DUSK, VORTOX_DAY_END_TYPES, FANG_GU_ONCE } from "./gameRuleFactRegistry";
+import { isVictoryEvidenceType, isSaintNonqualifyingEvidenceType, victoryEvidenceInvalidReason, victoryEvidenceCollectionInvalidReason, SAINT_EXECUTION_GOOD_TEAM_LOST, SAINT_EXECUTION_EVIL_TEAM_LOST, SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED, SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED, MAYOR_DAY_END_GOOD_TEAM_WON, MAYOR_DAY_END_EVIL_TEAM_WON, RESOLVED_DEMON_DEATH_NO_SUCCESSOR, VORTOX_DUSK_RULING, VORTOX_WORKING_AT_DUSK, VORTOX_DAY_END_TYPES, FANG_GU_ONCE, isProvedDemon, isDayOnlyProvedDemon } from "./gameRuleFactRegistry";
 import { gainedRoleOf } from "./gainedAbility";
 export { isSaintNonqualifyingEvidenceType } from "./gameRuleFactRegistry";
 import { executionsAt, momentOrdinal } from "./lifeEvents";
@@ -169,16 +169,21 @@ export function captureResolvedDemonDeath(before: StorytellerLobbyRecord, after:
   // compound chains remain unknown, even if their final counts look simple.
   if (newEvents.length !== 1 || newEvents[0]!.id !== eventId) return accepted(after);
   const event = newEvents[0]!;
-  if (!(event.kind === "death" || event.kind === "execution" && event.outcome === "died") || event.actualRoleAtEvent !== "imp" || event.moment.phase !== before.phase || event.moment.day !== before.day) return accepted(after);
+  // SV-5p: the Imp, and on the Day only (an execution or a Slayer's shot, Q20 A) the four Sects & Violets Demons.
+  const demon = event.actualRoleAtEvent;
+  if (!(event.kind === "death" || event.kind === "execution" && event.outcome === "died") || !isProvedDemon(demon) || event.moment.phase !== before.phase || event.moment.day !== before.day) return accepted(after);
+  if (isDayOnlyProvedDemon(demon) && (before.phase !== "day" || (mode !== "recordedDay" && mode !== "automaticSlayer"))) return accepted(after);
+  const demonRole = environment.registry.get(demon!);
+  if (!demonRole || !isCanonicalRole(demonRole)) return accepted(after);
   const source = before.players[event.subject.playerId];
-  if (!source || !source.alive || source.actualRole !== "imp" || source.participantId !== event.subject.participantId || !sameSource(source, after.players[source.id]) || after.players[source.id]!.alive) return accepted(after);
+  if (!source || !source.alive || source.actualRole !== demon || source.participantId !== event.subject.participantId || !sameSource(source, after.players[source.id]) || after.players[source.id]!.alive) return accepted(after);
   if (victoryCoverageEligibility(before, environment).kind !== "automated" || victoryCoverageEligibility(after, environment).kind !== "automated") return accepted(after);
   const livingDemons = (game: StorytellerLobbyRecord) => participants(game).filter(player => player.alive && environment.registry.get(player.actualRole)?.type === "demon");
   if (livingDemons(before).length !== 1 || livingDemons(after).length !== 0 || ordinaryEndingAlreadyReached(before, environment)) return accepted(after);
   const prior = before.gameRuleFacts.filter(fact => isVictoryEvidenceType(fact.type));
   if (prior.some(fact => !isSaintNonqualifyingEvidenceType(fact.type))) return accepted(after);
   const query = createRulesQuery(before, environment);
-  if (query.modifierGate("imp", ["death", "role", "registration"]).kind !== "clear" || scarletWomanSuccession(query, bindingOf(source)).kind !== "none") return accepted(after);
+  if (query.modifierGate(demon!, ["death", "role", "registration"]).kind !== "clear" || scarletWomanSuccession(query, bindingOf(source)).kind !== "none") return accepted(after);
   if (mode === "recordedNight" || mode === "automaticImp") {
     for (const candidate of participants(before).filter(player => player.alive && !player.isTraveler && player.participantId !== source.participantId)) {
       const eligible = query.registersAsType(bindingOf(candidate), "minion", "imp");

@@ -2,13 +2,18 @@
 // and the game never ends by itself. SV-5o puts all 25 Sects & Violets characters on the reviewed game-ending list
 // (docs/ai/SECTS_AND_VIOLETS_SV5H_PAIRS.md).
 import { beforeEach, describe, expect, it } from "vitest";
-import { patchPlayer, proofEnv, proofGame } from "@/test/proofFixtures";
+import { impair, openInStore, patchPlayer, proofEnv, proofGame } from "@/test/proofFixtures";
+import { participantRefOf } from "./participants";
+import { captureResolvedDemonDeath, validVictoryEvidence, type ResolvedDemonDeathMode } from "./victoryEvidence";
+import { StorytellerGamePersistedSchema } from "./schemas";
+import { endHint } from "@/features/grimoire-v6/vm/chrome";
+import type { V6Ctx } from "@/features/grimoire-v6/ctx";
 import { useStorytellerStore as store } from "./storytellerStore";
 import { endGameEligibility } from "./endGameEligibility";
 import { victoryCoverageEligibility } from "./victoryEvidence";
-import { FANG_GU_ONCE, KLUTZ_CHOICE_RULING, MASTERMIND_FINAL_DAY, PIT_HAG_ARBITRARY_DEATHS, VORTOX_WORKING_AT_DUSK } from "./gameRuleFactRegistry";
+import { RESOLVED_DEMON_DEATH_NO_SUCCESSOR, FANG_GU_ONCE, KLUTZ_CHOICE_RULING, MASTERMIND_FINAL_DAY, PIT_HAG_ARBITRARY_DEATHS, VORTOX_WORKING_AT_DUSK } from "./gameRuleFactRegistry";
 import { ENDING_EVIDENCE_ROLES } from "@/abilities/coverageEvidence";
-import type { GameRuleFactRecord, StorytellerLobbyRecord } from "./types";
+import type { CurrentParticipantRef, GameRuleFactRecord, StorytellerLobbyRecord } from "./types";
 
 const env = proofEnv();
 export const SECTS_AND_VIOLETS = ["clockmaker", "dreamer", "snakecharmer", "mathematician", "flowergirl", "towncrier", "oracle", "savant", "seamstress", "philosopher", "artist", "juggler", "sage",
@@ -74,5 +79,73 @@ describe("SV-5o: all 25 Sects & Violets characters on the game-ending list", () 
     it.each(["saint", "mayor", "fisherman"])("the %s's ability gained: manual (its ending rule is read from the seat's own character, or it is not reviewed)", (role) => {
       expect(endGameEligibility(gained(base(), "p1", role), env)).toMatchObject({ kind: "unknown" });
     });
+  });
+});
+
+describe("SV-5p: the Demon-death proof for the four Sects & Violets Demons (Day executions and the Slayer's shot only, Q20 A)", () => {
+  const state = () => store.getState();
+  const game = () => state().game!;
+  const ctx = (g: StorytellerLobbyRecord) => ({ game: g, script: env.script, registry: env.registry, privacy: false }) as unknown as V6Ctx;
+  /** A death of p0 recorded by hand (the same shape the commands record), for the capture's mode-by-mode reading. */
+  const died = (g: StorytellerLobbyRecord, execution: boolean): StorytellerLobbyRecord => ({ ...patchPlayer(g, "p0", { alive: false }), lifeEventWindow: { ...g.lifeEventWindow, events: [...g.lifeEventWindow.events,
+    { id: "death-p0", subject: participantRefOf(g, "p0") as CurrentParticipantRef, actualRoleAtEvent: g.players.p0!.actualRole,
+      ...(execution ? { kind: "execution" as const, outcome: "died" as const, moment: { phase: "day" as const, day: g.day } } : { kind: "death" as const, moment: { phase: g.phase as "day" | "night", day: g.day } }) }] } });
+  const capture = (g: StorytellerLobbyRecord, mode: ResolvedDemonDeathMode, execution = true) => {
+    const result = captureResolvedDemonDeath(g, died(g, execution), "death-p0", env, mode);
+    if (!result.ok) throw new Error(result.message);
+    return result.game;
+  };
+
+  it.each(DEMONS)("the %s executed on the Day: proved, \"The Demon is dead. Good wins\" (the Storyteller still ends the game)", (demon) => {
+    openInStore(proofGame([demon, "sage", "oracle", "witch", "dreamer"], "day", 2));
+    expect(state().recordExecution("p0", "died")).toMatchObject({ ok: true });
+    expect(game().gameRuleFacts).toEqual([expect.objectContaining({ type: RESOLVED_DEMON_DEATH_NO_SUCCESSOR, provenance: expect.objectContaining({ sourceCharacter: demon }) })]);
+    expect(endGameEligibility(game(), env)).toEqual({ kind: "verified", team: "good", reason: "demonDeath" });
+    expect(endHint(ctx(game()))).toBe("The Demon is dead. Good wins");
+    expect(game().phase).toBe("day");
+    expect(game().result).toBeUndefined();
+    expect(StorytellerGamePersistedSchema.safeParse(JSON.parse(JSON.stringify(game()))).success).toBe(true);
+    // Kept through the following Night (the Life Event's own window), then gone with it.
+    expect(state().advancePhase()).toMatchObject({ ok: true });
+    expect(endGameEligibility(game(), env)).toMatchObject({ kind: "verified", team: "good" });
+    // Undo restores the living Demon: nothing proved.
+    state().undo(); state().undo();
+    expect(game().players.p0!.alive).toBe(true);
+    expect(game().gameRuleFacts).toEqual([]);
+  });
+
+  it.each(DEMONS)("the %s killed by the Slayer's shot on the Day: proved", (demon) => {
+    expect(capture(proofGame([demon, "slayer", "oracle", "witch"], "day", 2), "automaticSlayer", false).gameRuleFacts).toHaveLength(1);
+  });
+
+  it.each(DEMONS)("the %s dying at night is not proved: \"Check whether the game has ended\"", (demon) => {
+    const night = proofGame([demon, "sage", "oracle", "witch"], "night", 3);
+    for (const mode of ["recordedNight", "automaticImp"] as const) expect(capture(night, mode, false).gameRuleFacts, mode).toEqual([]);
+    openInStore(night);
+    expect(state().recordDeath("p0")).toMatchObject({ ok: true });
+    expect(game().gameRuleFacts).toEqual([]);
+    expect(endGameEligibility(game(), env)).toMatchObject({ kind: "unknown" });
+    expect(endHint(ctx(game()))).toBe("The Demon is dead. Check whether the game has ended");
+  });
+
+  it("a forged night proof for a Sects & Violets Demon is refused on load", () => {
+    const day = capture(proofGame(["fanggu", "sage", "oracle", "witch"], "day", 2), "recordedDay");
+    const fact = day.gameRuleFacts[0]!;
+    const forged = { ...day, phase: "night" as const, day: 3, gameRuleFacts: [{ ...fact, recordedAt: { phase: "night" as const, day: 3 }, expiresAt: { phase: "night" as const, day: 4 } }],
+      lifeEventWindow: { ...day.lifeEventWindow, events: day.lifeEventWindow.events.map((event) => ({ ...event, kind: "death" as const, moment: { phase: "night" as const, day: 3 } })) } } as unknown as StorytellerLobbyRecord;
+    expect(validVictoryEvidence(forged)).toEqual([]);
+  });
+
+  it("not proved: a working Scarlet Woman with five or more alive, a second Demon, the Evil Twin's block, a Mastermind", () => {
+    expect(capture(proofGame(["vortox", "scarletwoman", "oracle", "sage", "dreamer"], "day", 2), "recordedDay").gameRuleFacts).toEqual([]);
+    expect(capture(proofGame(["vortox", "nodashii", "oracle", "sage", "dreamer"], "day", 2), "recordedDay").gameRuleFacts).toEqual([]);
+    expect(capture(proofGame(["vortox", "mastermind", "oracle", "sage", "dreamer"], "day", 2), "recordedDay").gameRuleFacts).toEqual([]);
+    // A poisoned Scarlet Woman does not take over (four alive: she never could).
+    expect(capture(impair(proofGame(["nodashii", "scarletwoman", "oracle", "sage"], "day", 2), "p1"), "recordedDay").gameRuleFacts).toHaveLength(1);
+  });
+
+  it("the Imp keeps its Day and Night proof unchanged", () => {
+    expect(capture(proofGame(["imp", "chef", "oracle"], "night", 2), "recordedNight", false).gameRuleFacts).toHaveLength(1);
+    expect(capture(proofGame(["imp", "chef", "oracle"], "day", 2), "recordedDay").gameRuleFacts).toHaveLength(1);
   });
 });

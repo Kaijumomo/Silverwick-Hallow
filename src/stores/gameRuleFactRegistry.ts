@@ -76,6 +76,11 @@ export const MASTERMIND_FINAL_DAY_TYPES = [MASTERMIND_FINAL_DAY, MASTERMIND_FINA
 export const isMastermindFinalDayType = (type: string): boolean => (MASTERMIND_FINAL_DAY_TYPES as readonly string[]).includes(type);
 export const VICTORY_EVIDENCE_TYPES = [SAINT_EXECUTION_GOOD_TEAM_LOST, SAINT_EXECUTION_EVIL_TEAM_LOST, SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED, SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED, MAYOR_DAY_END_GOOD_TEAM_WON, MAYOR_DAY_END_EVIL_TEAM_WON, RESOLVED_DEMON_DEATH_NO_SUCCESSOR] as const;
 export const isVictoryEvidenceType = (type: string): boolean => (VICTORY_EVIDENCE_TYPES as readonly string[]).includes(type);
+/** SV-5p: the Demons whose death the resolved-death proof covers. The Imp on Day and Night (its night self-pass is checked); the four
+ * Sects & Violets Demons on the Day only (an execution or a Slayer's shot; Q20 A): a night death of one stays the Storyteller's check. */
+export const PROVED_DEMONS = ["imp", "fanggu", "nodashii", "vigormortis", "vortox"] as const;
+export const isProvedDemon = (role: unknown): boolean => typeof role === "string" && (PROVED_DEMONS as readonly string[]).includes(role);
+export const isDayOnlyProvedDemon = (role: unknown): boolean => isProvedDemon(role) && role !== "imp";
 export const isSaintNonqualifyingEvidenceType = (type: string): boolean => type === SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED || type === SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED;
 
 /**
@@ -173,7 +178,8 @@ export function victoryEvidenceInvalidReason(game: Pick<StorytellerLobbyRecord, 
   const source = fact.provenance?.sourceParticipant;
   const saint = fact.type === SAINT_EXECUTION_GOOD_TEAM_LOST || fact.type === SAINT_EXECUTION_EVIL_TEAM_LOST || isSaintNonqualifyingEvidenceType(fact.type);
   const demon = fact.type === RESOLVED_DEMON_DEATH_NO_SUCCESSOR;
-  const role = demon ? "imp" : saint ? "saint" : "mayor";
+  const claimed = fact.provenance?.sourceCharacter;
+  const role = demon ? (isProvedDemon(claimed) ? claimed! : "imp") : saint ? "saint" : "mayor";
   if (!source || source.kind !== "participant" || !source.participantId || fact.provenance?.sourceCharacter !== role || fact.provenance.reason !== undefined || fact.provenance.note !== undefined) return "Qualification requires its exact character and durable participant source.";
   const player = game.players[source.playerId];
   if (!player || player.isEmpty || player.participantId !== source.participantId) return "Qualification source no longer belongs to this game.";
@@ -184,9 +190,10 @@ export function victoryEvidenceInvalidReason(game: Pick<StorytellerLobbyRecord, 
   }
   if ((!demon && fact.recordedAt.phase !== "day") || fact.expiresAt?.phase !== fact.recordedAt.phase || fact.expiresAt.day !== fact.recordedAt.day + 1) return "Qualification has an invalid lifetime.";
   if (demon) {
+    if (isDayOnlyProvedDemon(role) && fact.recordedAt.phase !== "day") return "This Demon's death is proved only on the Day.";
     const event = game.lifeEventWindow.events.find(event => event.id === fact.resolutionId);
-    if (!event || !(event.kind === "death" || event.kind === "execution" && event.outcome === "died") || event.actualRoleAtEvent !== "imp" || event.moment.phase !== fact.recordedAt.phase || event.moment.day !== fact.recordedAt.day || event.subject.participantId !== source.participantId || event.subject.playerId !== source.playerId) return "Demon resolution must reference its exact retained Imp death.";
-    if (player.actualRole !== "imp" || player.alive || Object.values(game.players).some(player => !player.isEmpty && player.alive && player.actualRole === "imp")) return "Demon resolution requires its dead Imp identity and no living Imp.";
+    if (!event || !(event.kind === "death" || event.kind === "execution" && event.outcome === "died") || event.actualRoleAtEvent !== role || event.moment.phase !== fact.recordedAt.phase || event.moment.day !== fact.recordedAt.day || event.subject.participantId !== source.participantId || event.subject.playerId !== source.playerId) return "Demon resolution must reference its exact retained Demon death.";
+    if (player.actualRole !== role || player.alive || Object.values(game.players).some(player => !player.isEmpty && player.alive && player.actualRole === role)) return "Demon resolution requires its dead Demon identity and no living Demon of that character.";
   } else if (saint) {
     const event = game.lifeEventWindow.events.find(event => event.id === fact.resolutionId);
     if (!event || event.kind !== "execution" || event.outcome !== "died" || event.actualRoleAtEvent !== "saint" || event.moment.day !== fact.recordedAt.day || event.subject.participantId !== source.participantId || event.subject.playerId !== source.playerId) return "Saint qualification must reference its exact retained execution death.";
