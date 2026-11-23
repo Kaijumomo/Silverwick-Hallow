@@ -346,6 +346,17 @@ const S335: React.CSSProperties = { "color": "rgba(222,216,204,.35)", "letterSpa
 const S336: React.CSSProperties = { "alignSelf": "center", "display": "inline-flex", "alignItems": "center", "gap": "6px", "padding": "3px 10px", "borderRadius": "99px", "border": "1px solid rgba(180,140,224,.55)", "background": "rgba(120,80,170,.2)", "fontSize": "13px", "color": "rgba(222,216,204,.7)" };
 // PO 2026-11-21: the shared Night status pill (Completed / Not waking), the Drunk pill's shape in the grimoire's silver line colour.
 const NIGHT_STATE_PILL: React.CSSProperties = { "alignSelf": "center", "display": "inline-flex", "alignItems": "center", "gap": "6px", "padding": "3px 10px", "borderRadius": "99px", "border": "1px solid rgba(176,186,204,.4)", "background": "rgba(176,186,204,.1)", "fontSize": "13px", "fontWeight": "600", "color": "rgba(222,216,204,.78)" };
+// SV-5 part 2a: the Artist's answer pills, side by side at the Day actions row's right end (no extra height).
+// PO 2026-11-23 (alignment): every Day actions row (the Slayer's, the Moonchild's and the others, the Artist's, the Savant's) is
+// one shared layout. The name, its status or pill, and the row's button(s) share one centre line; the description sits under the name.
+// The button line uses the Night card's "Not Tonight" trick (negative vertical margin), so a 40px button does not make the row taller.
+// On a narrow card the pill drops under the name rather than squeezing into the buttons (independent check S1).
+const DAY_ROW_TEXT: React.CSSProperties = { "flex": "1", "minWidth": "0", "display": "grid", "gridTemplateColumns": "minmax(0, 1fr) auto", "columnGap": "12px", "rowGap": "2px", "alignItems": "center" };
+const DAY_ROW_NAMES: React.CSSProperties = { "gridColumn": "1", "gridRow": "1", "minWidth": "0", "display": "flex", "flexWrap": "wrap", "alignItems": "center", "gap": "4px 8px" };
+const DAY_ROW_NOTE: React.CSSProperties = { "gridColumn": "1", "gridRow": "2", "fontSize": "12px", "color": "rgba(222,216,204,.55)", "whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis" };
+const DAY_ROW_ACTIONS: React.CSSProperties = { "gridColumn": "2", "gridRow": "1", "display": "flex", "alignItems": "center", "margin": "-8px 0" };
+const DAY_VISIT_FALSE_INFO: React.CSSProperties = { ...S336, "flex": "none", "whiteSpace": "nowrap" };
+const DAY_VISIT_PILLS: React.CSSProperties = { "flex": "none", "display": "flex", "alignItems": "center", "gap": "8px" };
 const NIGHT_STATE_GLYPH: React.CSSProperties = { "width": "12px", "height": "12px", "fill": "none", "stroke": "currentColor", "strokeWidth": "2.2", "strokeLinecap": "round", "strokeLinejoin": "round" };
 const S337: React.CSSProperties = { "width": "7px", "height": "7px", "borderRadius": "50%", "background": "#b48ce0" };
 const S338: React.CSSProperties = { "fontWeight": "700", "color": "#efe6fa" };
@@ -2985,8 +2996,8 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                   {vm.sv?.shown && (
                   <div style={S372}>
                     <div role="img" aria-hidden="true" style={css(`width:44px; height:44px; flex:none; border-radius:50%; background:url(${vm.sv?.img ?? ''}) center/78% no-repeat, radial-gradient(circle at 38% 30%, #f1e6c9, #b09566); box-shadow:0 0 0 2px #14151d, 0 0 0 3px rgba(176,186,204,.35); filter:${vm.sv?.rowFilter ?? ''};`)} />
-                    <div style={S350}>
-                      <div style={S41}>
+                    <div style={DAY_ROW_TEXT}>
+                      <div style={DAY_ROW_NAMES}>
                         <span style={S298}>
                           Slayer
                         </span>
@@ -2994,35 +3005,66 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                           {T(vm.sv?.status)}
                         </span>
                       </div>
-                      <span style={S352}>
+                      <span style={DAY_ROW_NOTE}>
                         {T(vm.sv?.holderText)}
                       </span>
+                      <div style={DAY_ROW_ACTIONS}>
+                        <button onClick={vm.sv?.toggle} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S373}>
+                          {T(vm.sv?.btnText)}
+                        </button>
+                      </div>
                     </div>
-                    <button onClick={vm.sv?.toggle} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S373}>
-                      {T(vm.sv?.btnText)}
-                    </button>
                   </div>
                   )}
                   {/* SV-1: one row per waiting Day action (the Moonchild's, the Sweetheart's), each in the Moonchild row's markup. */}
                   {(vm.dayC?.rows ?? []).map((row: any) => (
                     <div key={row.key} style={S372}>
                       <div role="img" aria-hidden="true" style={css(`width:44px; height:44px; flex:none; border-radius:50%; background:url(${row.img ?? ''}) center/78% no-repeat, radial-gradient(circle at 38% 30%, #f1e6c9, #b09566); box-shadow:0 0 0 2px #14151d, 0 0 0 3px rgba(176,186,204,.35);`)} />
-                      <div style={S350}>
-                        <div style={S41}>
+                      <div style={DAY_ROW_TEXT}>
+                        <div style={DAY_ROW_NAMES}>
                           <span style={S298}>
                             {T(row.name)}
                           </span>
+                          {row.status && (
                           <span style={css(`font-size:12px; font-weight:600; color:#f2c46a;`)}>
                             {T(row.status)}
                           </span>
+                          )}
+                          {/* SV-5 part 2a: the Night card's "Vortox · false info" pill, as is. */}
+                          {row.falseInfo && (
+                          <span style={DAY_VISIT_FALSE_INFO}>
+                            <span style={S337} />
+                            <span style={S338}>Vortox</span>
+                            · false info
+                          </span>
+                          )}
                         </div>
-                        <span style={S352}>
+                        <span style={DAY_ROW_NOTE}>
                           {T(row.text)}
                         </span>
+                      <div style={DAY_ROW_ACTIONS}>
+                      {row.done ? (
+                      // SV-5e2: the Savant's visit is recorded for today: the Night card's Completed pill, read-only.
+                      <span style={NIGHT_STATE_PILL} data-day-visit="done">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" style={NIGHT_STATE_GLYPH}>
+                          <path d="m5 12.5 4.5 4.5L19 7.5" />
+                        </svg>
+                        {T(row.done)}
+                      </span>
+                      ) : row.answers ? (
+                      // SV-5 part 2a: the Artist's answers or the Savant's "Told today", the choice language's quiet pills on the right (one tap records it).
+                      <div role="group" aria-label={row.answersLabel} style={DAY_VISIT_PILLS}>
+                        {row.answers.map((answer: any) => (
+                          <button key={answer.label} type="button" className="gv-choice-pill is-small" onClick={answer.act}>{T(answer.label)}</button>
+                        ))}
                       </div>
+                      ) : (
                       <button onClick={row.act} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S373}>
                         {T(row.button)}
                       </button>
+                      )}
+                      </div>
+                      </div>
                     </div>
                   ))}
                 </div>

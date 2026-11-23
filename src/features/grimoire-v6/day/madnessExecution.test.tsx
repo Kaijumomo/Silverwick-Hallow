@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
-import { useStorytellerStore as store } from "@/stores/storytellerStore";
+import { captureVotingContext, useStorytellerStore as store } from "@/stores/storytellerStore";
 import { VotingProvider } from "@/features/voting/VotingWorkspace";
 import { CERENOVUS_CHARACTER, CERENOVUS_TARGET } from "@/abilities/characters/cerenovus";
 import { patchPlayer, impair, openInStore, pick, plan, planned, proofGame, request } from "@/test/proofFixtures";
@@ -187,38 +187,33 @@ describe("SV-4b: Execute in the Day", () => {
     expect(useV6Ui.getState().toast).toMatch(/already dead/);
   });
 
-  it("a second execution that Day asks the existing 'additional execution' confirmation, and is recorded only when he agrees", async () => {
+  it("SV-5e3: once the Day has its execution, Execute asks nothing, records nothing and says to wait for tonight", async () => {
     madGame(["p2", "p3"], "day");
     await run("p2");
     expect(today()).toHaveLength(1);
-    let pending = run("p3");
-    await settle();
-    expect(useV6Ui.getState().ask).toMatchObject({ title: "Confirm", body: expect.stringContaining("An execution is already recorded for Day 2") });
-    await answer("cancel");
-    await pending;
+    await run("p3");
+    expect(useV6Ui.getState().ask).toBeNull();
+    expect(useV6Ui.getState().toast).toBe("One execution per day: wait for tonight.");
     expect(today()).toHaveLength(1);
     expect(game().players.p3!.alive).toBe(true);
-    pending = run("p3");
-    await settle();
-    await answer("run");
-    await pending;
-    expect(today()).toHaveLength(2);
-    expect(game().players.p3!.alive).toBe(false);
   });
 
-  it("a second execution of a Fool that survives still uses the ability up, in the same step", async () => {
-    madGame(["p2", "p4"], "day");
-    await run("p2");
-    const pending = run("p4");
-    await settle();
-    await answer("alt"); // Did Player 4 die? No
-    await settle();
-    await answer("run"); // Record an additional execution? Yes
-    await pending;
-    expect(game().players.p4).toMatchObject({ alive: true, abilityUsed: true });
-    expect(today()).toHaveLength(2);
-    act(() => { store.getState().undo(); });
+  it("SV-5e3: the same for a Fool (no 'Did they die?' question first) and for an execution the nomination made", async () => {
+    madGame(["p4"], "day");
+    act(() => { const r = store.getState().recordExecution("p5", "died", {}, undefined, captureVotingContext()); if (!r.ok) throw new Error(r.message); });
+    await run("p4");
+    expect(useV6Ui.getState().ask).toBeNull();
+    expect(useV6Ui.getState().toast).toBe("One execution per day: wait for tonight.");
     expect(game().players.p4).toMatchObject({ alive: true, abilityUsed: false });
+    expect(today()).toHaveLength(1);
+  });
+
+  it("SV-5e3: a dead mad player after the Day's execution is refused the same way", async () => {
+    madGame(["p2", "p3"], "day");
+    await run("p2");
+    act(() => { store.setState({ game: patchPlayer(game(), "p3", { alive: false }) }); });
+    await run("p3");
+    expect(useV6Ui.getState().toast).toBe("One execution per day: wait for tonight.");
     expect(today()).toHaveLength(1);
   });
 
@@ -299,5 +294,74 @@ describe("SV-4b: Execute at night", () => {
     await pending;
     expect(game().players.p0!.alive).toBe(true);
     expect(today()).toEqual([expect.objectContaining({ kind: "execution", outcome: "survived" })]);
+  });
+});
+
+describe("SV-5e3: a drunk or poisoned Mutant's ability is not working", () => {
+  const MUTANT = ["mutant", "imp", "chef", "empath"];
+  const NOT_WORKING = "This Mutant's ability is not working.";
+
+  it("a sober Mutant: no line, no question", async () => {
+    openInStore(proofGame(MUTANT, "day", 2));
+    await run("p0");
+    expect(game().players.p0!.alive).toBe(false);
+    expect(today()).toHaveLength(1);
+  });
+
+  it.each(["poisoned", "drunk"])("a %s Mutant in the Day: one question before anything is recorded; Cancel records nothing, Execute anyway records the execution", async (type) => {
+    openInStore(impair(proofGame(MUTANT, "day", 2), "p0", type));
+    let pending = run("p0");
+    await settle();
+    expect(useV6Ui.getState().ask).toMatchObject({ title: "This Mutant's ability is not working", okText: "Execute anyway",
+      body: "Player 0 is drunk or poisoned, so being mad about being an Outsider has no penalty. Execute anyway?" });
+    await answer("cancel");
+    await pending;
+    expect(today()).toEqual([]);
+    expect(game().players.p0!.alive).toBe(true);
+    pending = run("p0");
+    await settle();
+    await answer("run");
+    await pending;
+    expect(today()).toEqual([expect.objectContaining({ kind: "execution", outcome: "died", actualRoleAtEvent: "mutant" })]);
+  });
+
+  it("when 'Did they die?' is asked anyway, the line goes inside that question: one dialog, not two", async () => {
+    let g = impair(proofGame(MUTANT, "day", 2), "p0", "poisoned");
+    g = impair(g, "p0", "protected");
+    openInStore(g);
+    const pending = run("p0");
+    await settle();
+    expect(useV6Ui.getState().ask?.title).toBe("Did Player 0 die?");
+    expect(useV6Ui.getState().ask?.body).toContain(`${NOT_WORKING} Player 0 is drunk or poisoned`);
+    await answer("run");
+    await pending;
+    expect(useV6Ui.getState().ask).toBeNull();
+    expect(today()).toEqual([expect.objectContaining({ kind: "execution", outcome: "died" })]);
+  });
+
+  it("at night too: the same question before the ordinary death", async () => {
+    openInStore(impair(proofGame(MUTANT, "night", 3), "p0", "poisoned"));
+    const pending = run("p0");
+    await settle();
+    expect(useV6Ui.getState().ask?.title).toBe("This Mutant's ability is not working");
+    await answer("run");
+    await pending;
+    expect(game().players.p0!.alive).toBe(false);
+  });
+
+  it("a poisoned Mutant also mad from a working Cerenovus: that madness's execution, so no line", async () => {
+    madGame(["p2"], "day", ["cerenovus", "imp", "mutant", "empath"]);
+    openInStore(impair(game(), "p2", "poisoned"));
+    await run("p2");
+    expect(useV6Ui.getState().ask).toBeNull();
+    expect(today()).toEqual([expect.objectContaining({ kind: "execution", outcome: "died" })]);
+  });
+
+  it("the one-execution rule comes first: after the Day's execution a poisoned Mutant gets only 'wait for tonight'", async () => {
+    openInStore(impair(proofGame(MUTANT, "day", 2), "p0", "poisoned"));
+    act(() => { const r = store.getState().recordExecution("p2", "died", {}, undefined, captureVotingContext()); if (!r.ok) throw new Error(r.message); });
+    await run("p0");
+    expect(useV6Ui.getState().ask).toBeNull();
+    expect(useV6Ui.getState().toast).toBe("One execution per day: wait for tonight.");
   });
 });

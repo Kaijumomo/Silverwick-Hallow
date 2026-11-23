@@ -6,7 +6,9 @@ import type { ReminderRecord, STPlayerRecord, StorytellerLobbyRecord } from "./t
 /** The once-per-game characters whose spent ability is noted with their own official reminder token. */
 const USED_LABEL: Record<string, string> = { virgin: "No Ability", slayer: "No Ability", professor: "No Ability", fool: "No Ability", golem: "May Not Nominate",
   // SV-5b: "mark them with the NO ABILITY reminder" (https://wiki.bloodontheclocktower.com/Seamstress).
-  seamstress: "No Ability" };
+  seamstress: "No Ability",
+  // SV-5e: "The Artist loses their ability - mark them with NO ABILITY" (https://wiki.bloodontheclocktower.com/Artist).
+  artist: "No Ability" };
 const supported = (role: string) => role in USED_LABEL;
 export const abilityUseReminderId = (player: STPlayerRecord) =>
   `ability-use:${JSON.stringify([player.participantId, player.actualRole, player.packetEpoch ?? null])}`;
