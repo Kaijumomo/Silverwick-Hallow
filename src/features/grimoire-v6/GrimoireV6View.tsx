@@ -3032,9 +3032,17 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                           {T(row.text)}
                         </span>
                       </div>
-                      {row.answers ? (
-                      // SV-5 part 2a: the Artist's answers, the choice language's quiet pills on the right (one tap records it).
-                      <div role="group" aria-label={`${row.name}: the answer you whispered`} style={DAY_VISIT_PILLS}>
+                      {row.done ? (
+                      // SV-5e2: the Savant's visit is recorded for today: the Night card's Completed pill, read-only.
+                      <span style={NIGHT_STATE_PILL} data-day-visit="done">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" style={NIGHT_STATE_GLYPH}>
+                          <path d="m5 12.5 4.5 4.5L19 7.5" />
+                        </svg>
+                        {T(row.done)}
+                      </span>
+                      ) : row.answers ? (
+                      // SV-5 part 2a: the Artist's answers or the Savant's "Told today", the choice language's quiet pills on the right (one tap records it).
+                      <div role="group" aria-label={row.answersLabel} style={DAY_VISIT_PILLS}>
                         {row.answers.map((answer: any) => (
                           <button key={answer.label} type="button" className="gv-choice-pill is-small" onClick={answer.act}>{T(answer.label)}</button>
                         ))}

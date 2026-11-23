@@ -3,7 +3,7 @@ import { townsfolkInformationFalse } from "@/abilities/characters/passiveRules";
 import { captureFingerprint, type AbilityResolutionRequest } from "@/stores/abilityResolution";
 import { createRulesQuery } from "@/stores/rulesQuery";
 import { captureCharacterActionContext, useStorytellerStore } from "@/stores/storytellerStore";
-import type { STPlayerRecord } from "@/stores/types";
+import type { STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
 import type { V6Ctx } from "../ctx";
 import { flash } from "../v6Store";
 
@@ -29,6 +29,8 @@ import { flash } from "../v6Store";
 
 export const ARTIST_ANSWERS = ["Yes", "No", "I don't know"] as const;
 export type ArtistAnswer = (typeof ARTIST_ANSWERS)[number];
+/** The text of the Savant's visit record: what happened, never what was said (Q5 A). */
+export const SAVANT_VISIT_TEXT = "Visited the Storyteller: 2 things, 1 true and 1 false (not recorded)";
 
 const queryOf = (ctx: V6Ctx) => createRulesQuery(ctx.game, { registry: ctx.registry, script: ctx.script ?? null, semantics: CANONICAL_ABILITY_SEMANTICS });
 
@@ -41,6 +43,19 @@ function visitOpen(ctx: V6Ctx, player: STPlayerRecord | undefined, roleId: "arti
 /** A living Artist whose once-per-game question is still unasked. */
 export function artistMayAsk(ctx: V6Ctx, player: STPlayerRecord | undefined): boolean {
   return visitOpen(ctx, player, "artist") && !player!.abilityUsed;
+}
+
+/** A living Savant (the row stays all Day; "Told today" says whether today's visit happened). */
+export function savantMayVisit(ctx: V6Ctx, player: STPlayerRecord | undefined): boolean {
+  return visitOpen(ctx, player, "savant");
+}
+
+/** Whether this Savant's visit is recorded for the current Day (this participant, as the Savant). */
+export function savantToldToday(game: StorytellerLobbyRecord, player: STPlayerRecord): boolean {
+  return game.phase === "day" && game.informationDeliveries.some((delivery) => delivery.kind === "manual"
+    && delivery.recipient.participantId === player.participantId && delivery.actualRole === "savant"
+    && delivery.provenance?.sourceCharacter === "savant"
+    && delivery.moment.phase === "day" && delivery.moment.day === game.day);
 }
 
 /** The "Vortox · false info" pill: a living, sober and healthy Vortox makes this Townsfolk's information false (known only). */
@@ -74,4 +89,12 @@ export function answerArtist(ctx: V6Ctx, player: STPlayerRecord, answer: ArtistA
   if (!artistMayAsk(ctx, player)) { flash(`${player.name || "The Artist"} cannot ask a question right now.`); return; }
   if (!commit(ctx, player, "artist", answer, "The Artist's private question: the Storyteller's whispered answer", true)) return;
   flash(`${player.name || "The Artist"} was told “${answer}”. Their ability is used.`);
+}
+
+/** The Savant's "Told today" pill. */
+export function markSavantTold(ctx: V6Ctx, player: STPlayerRecord): void {
+  if (!savantMayVisit(ctx, player)) { flash(`${player.name || "The Savant"} cannot visit right now.`); return; }
+  if (savantToldToday(ctx.game, player)) return;
+  if (!commit(ctx, player, "savant", SAVANT_VISIT_TEXT, "The Savant's private visit: the Storyteller's whispered statements", false)) return;
+  flash(`${player.name || "The Savant"} was told today.`);
 }

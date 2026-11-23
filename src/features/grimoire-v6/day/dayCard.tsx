@@ -8,13 +8,16 @@ import { nominationsToday, toExecute } from "./dayModel";
 import { moonchildAwaitingChoice, startMoonchildChoice } from "./moonchild";
 import { startSweetheartChoice, sweetheartAwaitingChoice } from "./sweetheart";
 import { klutzAwaitingChoice, startKlutzChoice } from "./klutz";
-import { ARTIST_ANSWERS, answerArtist, artistMayAsk, visitFalseInformation } from "./privateVisit";
+import { ARTIST_ANSWERS, answerArtist, artistMayAsk, markSavantTold, savantMayVisit, savantToldToday, visitFalseInformation } from "./privateVisit";
 import type { STPlayerRecord } from "@/stores/types";
 
 /** One Day actions row in the Moonchild row's markup: a dead character's public or Storyteller choice still to make (SV-1). */
 export type DayActionRow = { key: string; name: string; img: string; text: string; status: string; button: string; act: () => void;
   /** SV-5 part 2a: a private visit's answer pills (the Artist's Yes / No / I don't know), drawn instead of the one button. */
   answers?: { label: string; act: () => void }[];
+  answersLabel?: string;
+  /** SV-5e2: the Savant's visit once recorded today: the Night card's Completed pill shape, with this label, instead of a button. */
+  done?: string;
   /** SV-5 part 2a: the existing "Vortox · false info" pill beside the name. */
   falseInfo?: boolean };
 
@@ -37,13 +40,13 @@ export function dayActionRows(ctx: V6Ctx): DayActionRow[] {
 }
 
 /**
- * SV-5 part 2a: the optional private visits (the Artist's question), in seat order, in the same row markup. They are NOT in
+ * SV-5 part 2a: the optional private visits (the Artist's question, the Savant's visit), in seat order, in the same row markup. They are NOT in
  * dayActionRows, so they never raise the Day button's "!" (PO Q12 A): an optional visit must not nag all game.
  */
 export function dayVisitRows(ctx: V6Ctx): DayActionRow[] {
   const { game, registry } = ctx;
   const rows: DayActionRow[] = [];
-  const base = (player: STPlayerRecord, roleId: "artist", text: string) => {
+  const base = (player: STPlayerRecord, roleId: "artist" | "savant", text: string) => {
     const def = registry.get(roleId);
     return { key: `${roleId}:${player.id}`, name: def?.name ?? roleId, img: def ? iconUrlFor(def) : "", text, status: "", button: "", act: () => {},
       falseInfo: visitFalseInformation(ctx, roleId) };
@@ -51,7 +54,13 @@ export function dayVisitRows(ctx: V6Ctx): DayActionRow[] {
   for (const id of game.seatOrder) {
     const player = game.players[id];
     if (artistMayAsk(ctx, player)) rows.push({ ...base(player!, "artist", `${player!.name || "The Artist"} may ask 1 yes/no question`),
-      answers: ARTIST_ANSWERS.map((label) => ({ label, act: () => answerArtist(ctx, player!, label) })) });
+      answersLabel: "Artist: the answer you whispered", answers: ARTIST_ANSWERS.map((label) => ({ label, act: () => answerArtist(ctx, player!, label) })) });
+    // SV-5e2: one "Told today" pill; once tapped, the row shows it as done until the Day ends (the next Day starts unmarked).
+    if (savantMayVisit(ctx, player)) {
+      const told = savantToldToday(game, player!);
+      rows.push({ ...base(player!, "savant", `${player!.name || "The Savant"} may learn 2 things: 1 true, 1 false`),
+        ...(told ? { done: "Told today" } : { answersLabel: "Savant: today's visit", answers: [{ label: "Told today", act: () => markSavantTold(ctx, player!) }] }) });
+    }
   }
   return rows;
 }
@@ -79,7 +88,7 @@ export function buildDayCard(ctx: V6Ctx): Record<string, unknown> {
     moonText: moonchild ? `${moonchild.name || "The Moonchild"} learned they died` : "", moonStatus: "Awaiting choice",
     moonAct: () => { if (!moonchild) return; ctx.ui.set({ panel: ctx.ui.panel === "night" ? "night" : null }); startMoonchildChoice(ctx, moonchild); },
     // SV-1: the Day actions rows (the Moonchild's, the Sweetheart's, the Klutz's), each drawn with the Moonchild row's markup; then
-    // SV-5 part 2a's optional private visits (the Artist's), in the same markup.
+    // SV-5 part 2a's optional private visits (the Artist's, the Savant's), in the same markup.
     rows,
   };
 }
