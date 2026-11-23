@@ -9,6 +9,7 @@ import { moonchildAwaitingChoice, startMoonchildChoice } from "./moonchild";
 import { startSweetheartChoice, sweetheartAwaitingChoice } from "./sweetheart";
 import { klutzAwaitingChoice, startKlutzChoice } from "./klutz";
 import { ARTIST_ANSWERS, answerArtist, artistMayAsk, markSavantTold, savantMayVisit, savantToldToday, visitFalseInformation } from "./privateVisit";
+import { jugglerMayGuess, jugglerToday, markJugglerDone, startJugglerGuess } from "./juggler";
 import type { STPlayerRecord } from "@/stores/types";
 
 /** One Day actions row in the Moonchild row's markup: a dead character's public or Storyteller choice still to make (SV-1). */
@@ -46,7 +47,7 @@ export function dayActionRows(ctx: V6Ctx): DayActionRow[] {
 export function dayVisitRows(ctx: V6Ctx): DayActionRow[] {
   const { game, registry } = ctx;
   const rows: DayActionRow[] = [];
-  const base = (player: STPlayerRecord, roleId: "artist" | "savant", text: string) => {
+  const base = (player: STPlayerRecord, roleId: "artist" | "savant" | "juggler", text: string) => {
     const def = registry.get(roleId);
     return { key: `${roleId}:${player.id}`, name: def?.name ?? roleId, img: def ? iconUrlFor(def) : "", text, status: "", button: "", act: () => {},
       falseInfo: visitFalseInformation(ctx, roleId) };
@@ -60,6 +61,15 @@ export function dayVisitRows(ctx: V6Ctx): DayActionRow[] {
       const told = savantToldToday(game, player!);
       rows.push({ ...base(player!, "savant", `${player!.name || "The Savant"} may learn 2 things: 1 true, 1 false`),
         ...(told ? { done: "Told today" } : { answersLabel: `Savant, ${player!.name || `seat ${player!.seat + 1}`}: today's visit`, answers: [{ label: "Told today", act: () => markSavantTold(ctx, player!) }] }) });
+    }
+    // SV-5f: the Juggler's first-Day guesses: "Guesses N of 5", Guess and Done; once Done, the Completed pill until the Day ends.
+    if (jugglerMayGuess(ctx, game, player)) {
+      const today = jugglerToday(game, player);
+      rows.push({ ...base(player, "juggler", `${player.name || "The Juggler"} · Guesses ${today.guesses} of 5`),
+        ...(today.done ? { done: "Done" } : { answersLabel: `Juggler, ${player.name || `seat ${player.seat + 1}`}: the guesses`, answers: [
+          { label: "Guess", act: () => startJugglerGuess(ctx, player) },
+          { label: "Done", act: () => markJugglerDone(ctx, player) },
+        ] }) });
     }
   }
   return rows;
@@ -88,7 +98,7 @@ export function buildDayCard(ctx: V6Ctx): Record<string, unknown> {
     moonText: moonchild ? `${moonchild.name || "The Moonchild"} learned they died` : "", moonStatus: "Awaiting choice",
     moonAct: () => { if (!moonchild) return; ctx.ui.set({ panel: ctx.ui.panel === "night" ? "night" : null }); startMoonchildChoice(ctx, moonchild); },
     // SV-1: the Day actions rows (the Moonchild's, the Sweetheart's, the Klutz's), each drawn with the Moonchild row's markup; then
-    // SV-5 part 2a's optional private visits (the Artist's, the Savant's), in the same markup.
+    // SV-5 part 2a's optional private visits (the Artist's, the Savant's) and SV-5f's Juggler guesses, in the same markup.
     rows,
   };
 }

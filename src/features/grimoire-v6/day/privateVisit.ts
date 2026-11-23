@@ -59,7 +59,7 @@ export function savantToldToday(game: StorytellerLobbyRecord, player: STPlayerRe
 }
 
 /** The "Vortox · false info" pill: a living, sober and healthy Vortox makes this Townsfolk's information false (known only). */
-export function visitFalseInformation(ctx: V6Ctx, roleId: "artist" | "savant"): boolean {
+export function visitFalseInformation(ctx: V6Ctx, roleId: "artist" | "savant" | "juggler"): boolean {
   const rule = townsfolkInformationFalse(queryOf(ctx), roleId);
   return rule.known && rule.value;
 }

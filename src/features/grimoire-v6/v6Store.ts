@@ -19,7 +19,9 @@ export type PickerState =
       /** Character tokens only: no "who holds it" names and no bluff marks (the Gambler guesses, and the Philosopher chooses, without the picker naming who is in play). */
       tokensOnly?: boolean;
       /** SV-5j: characters that may not be picked here (a Vortox: the true one); shown locked, like a type outside `types`. */
-      exclude?: RoleId[] }
+      exclude?: RoleId[];
+      /** SV-5f: the footer line, where a pick records something (the Juggler's guess); otherwise the "show it full screen" line. */
+      hint?: string }
   | { mode: "bluff"; slot: number }
   | { mode: "drunk"; playerId: PlayerId };
 

@@ -151,7 +151,10 @@ export function playerMarks(env: MarkEnv, player: STPlayerRecord): Mark[] {
     const label = times(token.label, token.instances.length);
     // SV-4a: the MAD token's tooltip names the character ("Cerenovus: Mad about being the Sage"); every other token keeps "Character: Label".
     const title = token.about ? `${token.role.name}: ${token.label} about being the ${token.about}` : `${token.role.name}: ${label}`;
-    marks.push({ key: `effect:${token.key}`, kind: "effect", label, title, src: iconUrlFor(token.role), size: ROLE_SIZE, removal: { type: "effect", token } });
+    // SV-5f: a CORRECT token is a Juggler's guess; it is taken back with Undo only (Q16 A), never by removing the disc.
+    const removal: Mark["removal"] = token.key === "juggler:jugglerGuess"
+      ? { type: "derived", reason: "This follows the Juggler's guesses. Undo the guess to take it back." } : { type: "effect", token };
+    marks.push({ key: `effect:${token.key}`, kind: "effect", label, title, src: iconUrlFor(token.role), size: ROLE_SIZE, removal });
   }
   // The No Dashii's neighbours are poisoned by its passive. Drawn with its official Poisoned token, but read-only.
   const poisoned = query.noDashiiPoisoned({ playerId: player.id, participantId: player.participantId });

@@ -3748,7 +3748,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                 {vm.pk?.isShow && (
                   <>
                   <div style={S492}>
-                    Tap a character to show it full screen. Nothing on the board changes.
+                    {vm.pk?.showHint}
                   </div>
                   </>
                 )}
