@@ -19,7 +19,9 @@ export type GameRuleFactExpiryRule =
   /** A Day qualification remains available through the immediately following Night. */
   | "nextDay"
   /** Retained exactly as long as its current/previous-phase Life Event. */
-  | "lifeEventWindow";
+  | "lifeEventWindow"
+  /** SV-5m: recorded on Day N, kept through the following Night, Day N+1 and the Night after it: expires on entering Day N+2. */
+  | "finalDay";
 
 export type GameRuleFactDefinition = {
   type: GameRuleFactType;
@@ -62,6 +64,16 @@ export const VORTOX_WORKING_AT_DUSK = "vortoxWorkingAtDusk";
 export const VORTOX_DUSK_RULING = "vortoxDuskRuling";
 export const VORTOX_DAY_END_TYPES = [VORTOX_WORKING_AT_DUSK, VORTOX_DUSK_RULING] as const;
 export const isVortoxDayEndType = (type: string): boolean => (VORTOX_DAY_END_TYPES as readonly string[]).includes(type);
+/** SV-5m: the Mastermind's "If the Demon dies by execution (ending the game), play for 1 more day. If a player is then executed, their
+ * team loses" (https://wiki.bloodontheclocktower.com/Mastermind). Captured only inside the accepted execution of the last living Demon,
+ * with the Mastermind as its source and that execution's Life Event id as its `resolutionId` (so Undo, a retraction or an amendment of
+ * the execution takes it away: `reconcileMastermindFinalDay`). Recorded on the Day of the execution and kept through the final Day and the
+ * Night after it. RULING: the ability may have triggered (its functioning was not known, a jinx, a Zombuul, an unresolved succession):
+ * the Storyteller decides. Not game-ending evidence: the End control carries advisory lines, and the Storyteller ends the game. */
+export const MASTERMIND_FINAL_DAY = "mastermindFinalDay";
+export const MASTERMIND_FINAL_DAY_RULING = "mastermindFinalDayRuling";
+export const MASTERMIND_FINAL_DAY_TYPES = [MASTERMIND_FINAL_DAY, MASTERMIND_FINAL_DAY_RULING] as const;
+export const isMastermindFinalDayType = (type: string): boolean => (MASTERMIND_FINAL_DAY_TYPES as readonly string[]).includes(type);
 export const VICTORY_EVIDENCE_TYPES = [SAINT_EXECUTION_GOOD_TEAM_LOST, SAINT_EXECUTION_EVIL_TEAM_LOST, SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED, SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED, MAYOR_DAY_END_GOOD_TEAM_WON, MAYOR_DAY_END_EVIL_TEAM_WON, RESOLVED_DEMON_DEATH_NO_SUCCESSOR] as const;
 export const isVictoryEvidenceType = (type: string): boolean => (VICTORY_EVIDENCE_TYPES as readonly string[]).includes(type);
 export const isSaintNonqualifyingEvidenceType = (type: string): boolean => type === SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED || type === SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED;
@@ -127,6 +139,13 @@ export const GAME_RULE_FACT_REGISTRY: ReadonlyMap<GameRuleFactType, GameRuleFact
       : "When the Day ended, a Vortox was alive but whether its ability worked is the Storyteller's ruling.",
     applicablePhases: ["day"] as const, expiry: "nextDay" as const, captureOnly: true as const,
   }] as const),
+  ...MASTERMIND_FINAL_DAY_TYPES.map(type => [type, {
+    type, label: type === MASTERMIND_FINAL_DAY ? "The Mastermind's final day" : "The Mastermind's final day: your ruling",
+    description: type === MASTERMIND_FINAL_DAY
+      ? "The last Demon died by execution while a sober and healthy Mastermind was alive: play goes on for one more day. Then, if a good player is executed, evil wins; if an evil player or nobody is executed, good wins. The Storyteller ends the game."
+      : "The last Demon died by execution and a Mastermind may have kept the game going for one more day: the Storyteller's ruling.",
+    applicablePhases: ["day"] as const, expiry: "finalDay" as const, captureOnly: true as const,
+  }] as const),
 ]);
 
 export const gameRuleFactDefinition = (type: unknown): GameRuleFactDefinition | undefined =>
@@ -141,6 +160,7 @@ export function registeredGameRuleFactExpiry(definition: GameRuleFactDefinition,
   if (definition.expiry === "followingDay" && recordedAt.phase === "night") return { phase: "day", day: recordedAt.day };
   if (definition.expiry === "nextDay" && recordedAt.phase === "day") return { phase: "day", day: recordedAt.day + 1 };
   if (definition.expiry === "lifeEventWindow") return { phase: recordedAt.phase, day: recordedAt.day + 1 };
+  if (definition.expiry === "finalDay" && recordedAt.phase === "day") return { phase: "day", day: recordedAt.day + 2 };
   return undefined;
 }
 

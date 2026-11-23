@@ -4,6 +4,7 @@ import { applyRolePlan, defaultRoleIds, planRoleTransaction, toldRoleChangeInten
 import { createRulesQuery, type RulesQueryEnvironment } from "./rulesQuery";
 import { historyId } from "./history";
 import { captureSaintQualification, captureResolvedDemonDeath } from "./victoryEvidence";
+import { captureMastermindFinalDay } from "./mastermindFinalDay";
 import type { LifeEventId, StorytellerLobbyRecord } from "./types";
 
 export type RecordedLifePlanResult = {
@@ -47,8 +48,21 @@ export function planRecordedLifeOutcome(
     if (!evidence.ok) return { ok: false, code: "refused", message: evidence.message };
     next = evidence.game;
   }
+  // SV-5m: the Mastermind's trigger, read from the moment before this execution. A succession the rules cannot settle here (manual)
+  // makes it the Storyteller's ruling; a settled succession leaves a living Demon, so nothing triggers.
+  const mastermind = () => {
+    if (!environment || intent?.kind !== "execution" || result.plan.addedEventIds.length !== 1) return null;
+    const captured = captureMastermindFinalDay(game, next, result.plan.addedEventIds[0]!, environment);
+    if (!captured.ok) return captured.message;
+    next = captured.game;
+    return null;
+  };
   // Only the single confirmed live outcome is eligible here. In particular,
   // an amendment, late record or status repair can never replay succession.
+  if (decision.kind === "manual") {
+    const refused = mastermind();
+    if (refused) return { ok: false, code: "refused", message: refused };
+  }
   if (decision.kind === "manual") return { ok: true, changed: true, game: next, eventIds: result.plan.addedEventIds,
     manualReason: `Outcome recorded. Resolve any character consequences using the official instructions and existing game controls. ${decision.reason}` };
   if (decision.kind === "successor") {
@@ -66,5 +80,7 @@ export function planRecordedLifeOutcome(
     if (!evidence.ok) return { ok: false, code: "refused", message: evidence.message };
     next = evidence.game;
   }
+  const refused = mastermind();
+  if (refused) return { ok: false, code: "refused", message: refused };
   return { ok: true, changed: true, game: next, eventIds: result.plan.addedEventIds };
 }
