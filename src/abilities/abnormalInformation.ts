@@ -2,7 +2,7 @@ import type { AbilityDescriptor, AbilityEvaluationContext } from "./semantics";
 import type { AbilityOperation, AbilityOutcome } from "@/stores/abilityResolution";
 import type { EffectIntent } from "@/stores/effectResolution";
 import type { StorytellerLobbyRecord } from "@/stores/types";
-import { ABNORMAL_IMPAIRED, ABNORMAL_VORTOX, abnormalMarkIntents, mathematicianListening } from "@/stores/abnormalMarks";
+import { ABNORMAL_IMPAIRED, ABNORMAL_VORTOX, abnormalMarkIntents, clearAbnormalIntents, mathematicianListening } from "@/stores/abnormalMarks";
 
 /**
  * SV-5g2 (PO Q17 A, 2026-11-23): the ABNORMAL marks the app places BY ITSELF, read by the ability coordinator for every descriptor,
@@ -38,6 +38,16 @@ export function abnormalInformationIntents(game: StorytellerLobbyRecord, input: 
     intents.push(...abnormalMarkIntents(game.players, operation.recipient, reason));
   }
   return intents;
+}
+
+/**
+ * SV-5g3 (PO Q18 A): the Mathematician's Night commit removes every ABNORMAL mark ("Remove all ABNORMAL reminders"), whether or not his
+ * ability works, in the same commit as his number (one Undo restores the marks and the count). A simulated wake (a Drunk shown the
+ * Mathematician) has no ability and clears nothing.
+ */
+export function abnormalClearingIntents(game: StorytellerLobbyRecord, context: AbilityEvaluationContext, outcome: AbilityOutcome): EffectIntent[] {
+  if (context.simulated || context.roleId !== "mathematician" || !outcome.operations.some((operation) => operation.domain === "information")) return [];
+  return clearAbnormalIntents(game);
 }
 
 /** The outcome with `intents` as one Effect operation, placed after the outcome's own mechanics and before its information and step

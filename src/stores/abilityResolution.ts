@@ -15,7 +15,7 @@ import {
 import { invocationEligibility, isInvocationPath, nightTriggerStatus, type InvocationPath } from "@/abilities/invocation";
 import { automationEligibility } from "@/abilities/automationEligibility";
 import { falseInformationApplies, falseInformationRefusal } from "@/abilities/falseInformation";
-import { abnormalInformationIntents, withEffectIntents } from "@/abilities/abnormalInformation";
+import { abnormalClearingIntents, abnormalInformationIntents, withEffectIntents } from "@/abilities/abnormalInformation";
 import { incompleteSuccessionReason } from "@/abilities/completeActionSafety";
 import { captureResolvedDemonDeath, automaticDemonDeathEvidenceMode } from "./victoryEvidence";
 import { activeModifiers, prospectiveJinxes, type ModifierDefinition } from "@/abilities/modifiers";
@@ -1095,9 +1095,11 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
     return refuse("unsupported", `This character change would bring an unverified jinx into play (${createdJinxes.map((jinx) => jinx.label).join(", ")}) -- resolve the whole action manually.`);
   }
   const judgmentAnswered = judgmentUsed || descriptor.inputs.some((requirement) => requirement.source === "judgment") || Object.keys(judgments).length > 0;
-  // SV-5g2 (PO Q17 A): the Mathematician's ABNORMAL marks the app proves by itself (src/abilities/abnormalInformation.ts), added after
-  // every check above so they never count as the ability changing state, and committed with the delivery (one Undo).
-  const committed = withEffectIntents(outcome, abnormalInformationIntents(game, { descriptor, context: evaluationContext, outcome, mustBeFalse }), isMechanical);
+  // SV-5g (PO Q17 A, Q18 A): the Mathematician's ABNORMAL marks the app proves by itself, and their clearing at his own Night commit
+  // (src/abilities/abnormalInformation.ts), added after every check above so they never count as the ability changing state, and
+  // committed with the delivery (one Undo).
+  const committed = withEffectIntents(outcome, [...abnormalInformationIntents(game, { descriptor, context: evaluationContext, outcome, mustBeFalse }),
+    ...abnormalClearingIntents(game, evaluationContext, outcome)], isMechanical);
   const result = composeAbilityOutcome(game, committed, environment, {
     automaticAction: { actor: actorBinding, roleId: request.roleId },
     resolutionId,
