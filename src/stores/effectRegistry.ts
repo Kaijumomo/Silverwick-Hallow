@@ -103,9 +103,13 @@ const DEFINITIONS: Record<string, EffectDefinition> = {
 /** The order known indicators appear in; unknown ones follow. */
 const INDICATOR_ORDER = Object.keys(INDICATORS);
 
+/** Types recorded only through their own path, never offered by the advanced "Add effect" workflow: the Mathematician's ABNORMAL mark
+ * is one per player and gone at dawn (PO Q18 A), which its own placement keeps and a manual Effect would not. */
+const OWN_PATH_ONLY: ReadonlySet<string> = new Set(["abnormal"]);
+
 /** Known types offered by the advanced "Add effect" workflow (any other
  * type can still be typed in as a custom Effect). */
-export const KNOWN_EFFECT_TYPES: readonly EffectDefinition[] = Object.values(DEFINITIONS);
+export const KNOWN_EFFECT_TYPES: readonly EffectDefinition[] = Object.values(DEFINITIONS).filter((definition) => !OWN_PATH_ONLY.has(definition.type));
 
 const own = <T,>(map: Record<string, T>, key: string): T | undefined =>
   Object.prototype.hasOwnProperty.call(map, key) ? map[key] : undefined;

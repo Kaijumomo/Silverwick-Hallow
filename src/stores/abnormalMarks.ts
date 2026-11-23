@@ -76,6 +76,11 @@ export function clearAbnormalIntents(game: Pick<StorytellerLobbyRecord, "players
 /** Whether a living player holds the Mathematician's ability (the character, or a Philosopher who gained it): only then does the app
  * place ABNORMAL marks by itself. Without one they would count for nobody. */
 export function mathematicianListening(game: Pick<StorytellerLobbyRecord, "players">): boolean {
-  return Object.values(game.players).some((player) => seated(player) && player.alive
-    && (player.actualRole === "mathematician" || gainedRoleOf(player) === "mathematician"));
+  return mathematicianHolders(game).length > 0;
+}
+
+/** The living seated players who hold the Mathematician's ability (the character, or a Philosopher who gained it). */
+export function mathematicianHolders(game: Pick<StorytellerLobbyRecord, "players">): string[] {
+  return Object.values(game.players).filter((player) => seated(player) && player.alive
+    && (player.actualRole === "mathematician" || gainedRoleOf(player) === "mathematician")).map((player) => player.id);
 }

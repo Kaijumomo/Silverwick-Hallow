@@ -12,6 +12,8 @@ import {
 import { applyEffectPlan, planEffectTransaction } from "@/stores/effectResolution";
 import { StorytellerGamePersistedSchema } from "@/stores/schemas";
 import type { AbilityInputs } from "./semantics";
+import { withEffectIntents } from "./abnormalInformation";
+import { isMechanical, type AbilityOperation } from "@/stores/abilityResolution";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
 const step = { withStep: true, completeStep: true } as const;
@@ -104,9 +106,55 @@ describe("Seamstress, Dreamer and Oracle while poisoned (no Vortox)", () => {
     expect(reasonsOn(after(g, "p0", "dreamer", inputs("mutant", "witch")), "p0")).toEqual([]);
   });
 
+  it("Dreamer: a Recluse chosen: an evil token could be his registration, so nothing is proven and nothing is marked", () => {
+    // p0 dreamer, p1 recluse, p2 cerenovus, p3 vigormortis, p4 mathematician
+    const g = impair(proofGame(["dreamer", "recluse", "cerenovus", "vigormortis", "mathematician"], "night", 2), "p0");
+    const inputs = { target: pick(g, "p1"), [subjectId(DREAMER_GOOD, { playerId: "p1", participantId: g.players.p1!.participantId! })]: character("sage"),
+      [subjectId(DREAMER_EVIL, { playerId: "p1", participantId: g.players.p1!.participantId! })]: character("witch") };
+    expect(reasonsOn(after(g, "p0", "dreamer", inputs), "p0")).toEqual([]);
+  });
+
   it("Oracle: nobody dead is evil (true: 0); a poisoned Oracle told 1 is marked, told 0 is not", () => {
     const g = impair(patchPlayer(proofGame(["oracle", "mathematician", "fanggu", "witch", "chef"], "night", 3), "p4", { alive: false }), "p0");
     expect(reasonsOn(after(g, "p0", "oracle", { communicated: num(1) }), "p0")).toEqual([ABNORMAL_IMPAIRED]);
     expect(reasonsOn(after(g, "p0", "oracle", { communicated: num(0) }), "p0")).toEqual([]);
+  });
+});
+
+describe("Seamstress and Dreamer under a Vortox", () => {
+  it("Seamstress: the Barber and the Clockmaker are both good (true: YES); under a Vortox she is told NO and marked", () => {
+    // p0 seamstress, p1 barber, p2 clockmaker, p3 vortox, p4 sweetheart, p5 witch, p6 mathematician
+    const g0 = proofGame(["seamstress", "barber", "clockmaker", "vortox", "sweetheart", "witch", "mathematician"], "night", 2);
+    const asked = plan(g0, request(g0, "p0", "seamstress", { targets: pick(g0, "p1", "p2") }, step));
+    const id = asked.ok ? "" : asked.requirements![0]!.id;
+    const told = id ? after(g0, "p0", "seamstress", { targets: pick(g0, "p1", "p2"), [id]: yes(false) }) : after(g0, "p0", "seamstress", { targets: pick(g0, "p1", "p2") });
+    expect(told.informationDeliveries.at(-1)).toMatchObject({ values: expect.arrayContaining([expect.objectContaining({ value: false })]) });
+    expect(reasonsOn(told, "p0")).toEqual([ABNORMAL_VORTOX]);
+  });
+
+  it("Dreamer: the Mutant chosen; under a Vortox neither token is the Mutant and the Dreamer is marked", () => {
+    // p0 dreamer, p1 mutant, p2 cerenovus, p3 vortox, p4 mathematician
+    const g = proofGame(["dreamer", "mutant", "cerenovus", "vortox", "mathematician"], "night", 2);
+    const inputs = { target: pick(g, "p1"), [subjectId(DREAMER_GOOD, { playerId: "p1", participantId: g.players.p1!.participantId! })]: character("sage"),
+      [subjectId(DREAMER_EVIL, { playerId: "p1", participantId: g.players.p1!.participantId! })]: character("witch") };
+    expect(reasonsOn(after(g, "p0", "dreamer", inputs), "p0")).toEqual([ABNORMAL_VORTOX]);
+  });
+});
+
+describe("the coordinator's ordering check stays intact (independent check, finding 1)", () => {
+  const table = proofGame(["oracle", "mathematician", "vortox", "witch", "chef"], "night", 2);
+  const marks = abnormalMarkIntents(table.players, { playerId: "p0", participantId: table.players.p0!.participantId! }, ABNORMAL_VORTOX);
+  const op = (domain: AbilityOperation["domain"]) => ({ domain }) as unknown as AbilityOperation;
+
+  it("a mark that adds the second mechanical domain makes the list order the declared order", () => {
+    const outcome = withEffectIntents({ operations: [op("life"), op("information")] }, marks, isMechanical);
+    expect(outcome.operations.map((operation) => operation.domain)).toEqual(["life", "effect", "information"]);
+    expect(outcome.mechanicalOrder).toBe("declared");
+  });
+
+  it("an outcome that already changed two kinds of state with no declared order stays undeclared, so the coordinator still refuses it", () => {
+    const outcome = withEffectIntents({ operations: [op("life"), op("role"), op("information")] }, marks, isMechanical);
+    expect(outcome.mechanicalOrder).toBeUndefined();
+    expect(withEffectIntents({ operations: [op("life"), op("role")], mechanicalOrder: "declared" }, marks, isMechanical).mechanicalOrder).toBe("declared");
   });
 });

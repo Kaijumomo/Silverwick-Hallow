@@ -2,7 +2,7 @@ import type { AbilityDescriptor, AbilityEvaluationContext } from "./semantics";
 import type { AbilityOperation, AbilityOutcome } from "@/stores/abilityResolution";
 import type { EffectIntent } from "@/stores/effectResolution";
 import type { StorytellerLobbyRecord } from "@/stores/types";
-import { ABNORMAL_IMPAIRED, ABNORMAL_VORTOX, abnormalMarkIntents, clearAbnormalIntents, mathematicianListening } from "@/stores/abnormalMarks";
+import { ABNORMAL_IMPAIRED, ABNORMAL_VORTOX, abnormalMarkIntents, clearAbnormalIntents, mathematicianHolders, mathematicianListening } from "@/stores/abnormalMarks";
 
 /**
  * SV-5g2 (PO Q17 A, 2026-11-23): the ABNORMAL marks the app places BY ITSELF, read by the ability coordinator for every descriptor,
@@ -44,20 +44,27 @@ export function abnormalInformationIntents(game: StorytellerLobbyRecord, input: 
  * SV-5g3 (PO Q18 A): the Mathematician's Night commit removes every ABNORMAL mark ("Remove all ABNORMAL reminders"), whether or not his
  * ability works, in the same commit as his number (one Undo restores the marks and the count). A simulated wake (a Drunk shown the
  * Mathematician) has no ability and clears nothing.
+ * While another living player also holds the Mathematician's ability (a Philosopher who gained it, whose count is the Storyteller's, by
+ * hand, from the tokens), nothing is cleared: each counts the marks since dawn, and they still expire at the next dawn uncounted.
  */
 export function abnormalClearingIntents(game: StorytellerLobbyRecord, context: AbilityEvaluationContext, outcome: AbilityOutcome): EffectIntent[] {
   if (context.simulated || context.roleId !== "mathematician" || !outcome.operations.some((operation) => operation.domain === "information")) return [];
+  if (mathematicianHolders(game).some((id) => id !== context.actor.player.id)) return [];
   return clearAbnormalIntents(game);
 }
 
 /** The outcome with `intents` as one Effect operation, placed after the outcome's own mechanics and before its information and step
- * bookkeeping (the coordinator's ordering rule); a second mechanical domain makes the list order the declared mechanical order. */
+ * bookkeeping (the coordinator's ordering rule). When the mark is what adds a second mechanical domain, the list order becomes the
+ * declared mechanical order; an outcome that already changed two kinds of state without declaring an order keeps its undeclared order,
+ * so the coordinator still refuses it exactly as it would with no Mathematician seated. */
 export function withEffectIntents(outcome: AbilityOutcome, intents: readonly EffectIntent[], isMechanical: (domain: AbilityOperation["domain"]) => boolean): AbilityOutcome {
   if (!intents.length) return outcome;
   const operations = [...outcome.operations];
   const firstBookkeeping = operations.findIndex((operation) => !isMechanical(operation.domain));
   const at = firstBookkeeping < 0 ? operations.length : firstBookkeeping;
   operations.splice(at, 0, { domain: "effect", intents });
-  const mechanical = new Set(operations.map((operation) => operation.domain).filter(isMechanical));
-  return { ...outcome, operations, ...(mechanical.size > 1 ? { mechanicalOrder: "declared" as const } : {}) };
+  const before = new Set(outcome.operations.map((operation) => operation.domain).filter(isMechanical));
+  const after = new Set(operations.map((operation) => operation.domain).filter(isMechanical));
+  const declare = after.size > 1 && (before.size <= 1 || outcome.mechanicalOrder === "declared");
+  return { ...outcome, operations, ...(declare ? { mechanicalOrder: "declared" as const } : {}) };
 }

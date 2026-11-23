@@ -15,6 +15,7 @@ import {
   clearAbnormalIntents, mathematicianListening,
 } from "./abnormalMarks";
 import { planEffectTransaction, applyEffectPlan } from "./effectResolution";
+import { KNOWN_EFFECT_TYPES, effectDefinitionOf } from "./effectRegistry";
 import type { StorytellerLobbyRecord } from "./types";
 
 const game = () => store.getState().game!;
@@ -33,6 +34,12 @@ beforeEach(() => { localStorage.clear(); store.setState({ game: null, lobby: nul
 afterEach(() => cleanup());
 
 describe("the abnormal Effect", () => {
+  it("is not offered by the Manual workspace's effect picker: only its own placement keeps one per player and gone at dawn", () => {
+    expect(KNOWN_EFFECT_TYPES.map((definition) => definition.type)).not.toContain("abnormal");
+    expect(KNOWN_EFFECT_TYPES.map((definition) => definition.type)).toContain("twin");
+    expect(effectDefinitionOf("abnormal").label).toBe("Abnormal");
+  });
+
   it("is a registered Storyteller fact, so no game-ending proposal turns manual because of it", () => {
     expect(effectSemanticsOf(ABNORMAL_EFFECT)).toBe("storytellerFact");
     const g = apply(proofGame(ROLES, "night", 2), abnormalMarkIntents(proofGame(ROLES, "night", 2).players, at(proofGame(ROLES), "p1"), ABNORMAL_VORTOX));

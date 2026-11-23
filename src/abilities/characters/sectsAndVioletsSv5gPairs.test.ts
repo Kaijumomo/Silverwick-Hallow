@@ -10,7 +10,11 @@ import { PHILOSOPHER_CHARACTER } from "./philosopher";
 import { gainedRoleOf } from "@/stores/gainedAbility";
 import { CLOCKMAKER_COMMUNICATED } from "./clockmaker";
 import { MATHEMATICIAN_COMMUNICATED } from "./mathematician";
-import { ABNORMAL_IMPAIRED, ABNORMAL_VORTOX, abnormalCount, abnormalMarksOf, abnormalReasons } from "@/stores/abnormalMarks";
+import { CERENOVUS_CHARACTER, CERENOVUS_TARGET } from "./cerenovus";
+import { FANG_GU_TARGET } from "./fanggu";
+import { SNAKE_CHARMER_TARGET } from "./snakecharmer";
+import { ABNORMAL_BY_HAND, ABNORMAL_IMPAIRED, ABNORMAL_VORTOX, abnormalCount, abnormalMarkIntents, abnormalMarksOf, abnormalReasons } from "@/stores/abnormalMarks";
+import { applyEffectPlan, planEffectTransaction } from "@/stores/effectResolution";
 import type { AbilityInputs } from "../semantics";
 import type { EffectRecord, StorytellerLobbyRecord } from "@/stores/types";
 
@@ -22,6 +26,14 @@ const sourced = (g: StorytellerLobbyRecord, id: string, type: string, source: st
   patchPlayer(g, id, { effects: [...g.players[id]!.effects, { id: `fx-${source}-${id}`, type, sourceCharacter: source,
     sourceParticipant: { kind: "participant", playerId: sourceId, participantId: g.players[sourceId]!.participantId!, nameAtTime: g.players[sourceId]!.name },
     lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: g.phase, day: g.day } } as EffectRecord] });
+function handMark(g: StorytellerLobbyRecord, ...ids: string[]): StorytellerLobbyRecord {
+  for (const id of ids) {
+    const result = planEffectTransaction(g, { intents: abnormalMarkIntents(g.players, { playerId: id, participantId: g.players[id]!.participantId! }, ABNORMAL_BY_HAND) });
+    if (!result.ok || !result.changed) throw new Error("mark");
+    g = applyEffectPlan(g, result.plan);
+  }
+  return g;
+}
 const noVotes = (g: StorytellerLobbyRecord): StorytellerLobbyRecord => ({ ...g, voting: { day: g.day - 1, revision: 1, coverage: "known", rounds: [], activeRoundId: null, block: null, modifiers: [] } });
 
 describe("SV-5g pairs: information characters", () => {
@@ -40,6 +52,12 @@ describe("SV-5g pairs: information characters", () => {
   it("Flowergirl / Mathematician: nobody voted (true: NO); a poisoned Flowergirl told YES is marked", () => {
     const g = impair(noVotes(proofGame(["flowergirl", "mathematician", "fanggu", "witch", "chef"], "night", 2)), "p0");
     expect(reasonsOn(after(g, "p0", "flowergirl", { communicated: yes(true) }), "p0")).toEqual([ABNORMAL_IMPAIRED]);
+  });
+
+  it("Flowergirl / Mathematician: under a Vortox the Flowergirl's YES (true: NO) marks her", () => {
+    const g = after(noVotes(proofGame(["flowergirl", "mathematician", "vortox", "witch", "chef"], "night", 2)), "p0", "flowergirl");
+    expect(g.informationDeliveries.at(-1)).toMatchObject({ values: [{ value: true }] });
+    expect(reasonsOn(g, "p0")).toEqual([ABNORMAL_VORTOX]);
   });
 
   it("Savant and Artist / Mathematician: whispered answers have no truth, so nothing is marked by the app (by hand)", () => {
@@ -77,9 +95,16 @@ describe("SV-5g pairs: who makes an ability abnormal", () => {
   it("Witch, Cerenovus, Fang Gu, Snake Charmer / Mathematician: abilities that are not information are never marked by the app, poisoned or not", () => {
     // p0 witch, p1 cerenovus, p2 fanggu, p3 snakecharmer, p4 mathematician, p5 chef
     const g = proofGame(["witch", "cerenovus", "fanggu", "snakecharmer", "mathematician", "chef"], "night", 2);
-    for (const base of [g, impair(g, "p0")]) {
-      const cursed = after(base, "p0", "witch", { target: pick(base, "p5") });
-      expect(abnormalCount(cursed)).toBe(0);
+    const actions: [string, string, (base: StorytellerLobbyRecord) => AbilityInputs][] = [
+      ["p0", "witch", (base) => ({ target: pick(base, "p5") })],
+      ["p1", "cerenovus", (base) => ({ [CERENOVUS_TARGET]: pick(base, "p5"), [CERENOVUS_CHARACTER]: { kind: "character", roleIds: ["sage"] } })],
+      ["p2", "fanggu", (base) => ({ [FANG_GU_TARGET]: pick(base, "p5") })],
+      ["p3", "snakecharmer", (base) => ({ [SNAKE_CHARMER_TARGET]: pick(base, "p2") })],
+    ];
+    for (const [actor, roleId, inputs] of actions) for (const base of [g, impair(g, actor)]) {
+      const result = resolve(base, actor, roleId, inputs(base));
+      expect(result.ok, `${roleId}${base === g ? "" : " (poisoned)"}`).toBe(true);
+      expect(abnormalCount(planned(result)), roleId).toBe(0);
     }
     expect(after(g, "p4", "mathematician").informationDeliveries.at(-1)).toMatchObject({ values: [{ value: 0 }] });
   });
@@ -98,6 +123,25 @@ describe("SV-5g pairs: becoming or gaining the Mathematician", () => {
     expect(gainedRoleOf(g.players.p0)).toBe("mathematician");
     expect(resolve(g, "p0", "mathematician")).toMatchObject({ ok: false });
     expect(reasonsOn(after(g, "p1", "oracle", { communicated: num(1) }), "p1")).toEqual([ABNORMAL_VORTOX]);
+  });
+
+  it("Philosopher / Mathematician: the real Mathematician the Philosopher made drunk gets the Storyteller's number and clears nothing, so the marks stay for the gained ability (gone at dawn)", () => {
+    // p0 philosopher, p1 mathematician (seated after: same slot, seat order), p2 oracle, p3 vortox, p4 witch
+    const before = proofGame(["philosopher", "mathematician", "oracle", "vortox", "witch"], "night", 2);
+    let g = after(before, "p0", "philosopher", { [PHILOSOPHER_CHARACTER]: { kind: "character", roleIds: ["mathematician"] } });
+    g = handMark(g, "p2", "p4");
+    expect(resolve(g, "p1", "mathematician")).toMatchObject({ ok: false, code: "needsInput", requirements: [{ id: MATHEMATICIAN_COMMUNICATED }] });
+    const told = after(g, "p1", "mathematician", { [MATHEMATICIAN_COMMUNICATED]: num(1) });
+    expect(told.informationDeliveries.at(-1)).toMatchObject({ values: [{ value: 1 }] });
+    expect(abnormalCount(told)).toBe(2);
+  });
+
+  it("Philosopher / Mathematician: a gained information ability the app runs (the Oracle) is marked like the real one under a Vortox", () => {
+    // p0 philosopher, p1 mathematician, p2 vortox, p3 witch, p4 chef (dead: 0 dead evil players, the true answer).
+    const before = patchPlayer(proofGame(["philosopher", "mathematician", "vortox", "witch", "chef"], "night", 3), "p4", { alive: false });
+    const g = after(before, "p0", "philosopher", { [PHILOSOPHER_CHARACTER]: { kind: "character", roleIds: ["oracle"] } });
+    expect(gainedRoleOf(g.players.p0)).toBe("oracle");
+    expect(reasonsOn(after(g, "p0", "oracle", { communicated: num(1) }), "p0")).toEqual([ABNORMAL_VORTOX]);
   });
 });
 
