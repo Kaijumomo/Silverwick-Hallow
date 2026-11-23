@@ -12,7 +12,8 @@ import { useV6Ui } from "@/features/grimoire-v6/v6Store";
 import { dayActionRows, dayVisitRows } from "@/features/grimoire-v6/day/dayCard";
 import { jugglerMayGuess } from "@/features/grimoire-v6/day/juggler";
 import { changeRoleIntent } from "@/stores/roleResolution";
-import { bind, num, openInStore, patchPlayer, plan, planned, proofGame, proofQuery, request } from "@/test/proofFixtures";
+import { bind, num, openInStore, patchPlayer, pick, plan, planned, proofGame, proofQuery, request } from "@/test/proofFixtures";
+import { BARBER_PLAYERS } from "./barber";
 import { withGuesses } from "@/test/jugglerFixtures";
 import type { AbilityInputValue } from "@/abilities/semantics";
 import type { StorytellerLobbyRecord } from "@/stores/types";
@@ -60,7 +61,18 @@ describe("SV-5f pairs: characters that change who is the Juggler", () => {
     expect(jugglerGuessVerdict(proofQuery(day), bind(day, "p0"), "philosopher")).toEqual({ kind: "known", correct: true });
   });
 
-  it.each([["Barber"], ["Pit-Hag"]])("%s / Juggler: a Juggler changed before their Night loses the guesses; whoever becomes the Juggler has a fresh first Day", () => {
+  it("Barber / Juggler: the Demon's swap through the Barber's own step takes the guesses away; the new Juggler has a fresh first Day", () => {
+    // p0 barber, p1 imp, p2 juggler, p3 chef, p4 witch. Night 2: the Imp kills the Barber, then the Demon swaps p2 and p3.
+    const g0 = withGuesses(proofGame(["barber", "imp", "juggler", "chef", "witch"], "night", 2), "p2", [{ who: "p3", role: "chef", correct: true }]);
+    const g = planned(plan(g0, request(g0, "p1", "imp", { target: pick(g0, "p0") })));
+    const next = planned(plan(g, request(g, "p0", "barber", { [BARBER_PLAYERS]: pick(g, "p2", "p3") }, { invocationPath: "nightTrigger", withStep: true, completeStep: true })));
+    expect([next.players.p2!.actualRole, next.players.p3!.actualRole]).toEqual(["chef", "juggler"]);
+    expect(records(next, "p2")).toEqual([]);
+    expect(next.players.p3!.characterSince).toEqual({ phase: "night", day: 2 });
+    expect(rowKeys({ ...next, phase: "day" as const })).toEqual(["juggler:p3"]);
+  });
+
+  it("Pit-Hag / Juggler: a Juggler changed before their Night loses the guesses (the Pit-Hag's own step: juggler.test.ts); whoever is made the Juggler has a fresh first Day", () => {
     const g = withGuesses(proofGame(["juggler", "pithag", "chef", "imp", "barber"], "night", 2), "p0", [{ who: "p2", role: "chef", correct: true }]);
     const next = changeRoles(g, [["p0", "chef"], ["p2", "juggler"]]);
     expect(records(next, "p0")).toEqual([]);
@@ -86,6 +98,21 @@ describe("SV-5f pairs: characters that change who is the Juggler", () => {
 });
 
 describe("SV-5f pairs: impairment tonight", () => {
+  it("Juggler poisoned while guessing (any poisoner), sober tonight: the true count (the page)", () => {
+    // Poisoned on Night 1 through Day 1 (a Poisoner's lifetime), guessing that Day; the poison ends at dusk, so Night 2 is sober.
+    const day1 = withGuesses(proofGame(["juggler", "fanggu", "clockmaker", "cerenovus", "savant"], "day", 1), "p0", [{ who: "p2", role: "clockmaker", correct: true }, { who: "p1", role: "nodashii", correct: false }, { who: "p4", role: "savant", correct: true }]);
+    const poisoned = patchPlayer(day1, "p0", { effects: [...day1.players.p0!.effects, { id: "fx-n1-poison", type: "poisoned", lifetime: { kind: "throughFollowingDay" },
+      state: "active", expiry: { kind: "at", moment: { phase: "night", day: 2 } }, appliedAt: { phase: "night", day: 1 } }] });
+    expect(proofQuery(poisoned).abilityFunctions(bind(poisoned, "p0"))).toEqual({ known: true, value: false });
+    openInStore(poisoned);
+    const advanced = store.getState().advancePhase();
+    expect(advanced, JSON.stringify(advanced)).toMatchObject({ ok: true });
+    const n2 = store.getState().game!;
+    expect(n2).toMatchObject({ phase: "night", day: 2 });
+    expect(proofQuery(n2).abilityFunctions(bind(n2, "p0"))).toEqual({ known: true, value: true });
+    expect(planned(night(n2)).informationDeliveries.at(-1)!.values).toEqual([{ requirementId: "correct", kind: "number", value: 2 }]);
+  });
+
   it("No Dashii / Juggler: a Juggler beside the No Dashii is poisoned tonight, so the Storyteller chooses; the records stay until dawn", () => {
     const g = withGuesses(proofGame(["juggler", "nodashii", "chef", "witch", "monk"], "night", 2), "p0", [{ who: "p2", role: "chef", correct: true }]);
     expect(proofQuery(g).abilityFunctions(bind(g, "p0"))).toEqual({ known: true, value: false });

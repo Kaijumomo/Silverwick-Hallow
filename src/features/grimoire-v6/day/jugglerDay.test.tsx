@@ -16,7 +16,7 @@ import { projectLobbyToPublic, projectLobbyToSelfMap } from "@/stores/projection
 import { JUGGLER_DONE, JUGGLER_GUESS } from "@/abilities/characters/juggler";
 import { createRulesQuery } from "@/stores/rulesQuery";
 import { useV6Ctx } from "../ctx";
-import { playerMarks } from "../board/marks";
+import { playerMarks, removeMark } from "../board/marks";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
 // p0 juggler, p1 fanggu, p2 clockmaker, p3 spy, p4 savant, p5 artist
@@ -36,11 +36,12 @@ const doneMark = () => document.querySelector('[data-day-visit="done"]');
 const records = (type = JUGGLER_GUESS) => game().players.p0!.effects.filter((e) => e.type === type);
 const toast = () => useV6Ui.getState().toast;
 /** The discs drawn around a seat (board/marks.ts), as the board draws them. */
-const marks = (id: string) => renderHook(() => {
+const drawn = (id: string) => renderHook(() => {
   const g = store((st) => st.game)!;
   const ctx = useV6Ctx(g);
-  return playerMarks({ game: g, script: ctx.script, registry: ctx.registry, query: createRulesQuery(g, { script: ctx.script!, registry: ctx.registry }) }, g.players[id]!).map((m) => m.title);
+  return playerMarks({ game: g, script: ctx.script, registry: ctx.registry, query: createRulesQuery(g, { script: ctx.script!, registry: ctx.registry }) }, g.players[id]!);
 }, { wrapper: ({ children }: { children: ReactNode }) => <VotingProvider>{children}</VotingProvider> }).result.current;
+const marks = (id: string) => drawn(id).map((m) => m.title);
 /** Guess: tap the player on the board, then pick the character. */
 function guess(who: string, roleId: string) {
   fireEvent.click(guessPill()!);
@@ -174,6 +175,42 @@ it("a drunk real Juggler still guesses; no row for a Drunk shown the Juggler, a 
   expect(screen.queryByLabelText(/^Seat 1, Player 0.*reminder/)).toBeNull();
 });
 
+it("Privacy Mode or the Night while the board waits for the guessed player: the wait ends; nothing is asked or recorded", async () => {
+  open(proofGame(ROLES, "day", 1));
+  openDay();
+  fireEvent.click(guessPill()!);
+  expect(useTargetPicker.getState().active?.owner).toBe("juggler-guess");
+  act(() => { usePrivacyStore.setState({ enabled: true }); });
+  expect(useTargetPicker.getState().active).toBeNull();
+  expect(pickSeatIfPicking(game(), "p3")).toBe(false);
+  expect(useV6Ui.getState().picker).toBeNull();
+  act(() => { usePrivacyStore.setState({ enabled: false }); });
+  // The seat is tapped and the character picker is open when Privacy Mode turns on: picking the Spy's possible form asks nothing.
+  fireEvent.click(guessPill()!);
+  act(() => { pickSeatIfPicking(game(), "p3"); });
+  const picker = useV6Ui.getState().picker;
+  act(() => { usePrivacyStore.setState({ enabled: true }); });
+  await act(async () => { if (picker?.mode === "show") picker.onPick?.("chef"); await Promise.resolve(); });
+  expect(useV6Ui.getState().ask).toBeNull();
+  expect(records()).toEqual([]);
+  expect(toast()).toBe("The game changed. Guess again.");
+  act(() => { usePrivacyStore.setState({ enabled: false }); useV6Ui.getState().set({ picker: null }); });
+  // Begin Night while waiting: the wait ends too.
+  fireEvent.click(guessPill()!);
+  act(() => { expect(store.getState().advancePhase()).toMatchObject({ ok: true }); });
+  expect(useTargetPicker.getState().active).toBeNull();
+});
+
+it("a CORRECT disc is not removed from the board: Undo takes the guess back (Q16 A)", () => {
+  open(proofGame(ROLES, "day", 1));
+  openDay();
+  guess("p2", "clockmaker");
+  const disc = drawn("p0").find((m) => m.title === "Juggler: Correct")!;
+  expect(removeMark("p0", game().players.p0!.participantId, disc)).toEqual({ ok: false, message: "This follows the Juggler's guesses. Undo the guess to take it back." });
+  expect(records()).toHaveLength(1);
+  expect(screen.getByText("Player 0 · Guesses 1 of 5")).toBeInTheDocument();
+});
+
 it("never reaches a player's or the public projection", () => {
   open(proofGame(ROLES, "day", 1));
   openDay();
@@ -185,9 +222,16 @@ it("never reaches a player's or the public projection", () => {
 });
 
 it("a working Vortox: the row carries the 'Vortox · false info' pill", () => {
-  open(proofGame(["juggler", "vortox", "clockmaker", "chef", "savant", "artist"], "day", 1));
+  // The Juggler's row is the only Day row here, so the one pill is the Juggler's.
+  open(proofGame(["juggler", "vortox", "clockmaker", "chef", "witch"], "day", 1));
   openDay();
-  expect(screen.getAllByText("· false info", { exact: false })).toHaveLength(3);
+  expect(row()).toBeInTheDocument();
+  expect(screen.getAllByText("· false info", { exact: false })).toHaveLength(1);
+  reopen();
+  open(proofGame(["juggler", "imp", "clockmaker", "chef", "witch"], "day", 1));
+  openDay();
+  expect(row()).toBeInTheDocument();
+  expect(screen.queryByText("· false info", { exact: false })).toBeNull();
 });
 
 it("end to end: guesses made on Day 1 survive a reload, Night 2 counts them, and the records are gone by Day 2's dawn", async () => {

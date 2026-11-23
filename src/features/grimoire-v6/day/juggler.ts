@@ -5,6 +5,7 @@ import {
 import { jugglerFirstDay } from "@/rules/night/nightOrder";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import { createRulesQuery } from "@/stores/rulesQuery";
+import { usePrivacyStore } from "@/stores/privacyStore";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { seatedParticipants, useTargetPicker } from "@/features/abilities/abilityUi";
 import type { RoleId, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
@@ -47,17 +48,33 @@ export function jugglerToday(game: StorytellerLobbyRecord, player: STPlayerRecor
 
 const nameOf = (player: STPlayerRecord, fallback: string) => player.name || fallback;
 
-/** The current game and Juggler, if the guess may still be recorded (the game did not change underneath the Storyteller). */
-function stillOpen(ctx: V6Ctx, player: STPlayerRecord): { game: StorytellerLobbyRecord; juggler: STPlayerRecord } | null {
+const OWNER = "juggler-guess";
+
+/** The current game and Juggler, if the guess may still be recorded: the game did not change underneath the Storyteller, and Privacy Mode
+ * and the game's end are read live (not from the render that offered the row). */
+function stillOpen(player: STPlayerRecord): { game: StorytellerLobbyRecord; juggler: STPlayerRecord } | null {
   const game = useStorytellerStore.getState().game;
   const juggler = game?.players[player.id];
-  if (!game || !juggler || juggler.participantId !== player.participantId || !jugglerMayGuess(ctx, game, juggler)) return null;
+  const live = { privacy: usePrivacyStore.getState().enabled, ended: game?.phase === "ended" };
+  if (!game || !juggler || juggler.participantId !== player.participantId || !jugglerMayGuess(live, game, juggler)) return null;
   return { game, juggler };
 }
 
+/** While the board waits for the guessed player's seat: cancel the wait as soon as the row is no longer offered (Privacy Mode turned on,
+ * the Night begun, the Juggler changed), so nothing about the guess is asked or shown. */
+function cancelWhenClosed(player: STPlayerRecord): void {
+  const unsubscribe: (() => void)[] = [];
+  const stop = () => { for (const off of unsubscribe.splice(0)) off(); };
+  const check = () => {
+    if (useTargetPicker.getState().active?.owner !== OWNER) { stop(); return; }
+    if (!stillOpen(player)) { useTargetPicker.getState().cancel(); stop(); }
+  };
+  unsubscribe.push(usePrivacyStore.subscribe(check), useStorytellerStore.subscribe(check), useTargetPicker.subscribe(check));
+}
+
 /** One guess: one Effect on the Juggler, one commit. */
-function recordGuess(ctx: V6Ctx, player: STPlayerRecord, target: ParticipantBinding, roleId: RoleId, correct: boolean): void {
-  const open = stillOpen(ctx, player);
+function recordGuess(player: STPlayerRecord, target: ParticipantBinding, roleId: RoleId, correct: boolean): void {
+  const open = stillOpen(player);
   if (!open) { flash("The game changed. Guess again."); return; }
   const { game, juggler } = open;
   const today = jugglerToday(game, juggler);
@@ -79,16 +96,16 @@ function recordGuess(ctx: V6Ctx, player: STPlayerRecord, target: ParticipantBind
 
 /** Judges the guess (asking the one Yes / No question for a Spy or Recluse), then records it. */
 async function judgeAndRecord(ctx: V6Ctx, player: STPlayerRecord, target: ParticipantBinding, roleId: RoleId): Promise<void> {
-  const open = stillOpen(ctx, player);
+  const open = stillOpen(player);
   if (!open) { flash("The game changed. Guess again."); return; }
   const verdict = jugglerGuessVerdict(queryOf(ctx, open.game), target, roleId);
-  if (verdict.kind === "known") { recordGuess(ctx, player, target, roleId, verdict.correct); return; }
+  if (verdict.kind === "known") { recordGuess(player, target, roleId, verdict.correct); return; }
   const guessed = open.game.players[target.playerId];
   const character = ctx.registry.get(roleId)?.name ?? roleId;
   const who = guessed ? nameOf(guessed, `Seat ${guessed.seat + 1}`) : "That player";
   const answer = await chooseAsk(`Does ${who} register as the ${character}?`, `${verdict.reason} Your ruling decides whether this guess is correct.`, "Yes", "No");
   if (answer === null) { flash("Nothing was recorded."); return; }
-  recordGuess(ctx, player, target, roleId, answer === "first");
+  recordGuess(player, target, roleId, answer === "first");
 }
 
 /** Guess: tap the guessed player, then pick the character. A sixth guess is refused. */
@@ -102,6 +119,7 @@ export function startJugglerGuess(ctx: V6Ctx, player: STPlayerRecord): void {
   const eligible = new Set(seatedParticipants(game).map((p) => p.participantId!));
   flash(`Tap the player ${name} is guessing.`);
   useTargetPicker.getState().start("the Juggler's guess", (target) => {
+    if (!stillOpen(player)) { flash("The game changed. Guess again."); return; }
     const guessed = useStorytellerStore.getState().game?.players[target.playerId];
     useV6Ui.getState().set({ pickHover: null, picker: { mode: "show", tokensOnly: true, title: "What does the Juggler guess?",
       kicker: `The Juggler · guess ${guessed?.name || "the player"}’s character`,
@@ -111,12 +129,13 @@ export function startJugglerGuess(ctx: V6Ctx, player: STPlayerRecord): void {
         void judgeAndRecord(ctx, player, target, roleId);
         return undefined;
       } } });
-  }, { owner: "juggler-guess", eligible });
+  }, { owner: OWNER, eligible });
+  cancelWhenClosed(player);
 }
 
 /** Done: the guesses are finished (zero allowed). One commit. */
 export function markJugglerDone(ctx: V6Ctx, player: STPlayerRecord): void {
-  const open = stillOpen(ctx, player);
+  const open = stillOpen(player);
   if (!open || open.game !== ctx.game) { flash("The game changed. Tap again."); return; }
   const { juggler } = open;
   if (jugglerToday(open.game, juggler).done) return;

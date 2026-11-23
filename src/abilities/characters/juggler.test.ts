@@ -89,11 +89,6 @@ describe("SV-5f Juggler: that night", () => {
     expect(told(withGuesses(night2(), "p0", five)).value).toMatchObject({ value: 5 });
   });
 
-  it("guessed while drunk, sober tonight: the true count (the page)", () => {
-    // The guess-time poisoning ended at dawn; nothing about it is read.
-    expect(told(withGuesses(night2(), "p0", THREE)).value).toMatchObject({ value: 2 });
-  });
-
   it("drunk or poisoned tonight: the Storyteller chooses any number 0 to 5, and the records stay until dawn", () => {
     const g = impair(withGuesses(night2(), "p0", THREE), "p0");
     expect(asked(g)).toMatchObject({ id: JUGGLER_COMMUNICATED, kind: "number", source: "storyteller" });

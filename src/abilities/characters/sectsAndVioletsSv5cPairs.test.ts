@@ -42,7 +42,7 @@ describe("SV-5c pairs: the Vortox with the other Sects & Violets characters", ()
   it("Savant, Artist and Mathematician information stays the Storyteller's (by hand) under a Vortox; SV-5f's Juggler declares its truth", () => {
     const q = proofQuery(proofGame(["vortox", "savant", "artist", "juggler", "mathematician", "philosopher"], "night", 2));
     for (const role of ["savant", "artist", "mathematician"]) expect(q.modifierGate(role, ["information"]).kind, role).toBe("gated");
-    // SV-5f: the Juggler now has a descriptor with `truth`, so the shared false-information rule runs it (sectsAndVioletsSv5fPairs.test.ts).
+    // SV-5f: the Juggler now has a descriptor with `truth`, so the shared false-information rule runs it (juggler.test.ts, the Vortox case).
     expect(q.modifierGate("juggler", ["information"]).kind).toBe("clear");
   });
 
