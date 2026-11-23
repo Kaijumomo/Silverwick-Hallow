@@ -3,7 +3,7 @@ import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
 import type { STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
 import { answerOf, ask, nameOf, outcome, requireLivingActor, subjectId } from "./shared";
-import { informationAbilityRefusal, recluseRegistrationChoice } from "./informationSupport";
+import { asGiven, informationAbilityRefusal, recluseRegistrationChoice, storytellerChooses, yesNoTruth, type WorkedTruth } from "./informationSupport";
 
 /**
  * Flowergirl -- GUIDED (SV-5d, Sects & Violets). https://wiki.bloodontheclocktower.com/Flowergirl (saved 2026-11-11)
@@ -21,8 +21,9 @@ import { informationAbilityRefusal, recluseRegistrationChoice } from "./informat
  * unless a Demon certainly voted (then YES). A YES in a vote that was abandoned, by a player who is or may have been a Demon, is also
  * the Storyteller's question (a vote still open counts at once). One certain Demon YES anywhere in the Day is YES. An incomplete or missing record: by hand, as the Town Crier's.
  * Drunk or poisoned (or a Drunk shown the Flowergirl): the Storyteller chooses YES or NO. Shared rules:
- * docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md (matrix Section 8, information support). A Vortox in play makes the whole step Manual
- * through the shared information modifier (passiveRules.ts) until the Vortox merge.
+ * docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md (matrix Section 8, information support). SV-5i: a Vortox makes the answer false
+ * (src/abilities/falseInformation.ts): the truth is worked out as above, for a drunk or poisoned Flowergirl too, and the opposite is
+ * given; the tokens still follow the record.
  */
 export const FLOWERGIRL_COMMUNICATED = "communicated";
 export const FLOWERGIRL_DEMON_VOTED = "flowergirl:demonVoted";
@@ -85,6 +86,25 @@ function deliver(context: AbilityEvaluationContext, voted: boolean): AbilityEval
     values: [{ requirementId: "demonVoted", kind: "boolean", value: voted }] }]);
 }
 
+/** Did a Demon vote during Day `day`, with the Storyteller's ruling where a voter may have been one? Shared by the evaluator and, under
+ * a Vortox, by the descriptor's truth (SV-5i). */
+function demonVoted(context: AbilityEvaluationContext, day: number): WorkedTruth<boolean> {
+  const record = demonVotedOn(context.query, day);
+  if (record.kind === "manual") return { kind: "unsupported", message: record.message };
+  if (record.kind === "known") return { kind: "known", value: record.voted };
+  const names = (list: ParticipantBinding[]) => list.map((who) => nameOf(context, who)).join(" and ");
+  const why = [
+    record.changed.length ? `${names(record.changed)} voted and ${record.changed.length === 1 ? "has" : "have"} changed character since, so may have been a Demon then.` : "",
+    record.recluses.length ? `${names(record.recluses)} voted and may register as a Demon.` : "",
+    record.unfinished.length ? `${names(record.unfinished)} voted in a vote that was abandoned.` : "",
+  ].filter(Boolean).join(" ");
+  const id = subjectId(FLOWERGIRL_DEMON_VOTED, ...record.changed, ...record.recluses, ...record.unfinished);
+  const ruled = answerOf(context.inputs, id, "boolean");
+  if (ruled) return { kind: "known", value: ruled.value };
+  return { kind: "ask", evaluation: ask(`${why} Did a Demon vote today?`,
+    { id, kind: "boolean", source: "storyteller", label: `A Demon voted today (Yes: the Flowergirl learns ${context.mustBeFalse ? "NO" : "YES"}; No: ${context.mustBeFalse ? "YES" : "NO"})` }) };
+}
+
 export const FLOWERGIRL: AbilityDescriptor = {
   roleId: "flowergirl",
   timing: ["otherNight"],
@@ -99,26 +119,23 @@ export const FLOWERGIRL: AbilityDescriptor = {
     if (refusal) return refusal;
     const moment = context.query.moment();
     if (!moment || moment.phase !== "night" || moment.day <= 1) return { kind: "notApplicable", message: "There was no previous Day to learn about." };
-    if (context.simulated || !context.functioning) {
+    if (storytellerChooses(context)) {
       const told = answerOf(context.inputs, FLOWERGIRL_COMMUNICATED, "boolean");
       if (!told) return ask(context.simulated ? "Simulated wake: this player has no Flowergirl ability. Choose the answer to show."
         : "This Flowergirl's ability is not functioning. Choose the answer to show.",
       { id: FLOWERGIRL_COMMUNICATED, kind: "boolean", source: "storyteller", label: "Show YES (a Demon voted today)" });
       return deliver(context, told.value);
     }
-    const record = demonVotedOn(context.query, moment.day - 1);
-    if (record.kind === "manual") return { kind: "unsupported", message: record.message };
-    if (record.kind === "known") return deliver(context, record.voted);
-    const names = (list: ParticipantBinding[]) => list.map((who) => nameOf(context, who)).join(" and ");
-    const why = [
-      record.changed.length ? `${names(record.changed)} voted and ${record.changed.length === 1 ? "has" : "have"} changed character since, so may have been a Demon then.` : "",
-      record.recluses.length ? `${names(record.recluses)} voted and may register as a Demon.` : "",
-      record.unfinished.length ? `${names(record.unfinished)} voted in a vote that was abandoned.` : "",
-    ].filter(Boolean).join(" ");
-    const id = subjectId(FLOWERGIRL_DEMON_VOTED, ...record.changed, ...record.recluses, ...record.unfinished);
-    const ruled = answerOf(context.inputs, id, "boolean");
-    if (!ruled) return ask(`${why} Did a Demon vote today?`,
-      { id, kind: "boolean", source: "storyteller", label: "A Demon voted today (Yes: the Flowergirl learns YES; No: NO)" });
-    return deliver(context, ruled.value);
+    // SV-5i: under a Vortox the truth is worked out the same way (a drunk or poisoned Flowergirl too, the doubtful-voter question
+    // included) and given as its opposite. The official DEMON VOTED / NOT VOTED tokens keep following the record: they are the
+    // Storyteller's notation of what happened, not what the Flowergirl was told.
+    const truth = demonVoted(context, moment.day - 1);
+    if (truth.kind === "unsupported") return { kind: "unsupported", message: truth.message };
+    if (truth.kind === "ask") return truth.evaluation;
+    return deliver(context, asGiven(context, truth.value));
+  },
+  truth: (context) => {
+    const moment = context.query.moment();
+    return yesNoTruth("demonVoted", moment ? demonVoted(context, moment.day - 1) : { kind: "unsupported", message: "There was no previous Day to learn about." });
   },
 };

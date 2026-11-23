@@ -64,7 +64,7 @@ export function DreamerNightAction({ game, script, step, visible, resolved, onRe
   const types = requirement ? dreamerPickTypes(requirement.id) : undefined;
 
   /** Opens the board's character picker for one token question; a pick either asks the next one (good, then evil) or commits. */
-  const openPicker = (answers: AbilityInputs, id: string) => {
+  const openPicker = (answers: AbilityInputs, id: string, exclude?: readonly (string | number)[]) => {
     if (!safe()) return;
     const group = dreamerPickTypes(id);
     if (!group) return;
@@ -72,6 +72,8 @@ export function DreamerNightAction({ game, script, step, visible, resolved, onRe
     guardGesture();
     useV6Ui.getState().set({ pickHover: null, picker: { mode: "show", tokensOnly: true, title: PICKER_TITLE[key]!,
       kicker: `The Dreamer · ${group === GOOD_TYPES ? "a Townsfolk or an Outsider" : "a Minion or a Demon"}`, types: [...group],
+      // SV-5j: under a Vortox the true character is not offered.
+      ...(exclude?.length ? { exclude: exclude.filter((item): item is string => typeof item === "string") } : {}),
       onPick: (roleId) => {
         const current = useStorytellerStore.getState().game;
         if (!current || current !== live.current.game || !live.current.visible || usePrivacyStore.getState().enabled) return "The game changed. Close this and choose again.";
@@ -82,7 +84,7 @@ export function DreamerNightAction({ game, script, step, visible, resolved, onRe
         if (!planned.ok && planned.code === "illegal") return planned.message;
         if (!planned.ok && planned.code === "needsInput" && planned.requirements?.length === 1 && dreamerPickTypes(planned.requirements[0]!.id)) {
           setDraft({ game: current, inputs: next });
-          openPicker(next, planned.requirements[0]!.id);
+          openPicker(next, planned.requirements[0]!.id, planned.requirements[0]!.exclude);
           return undefined;
         }
         if (!planned.ok) { closePicker(); onManual(planned.message); return undefined; }
@@ -106,7 +108,7 @@ export function DreamerNightAction({ game, script, step, visible, resolved, onRe
     if (!planned.ok && planned.code === "illegal") { setError(planned.message); return; }
     if (!planned.ok && planned.code === "needsInput" && planned.requirements?.length === 1 && dreamerPickTypes(planned.requirements[0]!.id)) {
       setDraft({ game, inputs: next });
-      openPicker(next, planned.requirements[0]!.id);
+      openPicker(next, planned.requirements[0]!.id, planned.requirements[0]!.exclude);
       return;
     }
     if (!planned.ok) onManual(planned.message);
@@ -143,14 +145,15 @@ export function DreamerNightAction({ game, script, step, visible, resolved, onRe
     </div>;
   }
 
-  const note = requirement && plan && !plan.ok ? plan.message.replace(/\s*Choose (a false|the) (good|evil) character( to show)?( with it)?\.$/, "") : null;
+  // SV-5j: the Vortox line is the card's own note line (vm/night.tsx), so it is not repeated here.
+  const note = requirement && plan && !plan.ok ? plan.message.replace(/\s*Choose (a false|the) (good|evil) character( to show)?( with it)?\.$/, "").replace(/^A Vortox is in play[:.]\s*(\w)/, (_, first: string) => first.toUpperCase()) : null;
   return <div className="gv-choice">
     <hr className="gv-choice-divider" />
     <p className="modern-night-pick">{target ? "Chosen" : "Choose a player on the board"}
       {target && <span className="night-pick-chip">{nameOf(target.playerId)}</span>}</p>
     {note && <p className="gv-choice-note">{note}</p>}
     {requirement && types && inputs && <div className="gv-choice-actions" role="group" aria-label="The Dreamer's tokens">
-      <button className="gv-choice-confirm" type="button" onClick={() => openPicker(inputs, requirement.id)}>
+      <button className="gv-choice-confirm" type="button" onClick={() => openPicker(inputs, requirement.id, requirement.exclude)}>
         {types === GOOD_TYPES ? "Choose Good Character" : "Choose Evil Character"}</button>
     </div>}
     {error && <p role="alert" className="behavior-help">{error}</p>}

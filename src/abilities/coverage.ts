@@ -96,7 +96,7 @@ const OWNED_CAPABILITIES: Readonly<Record<string, readonly CoverageCapability[]>
   soldier: [{ owner: "rules", boundary: "Canonical functioning Soldier Demon death protection only", evidence: "src/abilities/characters/passiveRules.ts" }],
   fool: [{ owner: "rules", boundary: "First death of a functioning Fool does not happen and spends the ability (death gate); executions advised, Storyteller records them", evidence: "src/abilities/characters/passiveRules.ts" }],
   tealady: [{ owner: "rules", boundary: "Both alive neighbours good (as they register to the Tea Lady) and a functioning Tea Lady: neither can die except to the Assassin (death gate); derived CANNOT DIE tokens", evidence: "src/abilities/characters/passiveRules.ts" }],
-  vortox: [{ owner: "rules", boundary: "Relevant Townsfolk information goes wholly Manual; no Vortox resolver", evidence: "src/abilities/characters/passiveRules.ts" }],
+  vortox: [{ owner: "rules", boundary: "SV-5k: the nightly kill is a guided wake through the shared Demon death gate (the Vortox's DEAD token, its cause recorded). SV-5h/i/j: Townsfolk information is false through one shared rule (a Yes / No given as its opposite; a number, token or pair chosen by the Storyteller from the answers that are not true) for every Townsfolk ability that declares its truth; any other Townsfolk information stays wholly Manual. SV-5l: a Day with no execution and a living, sober and healthy Vortox is captured at the Day-to-Night boundary and shown as one advisory line on the End control; the Storyteller ends the game", evidence: "src/abilities/falseInformation.ts" }],
 };
 
 function capabilitiesOf(role: RawRole, semantics: AbilitySemanticsRegistry): CoverageCapability[] {

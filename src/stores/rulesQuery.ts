@@ -238,6 +238,11 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
   const modifiers = environment.modifiers ?? activeModifiers(game, environment.registry);
   const participant = (binding: ParticipantBinding) => boundParticipant(game, binding);
   const seated = () => game.seatOrder.map((id) => game.players[id]).filter((p): p is STPlayerRecord => !!p && !p.isEmpty && !!p.participantId);
+  /** SV-5h: whether this ability's descriptor declares its truth, so the shared false-information rule can run it under a Vortox. */
+  const falseAnswersTaught = (roleId: RoleId) => {
+    const resolved = resolveAbilitySemantics(roleId, environment.registry, environment.semantics);
+    return resolved.kind === "supported" && !!resolved.descriptor.truth;
+  };
 
   /** Applicability with cycle detection: a revisited Effect is UNKNOWN. */
   const retained = (player: STPlayerRecord, visiting: Set<string>): QueryAnswer<boolean> => {
@@ -598,7 +603,7 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     gameRuleFact: (type) => gameRuleFactDefinition(type)
       ? known(gameRuleFactActive(game, type))
       : unknown(`"${typeof type === "string" ? type : "?"}" is not a registered Rule Fact: Silverwick applies no rule to it.`),
-    modifierGate: (roleId, scopes) => gateEvaluation([...modifiers, ...passiveInformationModifiers(self, roleId)], roleId, scopes, game),
+    modifierGate: (roleId, scopes) => gateEvaluation([...modifiers, ...passiveInformationModifiers(self, roleId, falseAnswersTaught(roleId))], roleId, scopes, game),
     assumingAlive: (binding, alive) => {
       const player = participant(binding);
       if (!player) return self;

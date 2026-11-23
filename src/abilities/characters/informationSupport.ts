@@ -1,4 +1,5 @@
-import type { AbilityEvaluation, AbilityEvaluationContext } from "../semantics";
+import type { AbilityEvaluation, AbilityEvaluationContext, InformationTruth } from "../semantics";
+import { booleanTruth, unknownTruth } from "../falseInformation";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import { isCanonicalRole } from "@/data/canonical";
 import type { RulesQuery } from "@/stores/rulesQuery";
@@ -85,13 +86,35 @@ export function possibleAlignments(query: RulesQuery, binding: ParticipantBindin
  * Minion could be counted", gives none), without duplicates, in first-seen order. */
 export function possibleAnswers<F, A>(choices: readonly (readonly F[])[], answer: (forms: readonly F[]) => readonly A[]): A[] {
   const answers: A[] = [];
+  for (const combination of answersByCombination(choices, answer)) for (const value of combination) if (!answers.includes(value)) answers.push(value);
+  return answers;
+}
+
+/** The answers under each combination of forms, one list per combination (SV-5h: their intersection is the certainly true answer). */
+export function answersByCombination<F, A>(choices: readonly (readonly F[])[], answer: (forms: readonly F[]) => readonly A[]): (readonly A[])[] {
+  const combinations: (readonly A[])[] = [];
   const walk = (index: number, picked: F[]) => {
-    if (index === choices.length) {
-      for (const value of answer(picked)) if (!answers.includes(value)) answers.push(value);
-      return;
-    }
+    if (index === choices.length) { combinations.push(answer(picked)); return; }
     for (const form of choices[index]!) walk(index + 1, [...picked, form]);
   };
   walk(0, []);
-  return answers;
+  return combinations;
 }
+
+/**
+ * SV-5h (the shared false-information rule, src/abilities/falseInformation.ts): the Storyteller picks the answer freely only when the
+ * actor has no working ability (a simulated wake, drunk, poisoned) AND no Vortox makes it false. Under a Vortox the truth is worked out
+ * as for a working ability, then removed: `asGiven` turns a Yes / No into its opposite; a number, token or pair is the Storyteller's
+ * choice among the answers that are not true.
+ */
+export const storytellerChooses = (context: AbilityEvaluationContext): boolean => !context.mustBeFalse && (context.simulated || !context.functioning);
+export const asGiven = (context: AbilityEvaluationContext, truth: boolean): boolean => context.mustBeFalse ? !truth : truth;
+
+/** SV-5i: a character's truth, worked out once and read both by its evaluator (true information, or its opposite under a Vortox) and
+ * by its descriptor's `truth` (the coordinator's check). `ask`: a Spy / Recluse / changed-character ruling the Storyteller has not
+ * given yet, as the question to put. */
+export type WorkedTruth<T> = { kind: "known"; value: T } | { kind: "ask"; evaluation: AbilityEvaluation } | { kind: "unsupported"; message: string };
+
+/** A Yes / No truth for the coordinator: the known or ruled answer is true; before the ruling either answer may be. */
+export const yesNoTruth = (requirementId: string, worked: WorkedTruth<boolean>): InformationTruth =>
+  worked.kind === "unsupported" ? unknownTruth(worked.message) : booleanTruth(requirementId, worked.kind === "known" ? worked.value : undefined);

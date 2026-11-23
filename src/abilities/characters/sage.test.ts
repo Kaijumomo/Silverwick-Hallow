@@ -142,7 +142,7 @@ describe("Sage -- a death with no recorded cause asks the Storyteller", () => {
 
 describe("Sage -- PO review 2026-11-15: when is the cause unknown, and a living Sage", () => {
   it("every Demon kill Silverwick resolves records its cause, so the Storyteller is never asked (Imp, Vigormortis, No Dashii, Fang Gu)", () => {
-    // The Vortox's kill is entered by hand today (SV-5); with it in play the Sage's step is the Storyteller's anyway.
+    // The Vortox's guided kill (SV-5k) records its cause too: vortoxKill.test.ts.
     for (const demon of ["imp", "vigormortis", "nodashii", "fanggu"]) {
       const g0 = proofGame(["sage", demon, "clockmaker", "dreamer", "mathematician"], "night", 2);
       const g = planned(plan(g0, request(g0, "p1", demon, { target: { kind: "participant", participants: [bind(g0, "p0")] } })));
@@ -177,10 +177,11 @@ describe("Sage -- impairment and modifiers", () => {
     }
   });
 
-  it("a living Vortox makes the whole step the Storyteller's (Manual)", () => {
+  it("SV-5j: a living Vortox makes the pair false: a death entered by hand, neither player may be the Demon", () => {
     const g = handDeath(proofGame(["sage", "vortox", "chef", "monk", "empath"], "night", 2));
     const id = sageCauseId(eventOf(g).id);
-    expect(sage(g, { [id]: yes(), [SAGE_PLAYERS]: players(g, "p1", "p2") })).toMatchObject({ ok: false, code: "unsupported" });
+    expect(sage(g, { [id]: yes(), [SAGE_PLAYERS]: players(g, "p1", "p2") })).toMatchObject({ ok: false, code: "illegal" });
+    expect(planned(sage(g, { [id]: yes(), [SAGE_PLAYERS]: players(g, "p2", "p3") })).informationDeliveries.at(-1)).toMatchObject({ informationActionId: "sage-triggered" });
   });
 
   it("a Recluse in play: the jinx \"The Recluse might register as the Demon to the Sage\" keeps the step the Storyteller's", () => {

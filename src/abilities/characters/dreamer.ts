@@ -1,6 +1,7 @@
 import type { AbilityDescriptor, AbilityEvaluation, AbilityEvaluationContext, AbilityInputRequirement } from "../semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
-import type { RoleId, RoleType } from "@/stores/types";
+import type { RoleDef, RoleId, RoleType } from "@/stores/types";
+import { FALSE_INFORMATION_REFUSED, knownTruth, unknownTruth } from "../falseInformation";
 import { answerOf, ask, nameOf, outcome, participantsOf, requireLivingActor, subjectId } from "./shared";
 import { informationAbilityRefusal, spyRegistrationChoice, recluseRegistrationChoice } from "./informationSupport";
 
@@ -19,8 +20,9 @@ import { informationAbilityRefusal, spyRegistrationChoice, recluseRegistrationCh
  * The Storyteller picks BOTH tokens (one good, one evil) when the Dreamer is drunk or poisoned, a Drunk is shown the Dreamer, or the
  * chosen player is a healthy Spy or Recluse (PO Q2: either may register as a character of the other group, so every good-and-evil
  * pair is one the pages allow). Shared rules: docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md (matrix Section 8, information support).
- * By hand: any other registration only the Storyteller can rule; a character that is neither good nor evil by type. A Vortox in
- * play makes the whole step Manual through the shared information modifier (passiveRules.ts) until the Vortox merge.
+ * By hand: any other registration only the Storyteller can rule; a character that is neither good nor evil by type. SV-5j: a Vortox
+ * makes both tokens false (src/abilities/falseInformation.ts; the page: a Dreamer who checks a Savant "learns that player is either
+ * the Philosopher or the No Dashii"): the Storyteller picks both, and neither may be the character the player registers as.
  */
 export const DREAMER_TARGET = "target";
 /** Follow-up ids. Each names the group of the token asked for, so the Night card opens the picker on that group. */
@@ -46,13 +48,26 @@ function deliver(context: AbilityEvaluationContext, target: ParticipantBinding, 
 }
 
 /** One picked token of the expected group, or a refusal. */
-function picked(context: AbilityEvaluationContext, id: string, types: readonly RoleType[], label: string, message: string):
+function picked(context: AbilityEvaluationContext, id: string, types: readonly RoleType[], label: string, message: string, exclude: readonly RoleId[] = []):
   { roleId: RoleId } | { evaluation: AbilityEvaluation } {
   const answer = answerOf(context.inputs, id, "character");
-  if (!answer) return { evaluation: ask(message, { id, kind: "character", source: "storyteller", label } satisfies AbilityInputRequirement) };
+  if (!answer) return { evaluation: ask(message, { id, kind: "character", source: "storyteller", label, ...(exclude.length ? { exclude } : {}) } satisfies AbilityInputRequirement) };
   const role = answer.roleIds.length === 1 ? context.query.roleOf(answer.roleIds[0]!) : undefined;
   if (!role || !types.includes(role.type)) return { evaluation: { kind: "illegal", message: types === GOOD_TYPES ? "Choose a Townsfolk or an Outsider of this script." : "Choose a Minion or a Demon of this script." } };
+  if (exclude.includes(role.id)) return { evaluation: { kind: "illegal", message: FALSE_INFORMATION_REFUSED } };
   return { roleId: role.id };
+}
+
+/** SV-5j: the character the chosen player registers as to the Dreamer (null: a healthy Spy or Recluse, who may register as a character
+ * of either team, so no token is certainly the true one). Shared by the evaluator and the descriptor's truth. */
+function registeredCharacter(context: AbilityEvaluationContext, target: ParticipantBinding): { known: true; role: RoleDef | null } | { known: false; message: string } {
+  if (spyRegistrationChoice(context.query, target) || recluseRegistrationChoice(context.query, target)) return { known: true, role: null };
+  const character = context.query.registration(target, "dreamer").character;
+  if (!character.known) return { known: false, message: character.reason };
+  const role = context.query.roleOf(character.value);
+  if (!role || (!GOOD_TYPES.includes(role.type) && !EVIL_TYPES.includes(role.type)))
+    return { known: false, message: "This character is neither good nor evil by type: choose the Dreamer's tokens by hand." };
+  return { known: true, role };
 }
 
 export const DREAMER: AbilityDescriptor = {
@@ -73,6 +88,21 @@ export const DREAMER: AbilityDescriptor = {
     if (!target || !player) return { kind: "illegal", message: "Choose one player." };
     if (player.isTraveler) return { kind: "illegal", message: "The Dreamer may not choose a Traveller." };
     const who = nameOf(context, target);
+    if (context.mustBeFalse) {
+      // SV-5j: under a Vortox (a drunk or poisoned Dreamer too) neither token is the character the player registers as: the Storyteller
+      // picks both, the true one left out. A healthy Spy or Recluse may register as a character of either team, so no token is
+      // certainly true and the Storyteller picks freely (their pick is also their ruling of that registration).
+      const truth = registeredCharacter(context, target);
+      if (!truth.known) return { kind: "unsupported", message: truth.message };
+      const exclude = truth.role ? [truth.role.id] : [];
+      const why = truth.role ? `A Vortox is in play: neither token may be the ${truth.role.name}.`
+        : `A Vortox is in play. ${who} is the ${context.query.roleOf(player.actualRole)?.name ?? "Spy or Recluse"} and may register as another character: show two tokens that are false for how they register.`;
+      const good = picked(context, subjectId(DREAMER_GOOD, target), GOOD_TYPES, "The good character shown", `${why} Choose the good character to show.`, exclude);
+      if ("evaluation" in good) return good.evaluation;
+      const evil = picked(context, subjectId(DREAMER_EVIL, target), EVIL_TYPES, "The evil character shown", `${why} Choose the evil character to show.`, exclude);
+      if ("evaluation" in evil) return evil.evaluation;
+      return deliver(context, target, good.roleId, evil.roleId);
+    }
     const optional = !context.simulated && context.functioning && (spyRegistrationChoice(context.query, target) || recluseRegistrationChoice(context.query, target));
     if (context.simulated || !context.functioning || optional) {
       const why = context.simulated ? "Simulated wake: this player has no Dreamer ability."
@@ -95,5 +125,14 @@ export const DREAMER: AbilityDescriptor = {
       `${who} is the ${role.name}. Choose a false ${goodTeam ? "evil" : "good"} character to show with it.`);
     if ("evaluation" in other) return other.evaluation;
     return goodTeam ? deliver(context, target, role.id, other.roleId) : deliver(context, target, other.roleId, role.id);
+  },
+  truth: (context) => {
+    const target = participantsOf(context.inputs, DREAMER_TARGET)?.[0];
+    if (!target || !context.query.participant(target)) return unknownTruth("Choose one player.");
+    const truth = registeredCharacter(context, target);
+    if (!truth.known) return unknownTruth(truth.message);
+    const trueId = truth.role?.id;
+    return knownTruth((value) => trueId !== undefined && value.kind === "role" && value.roleId === trueId
+      && (value.requirementId === "goodCharacter" || value.requirementId === "evilCharacter"));
   },
 };

@@ -3,7 +3,7 @@ import { VERIFIED_DESCRIPTORS } from "./characters";
 import { VERIFIED_MANUAL } from "./characters/classification";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import type { HookScope } from "./modifiers";
-import type { AbilityOutcome, ParticipantBinding } from "@/stores/abilityResolution";
+import type { AbilityInformationValue, AbilityOutcome, ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
 import type { Alignment, InformationActionId, ParticipantId, RoleDef, RoleId, STPlayerRecord } from "@/stores/types";
 
@@ -81,6 +81,9 @@ export type AbilityInputRequirement = {
   noneLabel?: string;
   constraints?: readonly InputConstraint[];
   label: string;
+  /** SV-5h: answers the Storyteller may not give here (a Vortox: the true ones), by number or character id. The Night card leaves
+   * them out; the coordinator refuses them whatever the card offers. Presentation of an evaluator follow-up only. */
+  exclude?: readonly (number | RoleId)[];
 };
 
 /** Phase 10F presentation metadata for the Night Order / workspace. */
@@ -145,7 +148,21 @@ export type AbilityDescriptor = {
   independentFacts?: readonly string[];
   presentation: AbilityPresentation;
   evaluator?: AbilityEvaluator;
+  /** SV-5h, the shared false-information rule (the Vortox: "Townsfolk abilities yield false info"). What the information would be if
+   * it were true, from authoritative state and the Storyteller's rulings so far. Only a Townsfolk information ability declares it;
+   * one that does not stays by hand while its information must be false. See src/abilities/falseInformation.ts. */
+  truth?: (context: AbilityEvaluationContext) => InformationTruth;
 };
+
+/**
+ * SV-5h: the truth of one information ability. `isTrue(value)`: this delivered value is true however any player whose registration is
+ * the Storyteller's call registers (so it can never be given as false information). A value that some allowed registration makes false
+ * is not "true" here: the Storyteller's choice of answer is also their ruling of that registration, as the pages allow. `known: false`:
+ * the truth cannot be worked out, so false information cannot be checked and the step is the Storyteller's, by hand.
+ */
+export type InformationTruth =
+  | { known: true; isTrue: (value: AbilityInformationValue) => boolean }
+  | { known: false; reason: string };
 
 /** One answered input, as the workspace collected it. Participant answers
  * are ALWAYS stale-safe bindings -- never a bare PlayerId. */
@@ -183,6 +200,10 @@ export type AbilityEvaluationContext = {
    * information modifier allowing only certain values). The coordinator
    * also ENFORCES information constraints on the delivered values. */
   constraints: readonly InformationConstraint[];
+  /** SV-5h: a Vortox makes this Townsfolk information false (src/abilities/falseInformation.ts). Set by the coordinator only for a
+   * descriptor that declares `truth` and an actor who really has the ability (never a simulated wake); the actor's own drunkenness or
+   * poisoning does not lift it ("even if they are drunk or poisoned, it must be false"). Absent means false. */
+  mustBeFalse?: boolean;
   /** SV-1a: on the verified Night-trigger path, the exact Life Event that
    * fired it (as revalidated by the coordinator). Absent on every other path. */
   trigger?: { eventId: string | null };

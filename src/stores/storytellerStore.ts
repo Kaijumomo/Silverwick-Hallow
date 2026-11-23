@@ -52,7 +52,7 @@ import { newParticipantId, participantIdAppearsIn } from "./participants";
 import { participantRoleStepEntries, participantStepKey, travelerArrivalStepKey, planNightStepStatus } from "./nightProgress";
 import { planAbilityResolution, type AbilityRefusal, type AbilityResolutionRequest } from "./abilityResolution";
 import { planRecordedLifeOutcome } from "./deathResolution";
-import { captureSaintQualification, captureMayorQualification, reconcileVictoryEvidence } from "./victoryEvidence";
+import { captureSaintQualification, captureMayorQualification, captureVortoxNoExecution, reconcileVictoryEvidence } from "./victoryEvidence";
 import { clearNightActionCorrections, invalidateNightActionCorrections, planNightActionTargetCorrection, rememberCorrectedNightAction, rememberNightAction, type NightActionTargetCorrection } from "./nightActionCorrection";
 import {
   applyGameRuleFactPlan,
@@ -3390,9 +3390,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
         let finalGame = expiredFacts ? applyGameRuleFactPlan(withEffects, expiredFacts) : withEffects;
         const registry = registryForGame(state, game);
         if (registry) {
-          const evidence = captureMayorQualification(game, finalGame, { registry, script: selectScriptById(state, game.scriptId) ?? null });
+          const environment = { registry, script: selectScriptById(state, game.scriptId) ?? null };
+          const evidence = captureMayorQualification(game, finalGame, environment);
           if (!evidence.ok) return evidence;
-          finalGame = evidence.game;
+          // SV-5l: in the same replacement (Undo of the advance removes it with everything else).
+          const vortox = captureVortoxNoExecution(game, evidence.game, environment);
+          if (!vortox.ok) return vortox;
+          finalGame = vortox.game;
         }
         const failure = commitAuthoritativeState(finalGame, state, votingAuthorityToken(state.lobby)!);
         return failure ? { ok: false, message: failure } : { ok: true };

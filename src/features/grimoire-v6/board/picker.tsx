@@ -159,7 +159,8 @@ export function buildPicker(env: PickerEnv): Record<string, unknown> {
       }
       const showTypes = mode === "show" ? (picker as Extract<PickerState, { mode: "show" }>).types : undefined;
       const locked = (mode === "bluff" && type === "traveler") || (mode === "drunk" && !shownChoices.some((r) => r.id === role.id))
-        || (!!showTypes && !showTypes.includes(type));
+        || (!!showTypes && !showTypes.includes(type))
+        || (mode === "show" && !!(picker as Extract<PickerState, { mode: "show" }>).exclude?.includes(role.id));
       return tileFor(role, {
         filter, ring, glow, nameColor, tag, tagKind, pressed: dist ? on : !!mine, locked,
         aria: `${role.name}${bi >= 0 ? ", Demon bluff" : ""}${dist ? (on ? ", selected" : "") : used ? `, in use by ${holder.join(", ")}` : mine ? ", current" : ""}`,

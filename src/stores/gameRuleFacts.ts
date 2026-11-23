@@ -1,7 +1,7 @@
 import { cloneOwned, durableProvenance, historyId, isLiveGamePhase, type MutationContext } from "./history";
 import { currentLiveMoment, momentOrdinal } from "./lifeEvents";
 import { GAME_RULE_FACT_TYPE, MutationContextInputSchema, ProvenanceSchema } from "./schemas";
-import { gameRuleFactDefinition, registeredGameRuleFactExpiry, TOYMAKER_DEMON_SKIP_OCCURRED, isVictoryEvidenceType } from "./gameRuleFactRegistry";
+import { gameRuleFactDefinition, registeredGameRuleFactExpiry, TOYMAKER_DEMON_SKIP_OCCURRED, isVictoryEvidenceType, isVortoxDayEndType } from "./gameRuleFactRegistry";
 import type {
   GameRuleFactHistoryRecord,
   GameRuleFactRecord,
@@ -148,6 +148,13 @@ export function planCapturedVictoryEvidence(game: StorytellerLobbyRecord, transa
   if (transaction.intents.length !== 1 || transaction.intents[0]?.kind !== "apply" || !isVictoryEvidenceType(transaction.intents[0].type)) return refuse("invalid", "Invalid qualification capture.");
   try { return plan(game, transaction, DEFAULT_IDS, true); }
   catch { return refuse("invalid", "Invalid qualification capture."); }
+}
+
+/** SV-5l: the Vortox's Day-end capture, the same atomic capture path as the victory evidence above, for its own two types only. */
+export function planCapturedDayEndFact(game: StorytellerLobbyRecord, transaction: GameRuleFactTransaction): GameRuleFactPlanResult {
+  if (transaction.intents.length !== 1 || transaction.intents[0]?.kind !== "apply" || !isVortoxDayEndType(transaction.intents[0].type)) return refuse("invalid", "Invalid Day-end capture.");
+  try { return plan(game, transaction, DEFAULT_IDS, true); }
+  catch { return refuse("invalid", "Invalid Day-end capture."); }
 }
 
 function plan(game: StorytellerLobbyRecord, transaction: GameRuleFactTransaction, ids: GameRuleFactIdSource, capture = false): GameRuleFactPlanResult {

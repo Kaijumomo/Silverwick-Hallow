@@ -17,7 +17,9 @@ export type PickerState =
   | { mode: "choose"; playerId: PlayerId }
   | { mode: "show"; title: string; kicker?: string; types?: RoleType[]; onPick?: (roleId: RoleId) => string | undefined;
       /** Character tokens only: no "who holds it" names and no bluff marks (the Gambler guesses, and the Philosopher chooses, without the picker naming who is in play). */
-      tokensOnly?: boolean }
+      tokensOnly?: boolean;
+      /** SV-5j: characters that may not be picked here (a Vortox: the true one); shown locked, like a type outside `types`. */
+      exclude?: RoleId[] }
   | { mode: "bluff"; slot: number }
   | { mode: "drunk"; playerId: PlayerId };
 
