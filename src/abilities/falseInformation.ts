@@ -50,9 +50,13 @@ export const booleanTruth = (requirementId: string, value: boolean | undefined):
   knownTruth((given) => value !== undefined && given.requirementId === requirementId && given.kind === "boolean" && given.value === value);
 
 /** The answers true under EVERY registration the Storyteller may rule: the intersection of each registration combination's answers.
- * A value some combination does not give is false under that ruling, so it is not certainly true. */
-export const certainValues = <T>(perCombination: readonly (readonly T[])[]): T[] =>
-  perCombination.length ? perCombination[0]!.filter((value, index, first) => first.indexOf(value) === index && perCombination.every((answers) => answers.includes(value))) : [];
+ * A value some combination does not give is false under that ruling, so it is not certainly true. A ruling that gives no answer at
+ * all (a lone Spy ruled not a Minion: the Clockmaker has nothing to count) is not one the Storyteller can use, so it is left out, as
+ * the true-information path (`possibleAnswers`) leaves it out (independent check at 4208516). */
+export const certainValues = <T>(perCombination: readonly (readonly T[])[]): T[] => {
+  const usable = perCombination.filter((answers) => answers.length > 0);
+  return usable.length ? usable[0]!.filter((value, index, first) => first.indexOf(value) === index && usable.every((answers) => answers.includes(value))) : [];
+};
 
 /** A number whose certainly true values are `certain` (see `certainValues`): only those are refused. */
 export const numberTruth = (requirementId: string, certain: readonly number[]): InformationTruth =>

@@ -148,8 +148,9 @@ describe("SV-5h: the truth helpers", () => {
     // Independent check: a Recluse who may register as a second Demon adds 1 to one ruling; 2 is true under both, so it is refused.
     expect(certainValues([[2, 1], [2]])).toEqual([2]);
     expect(falseNumbers([1, 2, 3, 4], certainValues([[2, 1], [2]]))).toEqual([1, 3, 4]);
-    // A ruling that gives no answer at all leaves nothing certainly true.
-    expect(certainValues([[2], []])).toEqual([]);
+    // A ruling that gives no answer at all is not one the Storyteller can use: it is left out, as on the true-information path.
+    expect(certainValues([[2], []])).toEqual([2]);
+    expect(certainValues([[], []])).toEqual([]);
     const truth = numberTruth("n", certainValues([[1], [3]]));
     expect(truth.known && truth.isTrue({ requirementId: "n", kind: "number", value: 1 })).toBe(false);
   });

@@ -113,6 +113,13 @@ describe("SV-5i Clockmaker (Night 1)", () => {
     const g = proofGame(["clockmaker", "vortox", "spy", "witch", "sage", "mutant", "dreamer", "seamstress"], "night", 1);
     expect(question(g, "clockmaker")).toMatchObject({ id: "communicated", exclude: [] });
   });
+  it("independent check at 4208516: a lone Spy ruled not a Minion leaves the Clockmaker nothing to count, so the true 2 is still refused", () => {
+    // p0 clockmaker, p1 vortox, p2 chef, p3 spy (2 steps), p4 sage ... : the true-information path gives 2 without asking.
+    const g = proofGame(["clockmaker", "vortox", "chef", "spy", "sage", "mutant", "dreamer", "seamstress"], "night", 1);
+    expect(question(g, "clockmaker")).toMatchObject({ id: "communicated", exclude: [2] });
+    expect(result(g, "clockmaker", { communicated: num(2) })).toMatchObject({ ok: false, code: "illegal" });
+    expect(told(g, "clockmaker", { communicated: num(3) }).value).toBe(3);
+  });
   it("independent check: a Recluse who may register as a second Demon adds 1 under one ruling, but 2 is true under every ruling: refused", () => {
     // p4 recluse: as a Demon it is 1 step from the Witch; as a Minion or an Outsider, the Vortox is still 2 from its nearest Minion.
     const g = proofGame(["clockmaker", "vortox", "chef", "witch", "recluse", "sage", "dreamer", "seamstress"], "night", 1);
