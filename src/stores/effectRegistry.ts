@@ -92,6 +92,8 @@ const DEFINITIONS: Record<string, EffectDefinition> = {
     description: "One of the Juggler's first-Day guesses: a player and a character, and whether it was correct when made. A correct one draws the official CORRECT token." },
   jugglerGuessesDone: { type: "jugglerGuessesDone", label: "Juggler's guesses done", indicator: "marked",
     description: "The Juggler finished guessing that Day. It draws no token." },
+  abnormal: { type: "abnormal", label: "Abnormal", indicator: "marked",
+    description: "The Mathematician's ABNORMAL mark: this player's ability worked abnormally since dawn due to another character. Counted at the Mathematician's wake, cleared there, gone at dawn." },
   marked: { type: "marked", label: "Marked", indicator: "marked" },
   registersFalsely: { type: "registersFalsely", label: "Registers falsely", indicator: "registration" },
   fortuneTellerRedHerring: { type: "fortuneTellerRedHerring", label: "Red Herring", indicator: "redHerring",

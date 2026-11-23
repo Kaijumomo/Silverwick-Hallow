@@ -13,6 +13,8 @@ import { haircutsTonight } from "@/abilities/characters/barber";
 import { demonVotedOn, flowergirlDay } from "@/abilities/characters/flowergirl";
 import { isCanonicalRole } from "@/data/canonical";
 import { ruleFactForReminder } from "@/stores/reminderRuleFacts";
+import { effectForReminder, reminderEffectIntents } from "@/stores/reminderEffects";
+import { abnormalReasons } from "@/stores/abnormalMarks";
 import { gainedRoleOf, gainedTokenShownOf } from "@/stores/gainedAbility";
 import {
   firstInformationReminderGroups, officialEffectPresentation, officialNotationRole, redHerringNotationCovered,
@@ -150,7 +152,11 @@ export function playerMarks(env: MarkEnv, player: STPlayerRecord): Mark[] {
   for (const token of effects.tokens) {
     const label = times(token.label, token.instances.length);
     // SV-4a: the MAD token's tooltip names the character ("Cerenovus: Mad about being the Sage"); every other token keeps "Character: Label".
-    const title = token.about ? `${token.role.name}: ${token.label} about being the ${token.about}` : `${token.role.name}: ${label}`;
+    // SV-5g: the ABNORMAL token's tooltip says why ("Mathematician: Abnormal (Vortox: false
+    // information)"), Storyteller-only like the seat.
+    const reasons = token.key === "mathematician:abnormal" ? abnormalReasons(token.instances) : [];
+    const title = token.about ? `${token.role.name}: ${token.label} about being the ${token.about}`
+      : reasons.length ? `${token.role.name}: ${label} (${reasons.join("; ")})` : `${token.role.name}: ${label}`;
     // SV-5f: a CORRECT token is a Juggler's guess; it is taken back with Undo only (Q16 A), never by removing the disc.
     const removal: Mark["removal"] = token.key === "juggler:jugglerGuess"
       ? { type: "derived", reason: "This follows the Juggler's guesses. Undo the guess to take it back." } : { type: "effect", token };
@@ -305,10 +311,20 @@ export function reminderPalette(env: MarkEnv): { inPlay: PaletteEntry[]; all: Pa
   return { all, inPlay: all.filter((entry) => present.has(entry.role.id) || chosen.has(entry.role.id)) };
 }
 
-/** Places one reminder with the source character that owns its artwork: notation only, except a token that records a rule (reminderRuleFacts.ts). */
+/** Places one reminder with the source character that owns its artwork: notation only, except a token that records a rule
+ * (reminderRuleFacts.ts) or a per-player Effect (reminderEffects.ts). */
 export function placeReminder(playerId: PlayerId, participantId: string | undefined, entry: PaletteEntry): MarkResult {
   const ctx = bound(playerId, participantId);
   if (!ctx) return { ok: false, message: "The player changed. Reopen their details before continuing." };
+  // SV-5g (PO Q7 A): the Mathematician's ABNORMAL token is a real mark on this player: the Effect alone is recorded and the token is
+  // drawn from it, so it is taken away the same way as any drawn Effect.
+  const effect = effectForReminder(entry.role.id, entry.label);
+  if (effect) {
+    const planned = reminderEffectIntents(ctx.game, effect, ctx.target);
+    if (!planned.ok) return planned;
+    const result = ctx.current.resolveEffects({ intents: planned.intents }, captureVotingContext());
+    return result.ok ? { ok: true } : { ok: false, message: result.message };
+  }
   const place = { intents: [{ kind: "place" as const, target: ctx.target, reminder: { label: entry.label, sourceCharacter: entry.role.id } }] };
   // SV-2c (PO decision 2026-11-21): a token that records a rule (the Fang Gu's ONCE) records it in the same commit.
   const fact = ruleFactForReminder(entry.role.id, entry.label);

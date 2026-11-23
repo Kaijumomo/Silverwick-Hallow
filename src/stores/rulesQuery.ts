@@ -109,6 +109,9 @@ export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>
   jugglerGuess: "storytellerFact",
   /** SV-5f: the Juggler's guesses are finished for that Day (zero allowed); without it the Night step's number is the Storyteller's. */
   jugglerGuessesDone: "storytellerFact",
+  /** SV-5g: the Mathematician's ABNORMAL mark on a player whose ability worked abnormally since dawn (stores/abnormalMarks.ts). A recorded
+   * Storyteller fact with no source: the Mathematician's Night step counts the holders, and it expires at dawn. */
+  abnormal: "storytellerFact",
 };
 export const effectSemanticsOf = (type: string): EffectSemantics | undefined =>
   Object.prototype.hasOwnProperty.call(APPROVED_EFFECT_SEMANTICS, type) ? APPROVED_EFFECT_SEMANTICS[type] : undefined;
