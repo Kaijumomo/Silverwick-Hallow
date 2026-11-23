@@ -54,12 +54,12 @@ export function dayVisitRows(ctx: V6Ctx): DayActionRow[] {
   for (const id of game.seatOrder) {
     const player = game.players[id];
     if (artistMayAsk(ctx, player)) rows.push({ ...base(player!, "artist", `${player!.name || "The Artist"} may ask 1 yes/no question`),
-      answersLabel: "Artist: the answer you whispered", answers: ARTIST_ANSWERS.map((label) => ({ label, act: () => answerArtist(ctx, player!, label) })) });
+      answersLabel: `Artist, ${player!.name || `seat ${player!.seat + 1}`}: the answer you whispered`, answers: ARTIST_ANSWERS.map((label) => ({ label, act: () => answerArtist(ctx, player!, label) })) });
     // SV-5e2: one "Told today" pill; once tapped, the row shows it as done until the Day ends (the next Day starts unmarked).
     if (savantMayVisit(ctx, player)) {
       const told = savantToldToday(game, player!);
       rows.push({ ...base(player!, "savant", `${player!.name || "The Savant"} may learn 2 things: 1 true, 1 false`),
-        ...(told ? { done: "Told today" } : { answersLabel: "Savant: today's visit", answers: [{ label: "Told today", act: () => markSavantTold(ctx, player!) }] }) });
+        ...(told ? { done: "Told today" } : { answersLabel: `Savant, ${player!.name || `seat ${player!.seat + 1}`}: today's visit`, answers: [{ label: "Told today", act: () => markSavantTold(ctx, player!) }] }) });
     }
   }
   return rows;

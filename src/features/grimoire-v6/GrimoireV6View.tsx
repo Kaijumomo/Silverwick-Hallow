@@ -347,6 +347,9 @@ const S336: React.CSSProperties = { "alignSelf": "center", "display": "inline-fl
 // PO 2026-11-21: the shared Night status pill (Completed / Not waking), the Drunk pill's shape in the grimoire's silver line colour.
 const NIGHT_STATE_PILL: React.CSSProperties = { "alignSelf": "center", "display": "inline-flex", "alignItems": "center", "gap": "6px", "padding": "3px 10px", "borderRadius": "99px", "border": "1px solid rgba(176,186,204,.4)", "background": "rgba(176,186,204,.1)", "fontSize": "13px", "fontWeight": "600", "color": "rgba(222,216,204,.78)" };
 // SV-5 part 2a: the Artist's answer pills, side by side at the Day actions row's right end (no extra height).
+// Independent check S1: on a narrow Day card the Vortox pill drops under the name rather than squeezing into the answer pills.
+const DAY_VISIT_NAME_LINE: React.CSSProperties = { ...S41, "flexWrap": "wrap", "rowGap": "4px" };
+const DAY_VISIT_FALSE_INFO: React.CSSProperties = { ...S336, "flex": "none", "whiteSpace": "nowrap" };
 const DAY_VISIT_PILLS: React.CSSProperties = { "flex": "none", "display": "flex", "alignItems": "center", "gap": "8px" };
 const NIGHT_STATE_GLYPH: React.CSSProperties = { "width": "12px", "height": "12px", "fill": "none", "stroke": "currentColor", "strokeWidth": "2.2", "strokeLinecap": "round", "strokeLinejoin": "round" };
 const S337: React.CSSProperties = { "width": "7px", "height": "7px", "borderRadius": "50%", "background": "#b48ce0" };
@@ -3010,7 +3013,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                     <div key={row.key} style={S372}>
                       <div role="img" aria-hidden="true" style={css(`width:44px; height:44px; flex:none; border-radius:50%; background:url(${row.img ?? ''}) center/78% no-repeat, radial-gradient(circle at 38% 30%, #f1e6c9, #b09566); box-shadow:0 0 0 2px #14151d, 0 0 0 3px rgba(176,186,204,.35);`)} />
                       <div style={S350}>
-                        <div style={S41}>
+                        <div style={row.falseInfo ? DAY_VISIT_NAME_LINE : S41}>
                           <span style={S298}>
                             {T(row.name)}
                           </span>
@@ -3021,7 +3024,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                           )}
                           {/* SV-5 part 2a: the Night card's "Vortox · false info" pill, as is. */}
                           {row.falseInfo && (
-                          <span style={S336}>
+                          <span style={DAY_VISIT_FALSE_INFO}>
                             <span style={S337} />
                             <span style={S338}>Vortox</span>
                             · false info

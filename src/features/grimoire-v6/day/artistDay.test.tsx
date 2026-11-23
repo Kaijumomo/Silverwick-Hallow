@@ -23,7 +23,7 @@ function open(g: StorytellerLobbyRecord) {
 }
 const openDay = () => { fireEvent.click(screen.getByRole("button", { name: /^Day$/i })); expect(screen.getByText("No one is on the block")).toBeInTheDocument(); };
 const reopen = () => { cleanup(); useV6Ui.getState().reset(); };
-const answers = () => screen.queryByRole("group", { name: "Artist: the answer you whispered" });
+const answers = () => screen.queryByRole("group", { name: "Artist, Player 0: the answer you whispered" });
 const tapAnswer = (label: string) => fireEvent.click(within(answers()!).getByRole("button", { name: label }));
 const noAbility = (id = "p0") => game().players[id]!.reminders.filter((r) => r.label === "No Ability" && r.sourceCharacter === "artist");
 

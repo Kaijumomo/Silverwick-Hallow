@@ -88,7 +88,8 @@ function commit(ctx: V6Ctx, player: STPlayerRecord, roleId: "artist" | "savant",
 export function answerArtist(ctx: V6Ctx, player: STPlayerRecord, answer: ArtistAnswer): void {
   if (!artistMayAsk(ctx, player)) { flash(`${player.name || "The Artist"} cannot ask a question right now.`); return; }
   if (!commit(ctx, player, "artist", answer, "The Artist's private question: the Storyteller's whispered answer", true)) return;
-  flash(`${player.name || "The Artist"} was told “${answer}”. Their ability is used.`);
+  // Independent check N2: the toast never repeats the whispered answer (it may still be on screen when Privacy Mode is switched on).
+  flash(`${player.name || "The Artist"}’s question is answered. Their ability is used.`);
 }
 
 /** The Savant's "Told today" pill. */

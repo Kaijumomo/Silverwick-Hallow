@@ -13,7 +13,7 @@ import { dayActionRows, dayVisitRows } from "@/features/grimoire-v6/day/dayCard"
 import { executeOffered, mutantNotWorking } from "@/features/grimoire-v6/day/madnessExecution";
 import { artistMayAsk, savantMayVisit } from "@/features/grimoire-v6/day/privateVisit";
 import { changeRoleIntent } from "@/stores/roleResolution";
-import { openInStore, patchPlayer, plan, planned, proofGame, request } from "@/test/proofFixtures";
+import { bind, openInStore, patchPlayer, plan, planned, proofGame, proofQuery, request } from "@/test/proofFixtures";
 import type { AbilityInputValue } from "@/abilities/semantics";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
@@ -46,6 +46,7 @@ describe("SV-5b pairs: the Artist and the Savant", () => {
     const g = philosopherChose(["philosopher", "imp", roleId, "chef", "witch"], roleId);
     const ctx = ctxOf(g);
     expect(artistMayAsk(ctx, g.players.p0) || savantMayVisit(ctx, g.players.p0)).toBe(false);
+    expect(proofQuery(g).abilityFunctions(bind(g, "p2"))).toEqual({ known: true, value: false });
     expect(rowKeys(g)).toEqual([`${roleId}:p2`]);
   });
 
@@ -55,10 +56,13 @@ describe("SV-5b pairs: the Artist and the Savant", () => {
     expect(rowKeys(next)).toEqual([`${roleId}:p2`]);
   });
 
-  it("Pit-Hag or Barber / Artist: a new Artist made from a spent one starts with an unspent ability, so the row is offered", () => {
-    const g = patchPlayer(proofGame(["artist", "pithag", "chef", "imp"], "day", 2), "p0", { abilityUsed: true });
+  it("Pit-Hag or Barber / Artist: a character change resets the used flag, so a player whose flag was set becomes an unspent Artist", () => {
+    let g = patchPlayer(proofGame(["artist", "pithag", "chef", "imp"], "day", 2), "p0", { abilityUsed: true });
+    g = patchPlayer(g, "p2", { abilityUsed: true });
     expect(rowKeys(g)).toEqual([]);
-    expect(rowKeys(changeRoles(g, [["p0", "chef"], ["p2", "artist"]]))).toEqual(["artist:p2"]);
+    const next = changeRoles(g, [["p0", "chef"], ["p2", "artist"]]);
+    expect(next.players.p2).toMatchObject({ actualRole: "artist", abilityUsed: false });
+    expect(rowKeys(next)).toEqual(["artist:p2"]);
   });
 
   it("Cerenovus / Artist and Savant: a mad Artist or Savant keeps the row (madness is the Storyteller's call); the seat offers Execute", () => {

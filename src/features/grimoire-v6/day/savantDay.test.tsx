@@ -43,7 +43,7 @@ it("a living Savant: a row with one 'Told today' pill beside the Artist's row, a
   openDay();
   expect(screen.getByText(`${game().players.p0!.name} may learn 2 things: 1 true, 1 false`)).toBeInTheDocument();
   expect(toldPill()).toBeInTheDocument();
-  expect(screen.getByRole("group", { name: "Artist: the answer you whispered" })).toBeInTheDocument();
+  expect(screen.getByRole("group", { name: "Artist, Player 3: the answer you whispered" })).toBeInTheDocument();
   expect(toldDone()).toBeNull();
 });
 
