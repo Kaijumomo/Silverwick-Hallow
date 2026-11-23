@@ -45,7 +45,8 @@ export function abnormalInformationIntents(game: StorytellerLobbyRecord, input: 
  * ability works, in the same commit as his number (one Undo restores the marks and the count). A simulated wake (a Drunk shown the
  * Mathematician) has no ability and clears nothing.
  * While another living player also holds the Mathematician's ability (a Philosopher who gained it, whose count is the Storyteller's, by
- * hand, from the tokens), nothing is cleared: each counts the marks since dawn, and they still expire at the next dawn uncounted.
+ * hand, from the tokens; or a second Mathematician made by a Pit-Hag or a Barber), nothing is cleared: each counts the marks since dawn,
+ * and they still expire at the next dawn uncounted, so no count changes.
  */
 export function abnormalClearingIntents(game: StorytellerLobbyRecord, context: AbilityEvaluationContext, outcome: AbilityOutcome): EffectIntent[] {
   if (context.simulated || context.roleId !== "mathematician" || !outcome.operations.some((operation) => operation.domain === "information")) return [];

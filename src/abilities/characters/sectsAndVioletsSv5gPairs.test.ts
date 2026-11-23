@@ -116,6 +116,18 @@ describe("SV-5g pairs: becoming or gaining the Mathematician", () => {
     expect(after(g, "p0", "mathematician", { [MATHEMATICIAN_COMMUNICATED]: num(1) }).informationDeliveries.at(-1)).toMatchObject({ values: [{ value: 1 }] });
   });
 
+  it("Pit-Hag / Mathematician: two real Mathematicians each count the marks without himself; neither clears them, and they go at dawn", () => {
+    // p0 mathematician, p1 chef made a Mathematician, p2 fanggu, p3 witch, p4 pithag
+    let g = patchPlayer(proofGame(["mathematician", "chef", "fanggu", "witch", "pithag"], "night", 2), "p1", { actualRole: "mathematician", shownRole: "mathematician" });
+    g = handMark(g, "p1", "p3");
+    const first = after(g, "p0", "mathematician");
+    expect(first.informationDeliveries.at(-1)).toMatchObject({ values: [{ value: 2 }] });
+    expect(abnormalCount(first)).toBe(2);
+    const second = after(first, "p1", "mathematician");
+    expect(second.informationDeliveries.at(-1)).toMatchObject({ values: [{ value: 1 }] });
+    expect(abnormalCount(second)).toBe(2);
+  });
+
   it("Philosopher / Mathematician: a gained Mathematician is not run by the app (by hand); while it listens the app still marks a Vortox's false information", () => {
     // p0 philosopher, p1 oracle, p2 vortox, p3 witch, p4 chef (dead, so the Oracle has 0 dead evil players to count truly).
     const before = patchPlayer(proofGame(["philosopher", "oracle", "vortox", "witch", "chef"], "night", 3), "p4", { alive: false });
