@@ -113,6 +113,6 @@ export const CLOCKMAKER: AbilityDescriptor = {
   },
   truth: (context) => {
     const answers = clockmakerAnswers(context.query);
-    return answers.kind === "manual" ? unknownTruth(answers.message) : numberTruth("steps", answers.certain);
+    return answers.kind === "manual" ? unknownTruth(answers.message) : numberTruth("steps", answers.certain, answers.steps);
   },
 };
