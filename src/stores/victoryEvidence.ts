@@ -2,7 +2,8 @@ import { isCanonicalRole } from "@/data/canonical";
 import { scarletWomanSuccession } from "@/abilities/characters/scarletWoman";
 import { bindingOf, createRulesQuery, effectSemanticsOf, type RulesQueryEnvironment } from "./rulesQuery";
 import { applyGameRuleFactPlan, planCapturedDayEndFact, planCapturedVictoryEvidence, planGameRuleFactTransaction } from "./gameRuleFacts";
-import { isVictoryEvidenceType, isSaintNonqualifyingEvidenceType, victoryEvidenceInvalidReason, victoryEvidenceCollectionInvalidReason, SAINT_EXECUTION_GOOD_TEAM_LOST, SAINT_EXECUTION_EVIL_TEAM_LOST, SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED, SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED, MAYOR_DAY_END_GOOD_TEAM_WON, MAYOR_DAY_END_EVIL_TEAM_WON, RESOLVED_DEMON_DEATH_NO_SUCCESSOR, VORTOX_DUSK_RULING, VORTOX_WORKING_AT_DUSK } from "./gameRuleFactRegistry";
+import { isVictoryEvidenceType, isSaintNonqualifyingEvidenceType, victoryEvidenceInvalidReason, victoryEvidenceCollectionInvalidReason, SAINT_EXECUTION_GOOD_TEAM_LOST, SAINT_EXECUTION_EVIL_TEAM_LOST, SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED, SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED, MAYOR_DAY_END_GOOD_TEAM_WON, MAYOR_DAY_END_EVIL_TEAM_WON, RESOLVED_DEMON_DEATH_NO_SUCCESSOR, VORTOX_DUSK_RULING, VORTOX_WORKING_AT_DUSK, VORTOX_DAY_END_TYPES, FANG_GU_ONCE } from "./gameRuleFactRegistry";
+import { gainedRoleOf } from "./gainedAbility";
 export { isSaintNonqualifyingEvidenceType } from "./gameRuleFactRegistry";
 import { executionsAt, momentOrdinal } from "./lifeEvents";
 import { sameSnapshot } from "./history";
@@ -10,7 +11,18 @@ import type { GameRuleFactRecord, STPlayerRecord, StorytellerLobbyRecord } from 
 
 export type VictoryEvidenceResult = { ok: true; game: StorytellerLobbyRecord } | { ok: false; message: string };
 const accepted = (game: StorytellerLobbyRecord): VictoryEvidenceResult => ({ ok: true, game });
-const supportedRoles = new Set(["washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller", "undertaker", "monk", "ravenkeeper", "virgin", "slayer", "soldier", "mayor", "butler", "drunk", "recluse", "saint", "poisoner", "spy", "scarletwoman", "baron", "imp", "bureaucrat", "thief", "gunslinger", "scapegoat", "beggar", "cerenovus", "eviltwin"]);
+const supportedRoles = new Set(["washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller", "undertaker", "monk", "ravenkeeper", "virgin", "slayer", "soldier", "mayor", "butler", "drunk", "recluse", "saint", "poisoner", "spy", "scarletwoman", "baron", "imp", "bureaucrat", "thief", "gunslinger", "scapegoat", "beggar", "cerenovus", "eviltwin",
+  // SV-5o: the rest of Sects & Violets, each reviewed against the ending rules (docs/ai/SECTS_AND_VIOLETS_SV5H_PAIRS.md).
+  "clockmaker", "dreamer", "snakecharmer", "mathematician", "flowergirl", "towncrier", "oracle", "savant", "seamstress", "philosopher", "artist", "juggler", "sage",
+  "mutant", "sweetheart", "barber", "klutz", "witch", "pithag", "fanggu", "vigormortis", "nodashii", "vortox"]);
+/** SV-5o: game-rule facts reviewed against the ending rules, which do not by themselves make the ending manual. The Fang Gu's ONCE only
+ * records that a jump happened (no ending meaning); the Vortox's dusk facts carry their own advisory line and never contradict a verified
+ * route (a Vortox alive at dusk cannot have died by a proved route, and two alive is evil's either way). Every other fact keeps the game
+ * manual (the Pit-Hag's arbitrary deaths, the Toymaker, the Klutz until SV-5q, the Mastermind's final day). */
+const endingReviewedFactTypes = new Set<string>([FANG_GU_ONCE, ...VORTOX_DAY_END_TYPES]);
+/** SV-5o: a gained ability (the Philosopher) of a character whose game-ending rule is read from the seat's own character (the Saint, the
+ * Mayor), or of a character not on the list, is not covered: manual. */
+const gainedEndingRoles = new Set(["saint", "mayor"]);
 
 /** A finite reviewed interaction envelope, independent of script name/id. The
  * broader ability coverage list also contains non-TB game-ending abilities;
@@ -19,12 +31,14 @@ export function victoryCoverageEligibility(game: StorytellerLobbyRecord, environ
   const manual = (reason: string) => ({ kind: "manual" as const, reason });
   if (!environment.script) return manual("The current script is unavailable.");
   if (game.fabled.length || game.lorics.length) return manual("A Fabled or Loric may affect the game-ending rules.");
-  if (game.gameRuleFacts.some(fact => !isVictoryEvidenceType(fact.type))) return manual("A game rule fact has unverified game-ending interactions.");
+  if (game.gameRuleFacts.some(fact => !isVictoryEvidenceType(fact.type) && !endingReviewedFactTypes.has(fact.type))) return manual("A game rule fact has unverified game-ending interactions.");
   for (const player of Object.values(game.players)) {
     if (player.isEmpty || !player.participantId) continue;
     const role = environment.registry.get(player.actualRole);
     if (!role || !isCanonicalRole(role) || !supportedRoles.has(role.id)) return manual("A character has unverified game-ending interactions.");
     if (player.effects.some(effect => effect.state === "active" && (!effectSemanticsOf(effect.type) || effectSemanticsOf(effect.type) === "judgment"))) return manual("An effect requires Storyteller judgment.");
+    const gained = gainedRoleOf(player);
+    if (gained && (gainedEndingRoles.has(gained) || !supportedRoles.has(gained))) return manual("A gained ability has unverified game-ending interactions.");
   }
   const query = createRulesQuery(game, environment);
   for (const role of ["saint", "mayor"]) if (query.modifierGate(role, ["death", "alignment", "role", "voting"]).kind !== "clear") return manual("A rule modifier needs manual game-ending adjudication.");

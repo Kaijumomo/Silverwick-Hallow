@@ -258,6 +258,8 @@ export const PARTIAL_SUPPORT: Readonly<Record<RoleId, readonly Piece[]>> = {
 export const ENDING_EVIDENCE_ROLES: readonly RoleId[] = [
   "washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller", "undertaker", "monk", "ravenkeeper", "virgin", "slayer", "soldier", "mayor",
   "butler", "drunk", "recluse", "saint", "poisoner", "spy", "scarletwoman", "baron", "imp", "bureaucrat", "thief", "gunslinger", "scapegoat", "beggar", "cerenovus", "eviltwin",
+  "clockmaker", "dreamer", "snakecharmer", "mathematician", "flowergirl", "towncrier", "oracle", "savant", "seamstress", "philosopher", "artist", "juggler", "sage",
+  "mutant", "sweetheart", "barber", "klutz", "witch", "pithag", "fanggu", "vigormortis", "nodashii", "vortox",
 ];
 
 /** Test files for guided and reviewed characters (the two most-referenced, or the loop that reviews them). */

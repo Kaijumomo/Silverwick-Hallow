@@ -66,10 +66,12 @@ describe("SV-4 pairs: the Evil Twin against every character of the script", () =
       expect(rows, other).toContain("eviltwin");
     }
   });
-  it("a game with any other character of the script in play keeps every ending proposal by hand", () => {
+  it("a game with any other character of the script in play: no ending proposed while the game goes on (SV-5o: every S&V character is now on the game-ending list)", () => {
     for (const other of [...TOWNSFOLK, ...OUTSIDERS, ...EVIL_OTHERS]) {
       const g = twinned(proofGame(["eviltwin", "imp", "chef", "monk", other], "day", 2), "p0", "p2");
-      expect(endGameEligibility(g, proofEnv()).kind, other).toBe("unknown");
+      // A second Demon beside the Imp: "Multiple Demons need manual adjudication".
+      const demon = ["fanggu", "nodashii", "vigormortis", "vortox"].includes(other);
+      expect(endGameEligibility(g, proofEnv()).kind, other).toBe(demon ? "unknown" : "none");
     }
   });
   it("beside the Cerenovus both run: the Cerenovus's choice and the Evil Twin's introduction, in the night order", () => {
