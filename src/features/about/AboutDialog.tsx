@@ -20,21 +20,21 @@ export function AboutDialog({ onClose }: { onClose: () => void }) {
     ["Channel", BUILD_INFO.channel],
   ];
   return (
-    <Modal title="About Silverwick Hollow" onClose={onClose}>
+    <Modal title="About Silverwick Hollow" onClose={onClose} className="about-dialog">
       <div className="dialog-body">
         <dl className="about-rows">
           {rows.map(([k, v]) => (
             <div key={k} className="about-row">
-              <dt className="field-label">{k}</dt>
+              <dt>{k}</dt>
               <dd>{v}</dd>
             </div>
           ))}
         </dl>
-        <p className="behavior-help">Quote these when reporting a problem, so we know exactly which build you were running.</p>
+        <p className="about-help">Quote these when reporting a problem, so we know exactly which build you were running.</p>
         <div className="dialog-row">
-          <button className="btn btn-gold" onClick={copy}>Copy</button>
-          {copied === "yes" && <span role="status">Copied</span>}
-          {copied === "no" && <span role="status">Could not copy. Select the text above instead.</span>}
+          <button className="about-copy" onClick={copy}>Copy</button>
+          {copied === "yes" && <span className="about-status" role="status">Copied</span>}
+          {copied === "no" && <span className="about-status" role="status">Could not copy. Select the text above instead.</span>}
         </div>
       </div>
     </Modal>
