@@ -1,5 +1,7 @@
 # Sects & Violets SV-1: pair record for the Sage, Sweetheart, Klutz and Barber
 
+> **History.** The final truth for every pair of the Sects & Violets script is in [SECTS_AND_VIOLETS_PAIRS.md](SECTS_AND_VIOLETS_PAIRS.md) (SV-6a). This record is kept as it was written; its rows are not edited further.
+
 Built on branch `claude/project-thread-yltpht` from main `9de844c`; rows 003, 018, 024, 039, 045, 060, 066 and 081 rewritten for SV-2 on `claude/project-thread-79ipjd`. In the style of the [Trouble Brewing pair record](TROUBLE_BREWING_B9_PAIRS.md): each pair is marked as **test** (a focused scenario names both, or the shared rule is tested with one of them), **code read** (the shared query or command was read, no dedicated scenario), or **Storyteller judgment** (the app leaves it by hand on purpose). It becomes the first part of the script's record for SV-6.
 
 Scope: the four SV-1 characters against the other 21 characters of Sects & Violets (84 pairs) and against each other (6 pairs): 90 unordered pairs, no self-pairs. This is not 90 dedicated tests. The rules come from the saved wiki pages of 2026-11-11 (Sage rev 3009, Sweetheart rev 2704, Klutz rev 1758, Barber rev 1757).

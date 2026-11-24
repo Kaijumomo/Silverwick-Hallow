@@ -1,5 +1,7 @@
 # Sects & Violets SV-5 part 4: pair record for the Mastermind
 
+> **History.** The Mastermind's pairs (a Bad Moon Rising character) stay in this record; the 300 pairs of the Sects & Violets script are in [SECTS_AND_VIOLETS_PAIRS.md](SECTS_AND_VIOLETS_PAIRS.md) (SV-6a).
+
 Built on branch `claude/project-thread-x4i9rg` from main `2a0a9de`. In the style of the earlier pair records: each pair is **test** (a focused scenario names both, or the shared rule is tested with one of them), **code read** (the shared query or command was read, no dedicated scenario), or **Storyteller judgment**.
 
 Scope: the Mastermind against every Sects & Violets character (25 rows) and the Trouble Brewing and Bad Moon Rising characters that touch its rule. The rules come from the saved Mastermind page ("If the Demon dies by execution (ending the game), play for 1 more day. If a player is then executed, their team loses.", its How to Run and its four jinxes) and the PO's answers of 2026-11-23: Q13 B (the End control's line plus "Day N · Mastermind's final day" in the Day card heading), Q14 A (the result shows when the final Day's execution is recorded; "nobody executed" waits for dusk), Q15 A (a Demon's death at night is a ruling line).

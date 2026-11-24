@@ -1,5 +1,7 @@
 # Sects & Violets SV-5 part 5: pair record for the endings
 
+> **History.** The final truth for every pair of the Sects & Violets script is in [SECTS_AND_VIOLETS_PAIRS.md](SECTS_AND_VIOLETS_PAIRS.md) (SV-6a). This record is kept as it was written; its rows are not edited further.
+
 Built on branch `claude/project-thread-x4i9rg` from main `2a0a9de`. Each Sects & Violets character against the ending rules (the Demon's death, two players alive, the Evil Twin's block, the Klutz, the Vortox, the Mastermind's final day): **25 rows**, one per character. Same assessment words as the other pair records.
 
 The rules come from plan v3 ("all 25 S&V at Level B: the app proposes, the Storyteller confirms") and the PO's answers of 2026-11-23: Q19 A (the Evil Twin, Klutz and Vortox lines keep "Check before ending the game"; only the Demon-death and two-alive routes state the winner plainly) and Q20 A (the first Demon-death proof covers Day executions and the Slayer's shot only).

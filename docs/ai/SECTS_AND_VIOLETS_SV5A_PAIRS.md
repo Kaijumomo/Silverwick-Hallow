@@ -1,5 +1,7 @@
 # Sects & Violets SV-5 part 1: pair record for the Clockmaker, the Seamstress, the Dreamer and the Flowergirl
 
+> **History.** The final truth for every pair of the Sects & Violets script is in [SECTS_AND_VIOLETS_PAIRS.md](SECTS_AND_VIOLETS_PAIRS.md) (SV-6a). This record is kept as it was written; its rows are not edited further.
+
 Built on branch `claude/project-thread-u7vzpe` from main `e9e6062`. In the style of the [SV-1](SECTS_AND_VIOLETS_SV1_PAIRS.md) to [SV-4](SECTS_AND_VIOLETS_SV4_PAIRS.md) pair records: each pair is marked as **test** (a focused scenario names both, or the shared rule is tested with one of them), **code read** (the shared query or command was read, no dedicated scenario), or **Storyteller judgment** (the app leaves it by hand on purpose).
 
 Scope: each of the four against every other character of Sects & Violets, each pair counted once: 24 + 23 + 22 + 21 = **90 unordered pairs**. The rules come from the saved wiki pages (Clockmaker, Seamstress, Dreamer, Flowergirl, saved 2026-11-11) and the PO's answers of 2026-11-21: Q1 numbers and Yes / No stay on the Storyteller's card for a finger or nod signal; Q2 Spy and Recluse registration follows the pages (automatic when every allowed registration gives the same answer, otherwise one Storyteller question offering only the possible answers); Q3 the Flowergirl's tokens are derived from the voting record, nothing new stored; Q4 the Dreamer's tokens are shown good first, evil second.

@@ -1,5 +1,7 @@
 # Sects & Violets SV-5 part 2a: pair record for the Artist, the Savant and the Mutant
 
+> **History.** The final truth for every pair of the Sects & Violets script is in [SECTS_AND_VIOLETS_PAIRS.md](SECTS_AND_VIOLETS_PAIRS.md) (SV-6a). This record is kept as it was written; its rows are not edited further.
+
 Built on branch `claude/project-thread-xj7eef` from main `d4cea32`. In the style of the [SV-1](SECTS_AND_VIOLETS_SV1_PAIRS.md) to [SV-5 part 3](SECTS_AND_VIOLETS_SV5C_PAIRS.md) pair records: each pair is marked as **test** (a focused scenario names both, or the shared rule is tested with one of them), **code read** (the shared query or command was read, no dedicated scenario), or **Storyteller judgment** (the app leaves it by hand on purpose).
 
 Scope: the Artist, the Savant and the Mutant against every other character of Sects & Violets: **69 unordered pairs** (24 for the Artist, 23 more for the Savant, 22 more for the Mutant). The rules come from the saved Artist, Savant, Mutant and Cerenovus pages and the PO's answers: Q5 A (nothing typed), Q8 A (the Execute wording), Q12 A (the optional rows never raise the Day button's "!") and the build approval of 2026-11-23 (no "Ask again" pill).

@@ -1,5 +1,7 @@
 # Sects & Violets SV-5 part 3: pair record for the Vortox
 
+> **History.** The final truth for every pair of the Sects & Violets script is in [SECTS_AND_VIOLETS_PAIRS.md](SECTS_AND_VIOLETS_PAIRS.md) (SV-6a). This record is kept as it was written; its rows are not edited further.
+
 Built on branch `claude/project-thread-aaxed3` from main `d19c7b9`; updated after the independent check. In the style of the [SV-1](SECTS_AND_VIOLETS_SV1_PAIRS.md) to [SV-5 part 1](SECTS_AND_VIOLETS_SV5A_PAIRS.md) pair records: each pair is marked as **test** (a focused scenario names both, or the shared rule is tested with one of them), **code read** (the shared query or command was read, no dedicated scenario), or **Storyteller judgment** (the app leaves it by hand on purpose).
 
 Scope: the Vortox against every other character of Sects & Violets: **24 unordered pairs**. Each row is also the Vortox row of the other character (the SV-5 part 1 rows 024, 047, 069 and 090 now point here). The rules come from the saved Vortox page ("Each night\*, choose a player: they die. Townsfolk abilities yield false info. Each day, if no-one is executed, evil wins.") and the PO's answers of 2026-11-22: Q9 A (the seven guided information characters get false answers), Q10 A (the Storyteller chooses among the answers that are not true; a Yes / No is flipped automatically), Q11 A (a guided kill step), and his vision of the same day (the no-execution ending is a line on the End control; the Storyteller confirms).
