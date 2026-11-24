@@ -208,11 +208,11 @@ describe("SV-5l: the line's lifetime", () => {
     expect(endHint(ctx(night, true))).toBe("");
   });
 
-  it("shows on a script with characters not on the game-ending list (the line does not wait for it)", () => {
-    // The Vortox, the Oracle and the Mutant are not on the reviewed game-ending list: no verified ending is proposed, yet the line shows.
+  it("shows beside the game-ending list's own reading (SV-5o: the Vortox, the Oracle and the Mutant are on the list; nothing verified here)", () => {
+    // No verified ending is proposed (the Demon lives and more than two are alive), yet the line shows.
     openInStore(day());
     const night = advance();
-    expect(endGameEligibility(night, env)).toMatchObject({ kind: "unknown" });
+    expect(endGameEligibility(night, env)).toMatchObject({ kind: "none" });
     expect(endHint(ctx(night))).toBe(VORTOX_NO_EXECUTION_LINE);
   });
 });

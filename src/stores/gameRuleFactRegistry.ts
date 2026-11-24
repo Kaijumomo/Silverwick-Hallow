@@ -19,7 +19,9 @@ export type GameRuleFactExpiryRule =
   /** A Day qualification remains available through the immediately following Night. */
   | "nextDay"
   /** Retained exactly as long as its current/previous-phase Life Event. */
-  | "lifeEventWindow";
+  | "lifeEventWindow"
+  /** SV-5m: recorded on Day N, kept through the following Night, Day N+1 and the Night after it: expires on entering Day N+2. */
+  | "finalDay";
 
 export type GameRuleFactDefinition = {
   type: GameRuleFactType;
@@ -62,8 +64,23 @@ export const VORTOX_WORKING_AT_DUSK = "vortoxWorkingAtDusk";
 export const VORTOX_DUSK_RULING = "vortoxDuskRuling";
 export const VORTOX_DAY_END_TYPES = [VORTOX_WORKING_AT_DUSK, VORTOX_DUSK_RULING] as const;
 export const isVortoxDayEndType = (type: string): boolean => (VORTOX_DAY_END_TYPES as readonly string[]).includes(type);
+/** SV-5m: the Mastermind's "If the Demon dies by execution (ending the game), play for 1 more day. If a player is then executed, their
+ * team loses" (https://wiki.bloodontheclocktower.com/Mastermind). Captured only inside the accepted execution of the last living Demon,
+ * with the Mastermind as its source and that execution's Life Event id as its `resolutionId` (so Undo, a retraction or an amendment of
+ * the execution takes it away: `reconcileMastermindFinalDay`). Recorded on the Day of the execution and kept through the final Day and the
+ * Night after it. RULING: the ability may have triggered (its functioning was not known, a jinx, a Zombuul, an unresolved succession):
+ * the Storyteller decides. Not game-ending evidence: the End control carries advisory lines, and the Storyteller ends the game. */
+export const MASTERMIND_FINAL_DAY = "mastermindFinalDay";
+export const MASTERMIND_FINAL_DAY_RULING = "mastermindFinalDayRuling";
+export const MASTERMIND_FINAL_DAY_TYPES = [MASTERMIND_FINAL_DAY, MASTERMIND_FINAL_DAY_RULING] as const;
+export const isMastermindFinalDayType = (type: string): boolean => (MASTERMIND_FINAL_DAY_TYPES as readonly string[]).includes(type);
 export const VICTORY_EVIDENCE_TYPES = [SAINT_EXECUTION_GOOD_TEAM_LOST, SAINT_EXECUTION_EVIL_TEAM_LOST, SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED, SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED, MAYOR_DAY_END_GOOD_TEAM_WON, MAYOR_DAY_END_EVIL_TEAM_WON, RESOLVED_DEMON_DEATH_NO_SUCCESSOR] as const;
 export const isVictoryEvidenceType = (type: string): boolean => (VICTORY_EVIDENCE_TYPES as readonly string[]).includes(type);
+/** SV-5p: the Demons whose death the resolved-death proof covers. The Imp on Day and Night (its night self-pass is checked); the four
+ * Sects & Violets Demons on the Day only (an execution or a Slayer's shot; Q20 A): a night death of one stays the Storyteller's check. */
+export const PROVED_DEMONS = ["imp", "fanggu", "nodashii", "vigormortis", "vortox"] as const;
+export const isProvedDemon = (role: unknown): boolean => typeof role === "string" && (PROVED_DEMONS as readonly string[]).includes(role);
+export const isDayOnlyProvedDemon = (role: unknown): boolean => isProvedDemon(role) && role !== "imp";
 export const isSaintNonqualifyingEvidenceType = (type: string): boolean => type === SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED || type === SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED;
 
 /**
@@ -127,6 +144,13 @@ export const GAME_RULE_FACT_REGISTRY: ReadonlyMap<GameRuleFactType, GameRuleFact
       : "When the Day ended, a Vortox was alive but whether its ability worked is the Storyteller's ruling.",
     applicablePhases: ["day"] as const, expiry: "nextDay" as const, captureOnly: true as const,
   }] as const),
+  ...MASTERMIND_FINAL_DAY_TYPES.map(type => [type, {
+    type, label: type === MASTERMIND_FINAL_DAY ? "The Mastermind's final day" : "The Mastermind's final day: your ruling",
+    description: type === MASTERMIND_FINAL_DAY
+      ? "The last Demon died by execution while a sober and healthy Mastermind was alive: play goes on for one more day. Then, if a good player is executed, evil wins; if an evil player or nobody is executed, good wins. The Storyteller ends the game."
+      : "The last Demon died by execution and a Mastermind may have kept the game going for one more day: the Storyteller's ruling.",
+    applicablePhases: ["day"] as const, expiry: "finalDay" as const, captureOnly: true as const,
+  }] as const),
 ]);
 
 export const gameRuleFactDefinition = (type: unknown): GameRuleFactDefinition | undefined =>
@@ -141,6 +165,7 @@ export function registeredGameRuleFactExpiry(definition: GameRuleFactDefinition,
   if (definition.expiry === "followingDay" && recordedAt.phase === "night") return { phase: "day", day: recordedAt.day };
   if (definition.expiry === "nextDay" && recordedAt.phase === "day") return { phase: "day", day: recordedAt.day + 1 };
   if (definition.expiry === "lifeEventWindow") return { phase: recordedAt.phase, day: recordedAt.day + 1 };
+  if (definition.expiry === "finalDay" && recordedAt.phase === "day") return { phase: "day", day: recordedAt.day + 2 };
   return undefined;
 }
 
@@ -153,7 +178,8 @@ export function victoryEvidenceInvalidReason(game: Pick<StorytellerLobbyRecord, 
   const source = fact.provenance?.sourceParticipant;
   const saint = fact.type === SAINT_EXECUTION_GOOD_TEAM_LOST || fact.type === SAINT_EXECUTION_EVIL_TEAM_LOST || isSaintNonqualifyingEvidenceType(fact.type);
   const demon = fact.type === RESOLVED_DEMON_DEATH_NO_SUCCESSOR;
-  const role = demon ? "imp" : saint ? "saint" : "mayor";
+  const claimed = fact.provenance?.sourceCharacter;
+  const role = demon ? (isProvedDemon(claimed) ? claimed! : "imp") : saint ? "saint" : "mayor";
   if (!source || source.kind !== "participant" || !source.participantId || fact.provenance?.sourceCharacter !== role || fact.provenance.reason !== undefined || fact.provenance.note !== undefined) return "Qualification requires its exact character and durable participant source.";
   const player = game.players[source.playerId];
   if (!player || player.isEmpty || player.participantId !== source.participantId) return "Qualification source no longer belongs to this game.";
@@ -164,9 +190,10 @@ export function victoryEvidenceInvalidReason(game: Pick<StorytellerLobbyRecord, 
   }
   if ((!demon && fact.recordedAt.phase !== "day") || fact.expiresAt?.phase !== fact.recordedAt.phase || fact.expiresAt.day !== fact.recordedAt.day + 1) return "Qualification has an invalid lifetime.";
   if (demon) {
+    if (isDayOnlyProvedDemon(role) && fact.recordedAt.phase !== "day") return "This Demon's death is proved only on the Day.";
     const event = game.lifeEventWindow.events.find(event => event.id === fact.resolutionId);
-    if (!event || !(event.kind === "death" || event.kind === "execution" && event.outcome === "died") || event.actualRoleAtEvent !== "imp" || event.moment.phase !== fact.recordedAt.phase || event.moment.day !== fact.recordedAt.day || event.subject.participantId !== source.participantId || event.subject.playerId !== source.playerId) return "Demon resolution must reference its exact retained Imp death.";
-    if (player.actualRole !== "imp" || player.alive || Object.values(game.players).some(player => !player.isEmpty && player.alive && player.actualRole === "imp")) return "Demon resolution requires its dead Imp identity and no living Imp.";
+    if (!event || !(event.kind === "death" || event.kind === "execution" && event.outcome === "died") || event.actualRoleAtEvent !== role || event.moment.phase !== fact.recordedAt.phase || event.moment.day !== fact.recordedAt.day || event.subject.participantId !== source.participantId || event.subject.playerId !== source.playerId) return "Demon resolution must reference its exact retained Demon death.";
+    if (player.actualRole !== role || player.alive || Object.values(game.players).some(player => !player.isEmpty && player.alive && player.actualRole === role)) return "Demon resolution requires its dead Demon identity and no living Demon of that character.";
   } else if (saint) {
     const event = game.lifeEventWindow.events.find(event => event.id === fact.resolutionId);
     if (!event || event.kind !== "execution" || event.outcome !== "died" || event.actualRoleAtEvent !== "saint" || event.moment.day !== fact.recordedAt.day || event.subject.participantId !== source.participantId || event.subject.playerId !== source.playerId) return "Saint qualification must reference its exact retained execution death.";

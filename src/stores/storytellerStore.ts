@@ -53,6 +53,7 @@ import { participantRoleStepEntries, participantStepKey, travelerArrivalStepKey,
 import { planAbilityResolution, type AbilityRefusal, type AbilityResolutionRequest } from "./abilityResolution";
 import { planRecordedLifeOutcome } from "./deathResolution";
 import { captureSaintQualification, captureMayorQualification, captureVortoxNoExecution, reconcileVictoryEvidence } from "./victoryEvidence";
+import { captureMastermindFinalDay, reconcileMastermindFinalDay } from "./mastermindFinalDay";
 import { clearNightActionCorrections, invalidateNightActionCorrections, planNightActionTargetCorrection, rememberCorrectedNightAction, rememberNightAction, type NightActionTargetCorrection } from "./nightActionCorrection";
 import {
   applyGameRuleFactPlan,
@@ -1450,6 +1451,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const evidence = reconcileVictoryEvidence(current, planned, { correction });
         if (!evidence.ok) return evidence.message;
         planned = evidence.game;
+        // SV-5m: a Mastermind's final day goes with its execution (a retraction, an amendment, the Demon brought back).
+        const mastermind = reconcileMastermindFinalDay(planned);
+        if (!mastermind.ok) return mastermind.message;
+        planned = mastermind.game;
         const notation = planAbilityUseReminders(current, withRevealTokens(current, planned, registryForGame(state, planned)), registryForGame(state, planned));
         if (!notation.ok) return notation.message;
         const drunkNotation = planDrunkPreparationReminders(current, notation.game, registryForGame(state, notation.game));
@@ -1510,6 +1515,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
           const evidence = captureSaintQualification(game, planned, result.plan.addedEventIds[0]!, environment);
           if (!evidence.ok) return { ok: false, code: "refused", message: evidence.message };
           planned = evidence.game;
+          const mastermind = captureMastermindFinalDay(game, planned, result.plan.addedEventIds[0]!, environment);
+          if (!mastermind.ok) return { ok: false, code: "refused", message: mastermind.message };
+          planned = mastermind.game;
         }
         const unsafe = commitAuthoritativeState(planned, state, authority, correction);
         return unsafe ? { ok: false, code: "refused", message: unsafe } : { ok: true, changed: true, eventIds: result.plan.addedEventIds };
@@ -2579,7 +2587,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!drunkNotation.ok) return { ok: false, code: "invalid", message: drunkNotation.message };
         const evidence = reconcileVictoryEvidence(game, drunkNotation.game, { correction: result.plan.actualRoleChanges.some(change => change.correction) });
         if (!evidence.ok) return { ok: false, code: "invalid", message: evidence.message };
-        set({ undoStack: pushUndo(game, undoStack), game: evidence.game });
+        // SV-5m: a character correction showing the executed player was not the Demon takes the Mastermind's fact away.
+        const mastermind = reconcileMastermindFinalDay(evidence.game);
+        if (!mastermind.ok) return { ok: false, code: "invalid", message: mastermind.message };
+        set({ undoStack: pushUndo(game, undoStack), game: mastermind.game });
         return { ok: true, changed: true };
       },
 

@@ -2,7 +2,8 @@ import { isCanonicalRole } from "@/data/canonical";
 import { scarletWomanSuccession } from "@/abilities/characters/scarletWoman";
 import { bindingOf, createRulesQuery, effectSemanticsOf, type RulesQueryEnvironment } from "./rulesQuery";
 import { applyGameRuleFactPlan, planCapturedDayEndFact, planCapturedVictoryEvidence, planGameRuleFactTransaction } from "./gameRuleFacts";
-import { isVictoryEvidenceType, isSaintNonqualifyingEvidenceType, victoryEvidenceInvalidReason, victoryEvidenceCollectionInvalidReason, SAINT_EXECUTION_GOOD_TEAM_LOST, SAINT_EXECUTION_EVIL_TEAM_LOST, SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED, SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED, MAYOR_DAY_END_GOOD_TEAM_WON, MAYOR_DAY_END_EVIL_TEAM_WON, RESOLVED_DEMON_DEATH_NO_SUCCESSOR, VORTOX_DUSK_RULING, VORTOX_WORKING_AT_DUSK } from "./gameRuleFactRegistry";
+import { isVictoryEvidenceType, isSaintNonqualifyingEvidenceType, victoryEvidenceInvalidReason, victoryEvidenceCollectionInvalidReason, SAINT_EXECUTION_GOOD_TEAM_LOST, SAINT_EXECUTION_EVIL_TEAM_LOST, SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED, SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED, MAYOR_DAY_END_GOOD_TEAM_WON, MAYOR_DAY_END_EVIL_TEAM_WON, RESOLVED_DEMON_DEATH_NO_SUCCESSOR, VORTOX_DUSK_RULING, VORTOX_WORKING_AT_DUSK, VORTOX_DAY_END_TYPES, FANG_GU_ONCE, KLUTZ_GOOD_TEAM_LOST, KLUTZ_EVIL_TEAM_LOST, KLUTZ_CHOICE_RULING, isProvedDemon, isDayOnlyProvedDemon } from "./gameRuleFactRegistry";
+import { gainedRoleOf } from "./gainedAbility";
 export { isSaintNonqualifyingEvidenceType } from "./gameRuleFactRegistry";
 import { executionsAt, momentOrdinal } from "./lifeEvents";
 import { sameSnapshot } from "./history";
@@ -10,7 +11,20 @@ import type { GameRuleFactRecord, STPlayerRecord, StorytellerLobbyRecord } from 
 
 export type VictoryEvidenceResult = { ok: true; game: StorytellerLobbyRecord } | { ok: false; message: string };
 const accepted = (game: StorytellerLobbyRecord): VictoryEvidenceResult => ({ ok: true, game });
-const supportedRoles = new Set(["washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller", "undertaker", "monk", "ravenkeeper", "virgin", "slayer", "soldier", "mayor", "butler", "drunk", "recluse", "saint", "poisoner", "spy", "scarletwoman", "baron", "imp", "bureaucrat", "thief", "gunslinger", "scapegoat", "beggar", "cerenovus", "eviltwin"]);
+const supportedRoles = new Set(["washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller", "undertaker", "monk", "ravenkeeper", "virgin", "slayer", "soldier", "mayor", "butler", "drunk", "recluse", "saint", "poisoner", "spy", "scarletwoman", "baron", "imp", "bureaucrat", "thief", "gunslinger", "scapegoat", "beggar", "cerenovus", "eviltwin",
+  // SV-5o: the rest of Sects & Violets, each reviewed against the ending rules (docs/ai/SECTS_AND_VIOLETS_SV5H_PAIRS.md).
+  "clockmaker", "dreamer", "snakecharmer", "mathematician", "flowergirl", "towncrier", "oracle", "savant", "seamstress", "philosopher", "artist", "juggler", "sage",
+  "mutant", "sweetheart", "barber", "klutz", "witch", "pithag", "fanggu", "vigormortis", "nodashii", "vortox"]);
+/** SV-5o: game-rule facts reviewed against the ending rules, which do not by themselves make the ending manual. The Fang Gu's ONCE only
+ * records that a jump happened (no ending meaning); the Vortox's dusk facts carry their own advisory line and never contradict a verified
+ * route (a Vortox alive at dusk cannot have died by a proved route, and two alive is evil's either way). Every other fact keeps the game
+ * manual (the Pit-Hag's arbitrary deaths, the Toymaker, the Mastermind's final day). */
+const endingReviewedFactTypes = new Set<string>([FANG_GU_ONCE, ...VORTOX_DAY_END_TYPES,
+  // SV-5q: the Klutz's choice, with its guard in endGameEligibility (on the Klutz's Day, a verified proposal it contradicts is withheld).
+  KLUTZ_GOOD_TEAM_LOST, KLUTZ_EVIL_TEAM_LOST, KLUTZ_CHOICE_RULING]);
+/** SV-5o: a gained ability (the Philosopher) of a character whose game-ending rule is read from the seat's own character (the Saint, the
+ * Mayor), or of a character not on the list, is not covered: manual. */
+const gainedEndingRoles = new Set(["saint", "mayor"]);
 
 /** A finite reviewed interaction envelope, independent of script name/id. The
  * broader ability coverage list also contains non-TB game-ending abilities;
@@ -19,12 +33,14 @@ export function victoryCoverageEligibility(game: StorytellerLobbyRecord, environ
   const manual = (reason: string) => ({ kind: "manual" as const, reason });
   if (!environment.script) return manual("The current script is unavailable.");
   if (game.fabled.length || game.lorics.length) return manual("A Fabled or Loric may affect the game-ending rules.");
-  if (game.gameRuleFacts.some(fact => !isVictoryEvidenceType(fact.type))) return manual("A game rule fact has unverified game-ending interactions.");
+  if (game.gameRuleFacts.some(fact => !isVictoryEvidenceType(fact.type) && !endingReviewedFactTypes.has(fact.type))) return manual("A game rule fact has unverified game-ending interactions.");
   for (const player of Object.values(game.players)) {
     if (player.isEmpty || !player.participantId) continue;
     const role = environment.registry.get(player.actualRole);
     if (!role || !isCanonicalRole(role) || !supportedRoles.has(role.id)) return manual("A character has unverified game-ending interactions.");
     if (player.effects.some(effect => effect.state === "active" && (!effectSemanticsOf(effect.type) || effectSemanticsOf(effect.type) === "judgment"))) return manual("An effect requires Storyteller judgment.");
+    const gained = gainedRoleOf(player);
+    if (gained && (gainedEndingRoles.has(gained) || !supportedRoles.has(gained))) return manual("A gained ability has unverified game-ending interactions.");
   }
   const query = createRulesQuery(game, environment);
   for (const role of ["saint", "mayor"]) if (query.modifierGate(role, ["death", "alignment", "role", "voting"]).kind !== "clear") return manual("A rule modifier needs manual game-ending adjudication.");
@@ -155,16 +171,22 @@ export function captureResolvedDemonDeath(before: StorytellerLobbyRecord, after:
   // compound chains remain unknown, even if their final counts look simple.
   if (newEvents.length !== 1 || newEvents[0]!.id !== eventId) return accepted(after);
   const event = newEvents[0]!;
-  if (!(event.kind === "death" || event.kind === "execution" && event.outcome === "died") || event.actualRoleAtEvent !== "imp" || event.moment.phase !== before.phase || event.moment.day !== before.day) return accepted(after);
+  // SV-5p: the Imp, and on the Day only (an execution or a Slayer's shot, Q20 A) the four Sects & Violets Demons.
+  const demon = event.actualRoleAtEvent;
+  if (!(event.kind === "death" || event.kind === "execution" && event.outcome === "died") || !isProvedDemon(demon) || event.moment.phase !== before.phase || event.moment.day !== before.day) return accepted(after);
+  // Q20 A: an execution recorded on the Day, or the Slayer's shot -- never another Day death recorded by hand (a Witch's curse, say).
+  if (isDayOnlyProvedDemon(demon) && (before.phase !== "day" || !(mode === "recordedDay" && event.kind === "execution" || mode === "automaticSlayer"))) return accepted(after);
+  const demonRole = environment.registry.get(demon!);
+  if (!demonRole || !isCanonicalRole(demonRole)) return accepted(after);
   const source = before.players[event.subject.playerId];
-  if (!source || !source.alive || source.actualRole !== "imp" || source.participantId !== event.subject.participantId || !sameSource(source, after.players[source.id]) || after.players[source.id]!.alive) return accepted(after);
+  if (!source || !source.alive || source.actualRole !== demon || source.participantId !== event.subject.participantId || !sameSource(source, after.players[source.id]) || after.players[source.id]!.alive) return accepted(after);
   if (victoryCoverageEligibility(before, environment).kind !== "automated" || victoryCoverageEligibility(after, environment).kind !== "automated") return accepted(after);
   const livingDemons = (game: StorytellerLobbyRecord) => participants(game).filter(player => player.alive && environment.registry.get(player.actualRole)?.type === "demon");
   if (livingDemons(before).length !== 1 || livingDemons(after).length !== 0 || ordinaryEndingAlreadyReached(before, environment)) return accepted(after);
   const prior = before.gameRuleFacts.filter(fact => isVictoryEvidenceType(fact.type));
   if (prior.some(fact => !isSaintNonqualifyingEvidenceType(fact.type))) return accepted(after);
   const query = createRulesQuery(before, environment);
-  if (query.modifierGate("imp", ["death", "role", "registration"]).kind !== "clear" || scarletWomanSuccession(query, bindingOf(source)).kind !== "none") return accepted(after);
+  if (query.modifierGate(demon!, ["death", "role", "registration"]).kind !== "clear" || scarletWomanSuccession(query, bindingOf(source)).kind !== "none") return accepted(after);
   if (mode === "recordedNight" || mode === "automaticImp") {
     for (const candidate of participants(before).filter(player => player.alive && !player.isTraveler && player.participantId !== source.participantId)) {
       const eligible = query.registersAsType(bindingOf(candidate), "minion", "imp");
