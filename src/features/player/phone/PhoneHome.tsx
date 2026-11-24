@@ -1,3 +1,4 @@
+import { VersionLink } from "@/features/about/VersionLink";
 import { PhoneFrame } from "./PhoneParts";
 
 const BUY_URL = "https://bloodontheclocktower.com/products/blood-on-the-clocktower-the-game";
@@ -54,6 +55,7 @@ export function PhoneHome({ onPick, trial, rejoin }: { onPick: (path: PhonePath)
             <span className="swp-home-links">
               <a href={BUY_URL} target="_blank" rel="noopener">Buy the game</a>
               <a href={GITHUB_URL} target="_blank" rel="noopener">GitHub</a>
+              <VersionLink />
             </span>
           </div>
         </div>

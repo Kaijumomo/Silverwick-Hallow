@@ -31,6 +31,12 @@ npm run build        # production build into dist/
 
 `npm run test:full` runs typecheck, tests and Rules tests in order.
 
+### Versions
+
+The version lives in one place, `version` in `package.json`; `vite.config.ts` injects it with the short commit, build time and
+channel at build, and `src/config/buildInfo.ts` is the only code that reads them. Home shows `vX.Y.Z` in the footer; tapping it opens
+About. How and when to bump is at the top of [CHANGELOG.md](CHANGELOG.md).
+
 ### Test file names
 
 - `*.test.ts(x)`: fast tests, run by `npm test`. Files that need no DOM start with `// @vitest-environment node`.

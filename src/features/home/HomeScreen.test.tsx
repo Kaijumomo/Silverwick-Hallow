@@ -10,6 +10,8 @@ import { JOIN_PREFILL_KEY, JOIN_PREFILL_TTL_MS, clearJoinPrefill, peekJoinPrefil
 import { buildReferenceCategories } from "./referenceCategories";
 import { listOfficialRoles } from "@/data/officialRoles";
 import { BUILTIN_SCRIPTS } from "@/data/scripts";
+const nav = (): HTMLElement[] => screen.getAllByRole("button").filter((b) => !b.classList.contains("about-version-link")); // the quiet footer version button is not a path
+
 
 const trial = vi.hoisted(() => ({ on: false }));
 vi.mock("@/config/trial", () => ({
@@ -82,7 +84,7 @@ describe("Package 3 (D9): phone Home", () => {
     phone(true);
     const navigate = vi.fn();
     render(<HomeScreen navigate={navigate} />);
-    expect(screen.getAllByRole("button")).toHaveLength(3);
+    expect(nav()).toHaveLength(3);
     expect(screen.queryByText("Storyteller")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /^Player/ }));
     expect(navigate).toHaveBeenCalledWith("?join=");

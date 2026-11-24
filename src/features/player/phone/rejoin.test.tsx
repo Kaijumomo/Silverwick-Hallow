@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { HomeScreen } from "@/features/home/HomeScreen";
 import { displayCode, rejoinUrl, savedGameCode } from "./rejoin";
+const nav = (): HTMLElement[] => screen.getAllByRole("button").filter((b) => !b.classList.contains("about-version-link")); // the quiet footer version button is not a path
+
 
 const KEY = "new-blood-player";
 const save = (state: unknown) => localStorage.setItem(KEY, JSON.stringify({ state, version: 5 }));
@@ -27,7 +29,7 @@ describe("phone Home: Rejoin game", () => {
     phone(); save({ code: "ABCD2345", uid: "u" });
     const navigate = vi.fn();
     render(<HomeScreen navigate={navigate} />);
-    expect(screen.getAllByRole("button")).toHaveLength(4);
+    expect(nav()).toHaveLength(4);
     fireEvent.click(screen.getByRole("button", { name: /Rejoin game/ }));
     expect(navigate).toHaveBeenCalledWith("?join=ABCD2345");
     expect(screen.getByText("Game ABCD 2345")).toBeInTheDocument();
@@ -38,6 +40,6 @@ describe("phone Home: Rejoin game", () => {
     phone();
     render(<HomeScreen navigate={() => {}} />);
     expect(screen.queryByRole("button", { name: /Rejoin game/ })).toBeNull();
-    expect(screen.getAllByRole("button")).toHaveLength(3);
+    expect(nav()).toHaveLength(3);
   });
 });

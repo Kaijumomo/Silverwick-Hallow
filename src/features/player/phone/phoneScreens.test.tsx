@@ -69,7 +69,9 @@ describe("PhoneHome (D9, v7): Player, Character Reference and How to Play", () =
     expect(screen.getByRole("button", { name: /Character Reference/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /How to Play/ })).toBeInTheDocument();
     expect(screen.queryByText("Storyteller")).toBeNull();
-    expect(screen.getAllByRole("button")).toHaveLength(3);
+    // Three paths, plus the quiet version button in the footer (opens About).
+    expect(screen.getAllByRole("button").filter((b) => !b.classList.contains("about-version-link"))).toHaveLength(3);
+    expect(screen.getByRole("button", { name: /^v\d+\.\d+\.\d+$/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Player/ }));
     expect(onPick).toHaveBeenCalledWith("player");
     fireEvent.click(screen.getByRole("button", { name: /How to Play/ }));
