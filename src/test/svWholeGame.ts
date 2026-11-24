@@ -15,6 +15,9 @@ import { usePrivacyStore } from "@/stores/privacyStore";
 import { useShellStore } from "@/stores/shellStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import type { VotingIntent } from "@/stores/votingTypes";
+import { createRulesQuery } from "@/stores/rulesQuery";
+import { jugglerGuessVerdict, JUGGLER_CHARACTER, JUGGLER_CORRECT, JUGGLER_DONE, JUGGLER_GUESS, JUGGLER_GUESSED } from "@/abilities/characters/juggler";
+import type { V6Ctx } from "@/features/grimoire-v6/ctx";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
 export const state = () => store.getState();
@@ -158,3 +161,23 @@ export type Game = StorytellerLobbyRecord;
 /** The game without the players' reveal tokens: by design Undo never restores an older reveal token (revealTokens.ts), so a role change
  * that is undone leaves a fresh one; everything else must be restored exactly. */
 export const withoutRevealTokens = (g: StorytellerLobbyRecord) => ({ ...g, players: Object.fromEntries(Object.entries(g.players).map(([key, player]) => [key, { ...player, revealToken: undefined }])) });
+
+/** The Storyteller screen's context over the live game (what the Day rows and the End control read); `privacy` is Privacy Mode. */
+export const ctx = (privacy = false) => ({ game: game(), script: environment.script, registry: environment.registry, privacy }) as unknown as V6Ctx;
+/** The seats (by role) that carry an Effect of this type. */
+export const effects = (type: string) => Object.values(game().players).filter((player) => player.effects.some((effect) => effect.type === type)).map((player) => player.actualRole);
+export const lastValues = () => game().informationDeliveries.at(-1)!.values;
+export const visit = (playerId: string) => game().players[playerId]!;
+/** The Night steps listed now, by character (or global step). */
+export const order = () => work().steps.map((step) => step.kind === "player" ? step.effectiveRoleId : step.stepKey);
+/** The Juggler's Day guess, recorded exactly as the Day row records it (one Effect on the Juggler, its correctness judged now). */
+export function jugglerGuess(guessed: string, roleId: string) {
+  const me = binding(id("juggler")), who = binding(guessed);
+  const verdict = jugglerGuessVerdict(createRulesQuery(game(), { registry, script: sectsAndViolets, semantics: CANONICAL_ABILITY_SEMANTICS }), who, roleId);
+  expect(verdict.kind).toBe("known");
+  ok(state().resolveEffects({ intents: [{ kind: "apply", target: me, effect: { type: JUGGLER_GUESS, source: me, sourceCharacter: "juggler", lifetime: { kind: "untilDawn" },
+    parameters: { [JUGGLER_GUESSED]: { kind: "participant", participants: [who] }, [JUGGLER_CHARACTER]: { kind: "role", roleIds: [roleId] }, [JUGGLER_CORRECT]: { kind: "boolean", value: verdict.kind === "known" && verdict.correct } } } }] }));
+  return verdict.kind === "known" && verdict.correct;
+}
+/** The Juggler's Done pill: one Effect, as the Day row records it. */
+export const jugglerDone = () => { const me = binding(id("juggler")); ok(state().resolveEffects({ intents: [{ kind: "apply", target: me, effect: { type: JUGGLER_DONE, source: me, sourceCharacter: "juggler", lifetime: { kind: "untilDawn" } } }] })); };

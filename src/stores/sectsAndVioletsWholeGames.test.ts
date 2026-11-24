@@ -3,19 +3,14 @@
 // death, role, effect, phase jump or outcome is seeded with setState. Every game checks the persisted schema, the projections, Undo and a reload.
 import { beforeEach, describe, expect, it } from "vitest";
 import { answerArtist, markSavantTold } from "@/features/grimoire-v6/day/privateVisit";
-import { jugglerGuessVerdict, JUGGLER_CHARACTER, JUGGLER_CORRECT, JUGGLER_DONE, JUGGLER_GUESS, JUGGLER_GUESSED } from "@/abilities/characters/juggler";
-import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
-import { createRulesQuery } from "./rulesQuery";
-import { endGameEligibility, klutzAdvisory, twinAdvisory } from "./endGameEligibility";
+import { endGameEligibility, klutzAdvisory, twinAdvisory, vortoxAdvisory, VORTOX_NO_EXECUTION_LINE } from "./endGameEligibility";
 import { KLUTZ_GOOD_TEAM_LOST } from "./gameRuleFactRegistry";
 import { subjectId } from "@/abilities/characters/shared";
 import { POISONED_NEIGHBOUR } from "@/abilities/characters/vigormortis";
 import { sectsAndViolets } from "@/data/scripts/sectsAndViolets";
-import { alive, ability, advance, answered, begin, binding, character, choose, dawn, declare, environment, execute, game, id, nominate, number, ok, privateProjection, reload, resetStores, withoutRevealTokens, seat, setup, state, target, vote, work } from "@/test/svWholeGame";
+import { alive, ctx, effects, jugglerDone, jugglerGuess, lastValues, order, visit, ability, advance, answered, begin, binding, character, choose, dawn, declare, environment, execute, game, id, nominate, number, ok, privateProjection, reload, resetStores, withoutRevealTokens, seat, setup, state, target, vote, work } from "@/test/svWholeGame";
 import { captureCharacterActionContext } from "./storytellerStore";
 import { endHint } from "@/features/grimoire-v6/vm/chrome";
-import { vortoxAdvisory, VORTOX_NO_EXECUTION_LINE } from "./endGameEligibility";
-import type { V6Ctx } from "@/features/grimoire-v6/ctx";
 
 beforeEach(resetStores);
 
@@ -27,10 +22,6 @@ const G4 = ["witch", "sage", "clockmaker", "mathematician", "savant", "artist", 
 const G5 = ["nodashii", "snakecharmer", "dreamer", "klutz", "eviltwin", "oracle", "towncrier", "philosopher"];
 /** The endings the games reached, each recorded where the game proves it. */
 const reached = new Set<string>();
-const ctx = () => ({ game: game(), script: environment.script, registry: environment.registry, privacy: false }) as unknown as V6Ctx;
-const effects = (type: string) => Object.values(game().players).filter((player) => player.effects.some((effect) => effect.type === type)).map((player) => player.actualRole);
-const lastValues = () => game().informationDeliveries.at(-1)!.values;
-
 describe("SV-6c game 1 (7 players): the Vortox, the Witch and five information characters; evil wins by two alive after the no-execution line", () => {
   it("plays the Vortox's false information, the no-execution line, then two alive", async () => {
     setup(G1); begin();
@@ -84,19 +75,6 @@ describe("SV-6c game 1 (7 players): the Vortox, the Witch and five information c
   });
 });
 
-const visit = (id: string) => game().players[id]!;
-/** The Juggler's Day guess, recorded exactly as the Day row records it (one Effect on the Juggler, its correctness judged now). */
-function jugglerGuess(guessed: string, roleId: string) {
-  const juggler = id("juggler"), me = binding(juggler), who = binding(guessed);
-  const verdict = jugglerGuessVerdict(createRulesQuery(game(), { registry: environment.registry, script: environment.script, semantics: CANONICAL_ABILITY_SEMANTICS }), who, roleId);
-  expect(verdict.kind).toBe("known");
-  ok(state().resolveEffects({ intents: [{ kind: "apply", target: me, effect: { type: JUGGLER_GUESS, source: me, sourceCharacter: "juggler", lifetime: { kind: "untilDawn" },
-    parameters: { [JUGGLER_GUESSED]: { kind: "participant", participants: [who] }, [JUGGLER_CHARACTER]: { kind: "role", roleIds: [roleId] }, [JUGGLER_CORRECT]: { kind: "boolean", value: verdict.kind === "known" && verdict.correct } } } }] }));
-  return verdict.kind === "known" && verdict.correct;
-}
-/** The Juggler's Done pill: one Effect, as the Day row records it. */
-const jugglerDone = () => { const me = binding(id("juggler")); ok(state().resolveEffects({ intents: [{ kind: "apply", target: me, effect: { type: JUGGLER_DONE, source: me, sourceCharacter: "juggler", lifetime: { kind: "untilDawn" } } }] })); };
-const order = () => work().steps.map((step) => step.kind === "player" ? step.effectiveRoleId : step.stepKey);
 
 describe("SV-6c game 2 (10 players): Fang Gu, Cerenovus, Pit-Hag, Mutant and six Townsfolk; good wins by executing the Demon", () => {
   it("plays the Snake Charmer's swap, madness, the Seamstress, the Juggler's guesses, a Fang Gu jump into the Mutant and the Demon's execution", async () => {
