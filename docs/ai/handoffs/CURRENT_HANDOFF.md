@@ -8,6 +8,7 @@
 - **Milestones** (owner decisions, 2026-10-31): 1 T30 single-device and 2 T30 rules complete (done); 3 controlled merge
   to `main` (done); 4 multiplayer, tested on an isolated Firebase test project (next); 5 automation, Travellers,
   reminders and CI without auto-deploy; 6 Release 1. Native apps and the advanced Storyteller phone are deferred.
+- **SV-6 (Sects & Violets validation), local branch `claude/project-thread-80qkg9` from `main` `d2abdcb`:** documents and tests only. Master pair record `docs/ai/SECTS_AND_VIOLETS_PAIRS.md` (300 pairs + 25 endings), five store-level whole games (`src/stores/sectsAndVioletsWholeGames.test.ts`), privacy/Undo/save-load sweep, 15 gap-pair tests. Wiki revision check (Codex) and three browser replays are pending; the real game is the Product Owner's. Not pushed. Kit and findings log: Library `planning/sv6/`.
 - **In progress:** the codebase streamlining review (F-01 to F-23) is being applied on branch
   `claude/project-thread-l704xm`, from `main` `14f9acd`. It needs the owner's retest before any push or merge.
 - **Ways of working:** the project owner approves each work package. No push, PR, merge or deploy without explicit
