@@ -3,6 +3,7 @@
 // Silverwick Home v7.dc.html"), value for value. The prototype's 1524x968 bezel is a device mock: the product is its
 // 1480x924 screen. The design's Player panel (name and game code) is not shown on the tablet: players join by the
 // invitation link or QR (streamlining review F-06), so it has no view-model here.
+import { VersionLink } from "@/features/about/VersionLink";
 import { Fragment } from 'react';
 import { css, T } from './designRuntime';
 
@@ -264,6 +265,7 @@ export function HomeV6View({ vm }: { vm: any }) {
             <span style={SF5}>
               <a href={BUY_URL} target="_blank" rel="noopener" style={SF6}>Buy Blood on the Clocktower</a>
               <a href={GITHUB_URL} target="_blank" rel="noopener" style={SF6}>GitHub</a>
+              <VersionLink className="about-version-link--tablet" />
             </span>
           </div>
         </div>

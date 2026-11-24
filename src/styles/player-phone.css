@@ -866,3 +866,40 @@ li.swp-rs-nrow { list-style: none; }
   .swp-home-title { font-size: 40px; }
   .swp-path { min-height: 68px; }
 }
+
+/* Version text in the Home footer links row (tablet and phone); tapping it opens the About dialog. */
+.about-version-link { background: none; border: none; padding: 0; cursor: pointer; font: inherit; font-size: 11px; letter-spacing: .04em; font-variant-numeric: tabular-nums; color: rgba(236, 230, 218, .4); }
+.about-version-link:hover, .about-version-link:focus-visible { color: rgba(236, 230, 218, .85); }
+.about-version-link--tablet { font-size: 13px; }
+/* About dialog: the v7 red language (phone sheet gradient and red top line, IM Fell title, Source Sans labels, red pill CTA).
+   Scoped to .about-dialog so the shared Modal used elsewhere is untouched. */
+.dialog.about-dialog {
+  width: min(460px, calc(100% - 24px));
+  background: linear-gradient(170deg, rgba(42, 23, 18, .98), rgba(20, 11, 9, .99));
+  border: 1px solid rgba(176, 186, 204, .18);
+  border-radius: 22px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .7), inset 0 1px 0 rgba(232, 88, 74, .45);
+  color: #ddd6c8;
+  -webkit-font-smoothing: antialiased;
+}
+.about-dialog .dialog-header { border-bottom: 1px solid rgba(176, 186, 204, .18); padding: 18px 18px 14px 24px; }
+.about-dialog .dialog-title { font-family: "IM Fell English", serif; font-weight: 400; font-size: 24px; letter-spacing: .04em; color: #ece6da; }
+.about-dialog .dialog-close { border-radius: 24px; border: 1px solid rgba(176, 186, 204, .3); background: transparent; color: rgba(236, 230, 218, .7); }
+.about-dialog .dialog-close:hover { color: #ece6da; }
+.about-dialog .dialog-body { padding: 18px 24px 22px; gap: 14px; }
+.about-dialog button:focus-visible { outline: 2px solid #ffb4a6; outline-offset: 3px; }
+.about-rows { margin: 0; display: grid; gap: 0; }
+.about-row { display: flex; gap: 18px; align-items: baseline; padding: 10px 0; border-bottom: 1px solid rgba(176, 186, 204, .12); }
+.about-row:last-child { border-bottom: 0; }
+.about-row dt { min-width: 84px; margin: 0; font-size: 11px; letter-spacing: .22em; text-transform: uppercase; font-weight: 700; color: rgba(222, 216, 204, .6); }
+.about-row dd { margin: 0; font-size: 16px; color: #ece6da; font-variant-numeric: lining-nums tabular-nums; }
+.about-help { margin: 0; font-size: 13px; color: rgba(222, 216, 204, .6); }
+.about-status { margin-right: auto; align-self: center; font-size: 13px; color: rgba(222, 216, 204, .75); }
+.about-copy {
+  min-height: 48px; padding: 0 30px; border-radius: 28px; cursor: pointer;
+  border: 1px solid rgba(255, 122, 104, .7);
+  background: linear-gradient(180deg, rgba(232, 88, 74, .28), rgba(192, 57, 46, .18));
+  box-shadow: 0 0 24px rgba(232, 88, 74, .2), inset 0 1px 0 rgba(236, 230, 218, .25);
+  font-family: "IM Fell English", serif; font-size: 18px; text-transform: uppercase; letter-spacing: .14em; color: #ffb4a6;
+}
+.about-copy:hover { color: #ff8a78; }
