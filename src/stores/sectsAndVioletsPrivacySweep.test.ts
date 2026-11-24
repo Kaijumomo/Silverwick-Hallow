@@ -127,7 +127,7 @@ describe("SV-6e privacy, Undo and save/load of what Sects & Violets keeps for th
     expect(JSON.stringify(game().players)).not.toMatch(/falseInformation|vortoxRule/i);
   });
 
-  it("everything above keeps the persisted schema valid and no Storyteller-only record in the projections at the end of a game", async () => {
+  it("a fresh game with a Good Twin chosen keeps the persisted schema valid and no Storyteller-only record in the projections", async () => {
     setup(G5, undefined, () => ok(state().setSetupGoodTwin(binding(seat(2)))));
     expect(StorytellerGamePersistedSchema.safeParse(game()).success).toBe(true);
     expect(exposed()).not.toMatch(STORYTELLER_ONLY);

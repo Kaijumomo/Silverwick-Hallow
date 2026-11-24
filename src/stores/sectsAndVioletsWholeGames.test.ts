@@ -155,8 +155,10 @@ describe("SV-6c game 3 (9 players): No Dashii, Evil Twin, Sweetheart, Barber, Sa
     expect(effects("drunk")).toEqual(["dreamer"]);
     // The drunk Dreamer and the poisoned Town Crier and Oracle are answered by the Storyteller; the Philosopher's gained Oracle runs the real step.
     ok(answered("dreamer", { target: target(seat(0)) }, { "dreamer:good": character("sage"), "dreamer:evil": character("eviltwin") }));
+    expect(ability("towncrier")).toMatchObject({ ok: false, code: "needsInput" });   // poisoned: the Storyteller is asked
     ok(answered("towncrier", {}, { communicated: { kind: "boolean", value: false } }));
     ok(ability("oracle", {}, seat(4))); expect(lastValues()).toContainEqual({ requirementId: "deadEvil", kind: "number", value: 0 });
+    expect(ability("oracle", {}, seat(8))).toMatchObject({ ok: false, code: "needsInput" });
     ok(answered("oracle", {}, { communicated: number(1) }, seat(8)));
     await reload(); dawn(["eviltwin"]);
 

@@ -123,7 +123,7 @@ describe("SV-6a gap pairs (the six characters no stage owned)", () => {
     const g = proofGame(["pithag", "chef", "empath", "monk", "saint", "washerwoman", "oracle"], "night", 3);
     const made = planned(hag(g, "p0", "p1", "vigormortis"));
     expect(made.gameRuleFacts).toEqual([expect.objectContaining({ type: "pitHagArbitraryDeaths" })]);
-    expect(kill(made, "p1", "vigormortis", "p2")).toMatchObject({ ok: false });
+    expect(kill(made, "p1", "vigormortis", "p2")).toMatchObject({ ok: false, code: "unsupported" });
     const v = proofGame(["vigormortis", "chef", "empath", "pithag", "monk", "saint", "washerwoman"], "night", 3);
     const killed = planned(kill(v, "p0", "vigormortis", "p3", choice(v, "p3", "p2")));
     expect(killed.players.p3!.alive).toBe(false);
@@ -154,7 +154,7 @@ describe("SV-6a gap pairs (the six characters no stage owned)", () => {
     const g = proofGame(["witch", "towncrier", "chef", "imp", "empath", "monk", "saint"], "night", 3);
     const cursed = planned(kill(g, "p0", "witch", "p1"));
     expect(curseOn(cursed, "p1")).toBeDefined();
-    expect(lastValues(planned(crier(nominated(g, "p0", "p2"), "p1")))).toContainEqual({ requirementId: "minionNominated", kind: "boolean", value: true });
+    expect(lastValues(planned(crier(nominated(cursed, "p0", "p2"), "p1")))).toContainEqual({ requirementId: "minionNominated", kind: "boolean", value: true });
   });
 
   it("Vigormortis / Witch: a Witch the Vigormortis kills keeps her ability, so her curse still applies and she poisons the Townsfolk neighbour chosen", () => {
