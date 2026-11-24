@@ -1,5 +1,7 @@
 # Sects & Violets SV-5 part 2c: pair record for the Mathematician
 
+> **History.** The final truth for every pair of the Sects & Violets script is in [SECTS_AND_VIOLETS_PAIRS.md](SECTS_AND_VIOLETS_PAIRS.md) (SV-6a). This record is kept as it was written; its rows are not edited further.
+
 Built on branch `claude/project-thread-0o1r99` from main `0bcf3ec`. In the style of the [SV-1](SECTS_AND_VIOLETS_SV1_PAIRS.md) to [SV-5 part 2a](SECTS_AND_VIOLETS_SV5B_PAIRS.md) pair records: each pair is marked as **test** (a focused scenario names both, or the shared rule is tested with one of them), **code read** (the shared query or command was read, no dedicated scenario), or **Storyteller judgment** (the app leaves it by hand on purpose).
 
 Scope: the Mathematician against every other character of Sects & Violets: **24 unordered pairs**. The rules come from the saved Mathematician page (with its Chambermaid, Drunk, Lunatic and Marionette jinxes), the Vortox page's Mathematician example, and the PO's answers: Q1 A (finger signals on the Storyteller's card), Q7 A (a hand-placed official ABNORMAL token is a real mark), Q17 A (the app marks only the Vortox's false information and impaired information proven false) and Q18 A (marks clear at his commit; a later mark expires at dawn uncounted).

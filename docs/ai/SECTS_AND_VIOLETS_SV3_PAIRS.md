@@ -1,5 +1,7 @@
 # Sects & Violets SV-3: pair record for the Philosopher
 
+> **History.** The final truth for every pair of the Sects & Violets script is in [SECTS_AND_VIOLETS_PAIRS.md](SECTS_AND_VIOLETS_PAIRS.md) (SV-6a). This record is kept as it was written; its rows are not edited further.
+
 Built on branch `claude/project-thread-huqrw7` from main `0a7f8da`. In the style of the [SV-1](SECTS_AND_VIOLETS_SV1_PAIRS.md) and [SV-2](SECTS_AND_VIOLETS_SV2_PAIRS.md) pair records: each pair is marked as **test** (a focused scenario names both, or the shared rule is tested with one of them), **code read** (the shared query or command was read, no dedicated scenario), or **Storyteller judgment** (the app leaves it by hand on purpose).
 
 Scope: the Philosopher against the other 24 characters of Sects & Violets: 24 unordered pairs. The six SV-1 and SV-2 rows that named the Philosopher (SV-1 010, 031, 052, 073; SV-2 009, 032) were rewritten in SV-3a and agree with this record. The rules come from the saved wiki page (Philosopher, revision 2421) and the PO's answers of 2026-11-21 (Q1 follow the page; Q2 the gained row runs as the real character's step; Q3 commit on pick; Q4 a fresh, poisoned Philosopher after a Snake Charmer swap; Q5 the true character decides who is "in play").

@@ -1,5 +1,7 @@
 # Sects & Violets SV-2: pair record for the Snake Charmer and Fang Gu
 
+> **History.** The final truth for every pair of the Sects & Violets script is in [SECTS_AND_VIOLETS_PAIRS.md](SECTS_AND_VIOLETS_PAIRS.md) (SV-6a). This record is kept as it was written; its rows are not edited further.
+
 Built on branch `claude/project-thread-79ipjd` from main `8de9771`. In the style of the [SV-1 pair record](SECTS_AND_VIOLETS_SV1_PAIRS.md): each pair is marked as **test** (a focused scenario names both, or the shared rule is tested with one of them), **code read** (the shared query or command was read, no dedicated scenario), or **Storyteller judgment** (the app leaves it by hand on purpose). Together with the SV-1 record it becomes part of the script's record for SV-6.
 
 Scope: the Snake Charmer and the Fang Gu each against the other 23 characters of Sects & Violets (46 pairs) and against each other (1 pair): 47 unordered pairs, no self-pairs. The four SV-1 characters appear here from the SV-2 side; SV-1 rows 003, 018, 024, 039, 045, 060, 066 and 081 now point here. This is not 47 dedicated tests. The rules come from the saved wiki pages of 2026-11-11 (Snake Charmer, Fang Gu rev 3175).
