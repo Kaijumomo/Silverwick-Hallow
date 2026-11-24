@@ -132,7 +132,9 @@ export const DREAMER: AbilityDescriptor = {
     const truth = registeredCharacter(context, target);
     if (!truth.known) return unknownTruth(truth.message);
     const trueId = truth.role?.id;
-    return knownTruth((value) => trueId !== undefined && value.kind === "role" && value.roleId === trueId
-      && (value.requirementId === "goodCharacter" || value.requirementId === "evilCharacter"));
+    const shown = (value: Parameters<Parameters<typeof knownTruth>[0]>[0]) => value.kind === "role" && (value.requirementId === "goodCharacter" || value.requirementId === "evilCharacter");
+    return knownTruth((value) => trueId !== undefined && shown(value) && value.kind === "role" && value.roleId === trueId,
+      // SV-5g: a token that is not the player's registered character (neither token: the information was false).
+      (value) => trueId !== undefined && shown(value) && value.kind === "role" && value.roleId !== trueId);
   },
 };

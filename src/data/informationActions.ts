@@ -271,6 +271,27 @@ export const INFORMATION_ACTIONS: Record<RoleId, InformationAction[]> = {
     },
   ],
 
+  // "Each night, you learn how many players' abilities worked abnormally (since dawn) due to another character's ability." (SV-5g) --
+  // Number, every night: two Information Actions sharing the same requirement shape, one per timing (the Empath's pattern).
+  mathematician: [
+    {
+      id: "mathematician-first-night",
+      timing: { kind: "firstNight" },
+      instruction: "Give a finger signal for the number of players whose abilities worked abnormally since dawn.",
+      requirements: [
+        { id: "abnormal", kind: "number", label: "Players whose abilities worked abnormally" },
+      ],
+    },
+    {
+      id: "mathematician-other-night",
+      timing: { kind: "otherNight" },
+      instruction: "Give a finger signal for the number of players whose abilities worked abnormally since dawn.",
+      requirements: [
+        { id: "abnormal", kind: "number", label: "Players whose abilities worked abnormally" },
+      ],
+    },
+  ],
+
   // "If the Demon kills you, you learn that it is 1 of 2 players." (SV-1a) -- two players, one of them the Demon that killed the Sage.
   sage: [
     {

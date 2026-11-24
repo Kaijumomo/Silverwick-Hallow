@@ -16,6 +16,7 @@ import { usePrivacyStore } from "@/stores/privacyStore";
 import { makeSTPlayer } from "@/test/fixtures";
 import type { RoleDef, Script, StorytellerLobbyRecord } from "@/stores/types";
 import { placeReminder, playerMarks, reminderPalette, type MarkEnv } from "./marks";
+import { effectForReminder } from "@/stores/reminderEffects";
 
 const labelsOf = (role: RoleDef): string[] => [...new Set([...(role.reminders ?? []), ...(role.remindersGlobal ?? [])])];
 const pairsOf = (roles: RoleDef[]): string[] => roles.flatMap((role) => labelsOf(role).map((label) => `${role.id}:${label}`));
@@ -115,15 +116,19 @@ describe("every official token of every character in the pinned data can be plac
     expect(reminderPalette(env).all.filter((entry) => entry.role.id === role.id).map((entry) => entry.label), "offered under All").toEqual(labels);
 
     const player = () => store.getState().game!.players.p0!;
+    // SV-5g: a token that records a per-player Effect (the Mathematician's ABNORMAL) is a mark of a Night or Day, not notation: it is
+    // refused at Setup with the reason, and placed in live play (abnormalMarks.test.ts).
+    const notation = labels.filter((label) => !effectForReminder(role.id, label));
     for (const entry of offered) {
       const result = placeReminder("p0", player().participantId, entry);
-      expect(result, `${role.id}: ${entry.label}`).toEqual({ ok: true });
+      if (effectForReminder(role.id, entry.label)) expect(result, `${role.id}: ${entry.label}`).toEqual({ ok: false, message: "An ABNORMAL mark is placed during the Night or the Day." });
+      else expect(result, `${role.id}: ${entry.label}`).toEqual({ ok: true });
     }
-    expect(player().reminders.map((reminder) => [reminder.label, reminder.sourceCharacter])).toEqual(labels.map((label) => [label, role.id]));
+    expect(player().reminders.map((reminder) => [reminder.label, reminder.sourceCharacter])).toEqual(notation.map((label) => [label, role.id]));
 
     const after = store.getState().game!;
     const marks = playerMarks(envOf(after, script), after.players.p0!).filter((mark) => mark.kind === "notation");
-    expect(marks.map((mark) => mark.label)).toEqual(labels);
+    expect(marks.map((mark) => mark.label)).toEqual(notation);
     for (const mark of marks) {
       expect(mark.title, role.id).toBe(`${role.name}: ${mark.label}`);
       expect(mark.src, `${role.id}: ${mark.label} is drawn with official art`).toBeTruthy();

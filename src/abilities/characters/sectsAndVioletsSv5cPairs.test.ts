@@ -39,11 +39,11 @@ describe("SV-5c pairs: the Vortox with the other Sects & Violets characters", ()
       expect(townsfolkInformationFalse(q, role), role).toEqual({ known: true, value: false });
   });
 
-  it("Savant, Artist and Mathematician information stays the Storyteller's (by hand) under a Vortox; SV-5f's Juggler declares its truth", () => {
+  it("Savant and Artist information stays the Storyteller's (by hand) under a Vortox; SV-5f's Juggler and SV-5g's Mathematician declare their truth", () => {
     const q = proofQuery(proofGame(["vortox", "savant", "artist", "juggler", "mathematician", "philosopher"], "night", 2));
-    for (const role of ["savant", "artist", "mathematician"]) expect(q.modifierGate(role, ["information"]).kind, role).toBe("gated");
-    // SV-5f: the Juggler now has a descriptor with `truth`, so the shared false-information rule runs it (juggler.test.ts, the Vortox case).
-    expect(q.modifierGate("juggler", ["information"]).kind).toBe("clear");
+    for (const role of ["savant", "artist"]) expect(q.modifierGate(role, ["information"]).kind, role).toBe("gated");
+    // SV-5f / SV-5g: each now has a descriptor with `truth`, so the shared false-information rule runs it (juggler.test.ts, mathematician.test.ts).
+    for (const role of ["juggler", "mathematician"]) expect(q.modifierGate(role, ["information"]).kind, role).toBe("clear");
   });
 
   it.each(["fanggu", "vigormortis", "nodashii"])("%s alongside a Vortox (a Pit-Hag's second Demon): two living Demons keep each kill by hand", (demon) => {

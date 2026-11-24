@@ -42,12 +42,15 @@ export function falseInformationRefusal(descriptor: AbilityDescriptor, context: 
   return null;
 }
 
-export const knownTruth = (isTrue: (value: AbilityInformationValue) => boolean): InformationTruth => ({ known: true, isTrue });
+export const knownTruth = (isTrue: (value: AbilityInformationValue) => boolean, isFalse?: (value: AbilityInformationValue) => boolean): InformationTruth =>
+  isFalse ? { known: true, isTrue, isFalse } : { known: true, isTrue };
 export const unknownTruth = (reason: string): InformationTruth => ({ known: false, reason });
 
 /** A Yes / No whose truth is `value` (undefined: either answer is true under a registration the Storyteller has not ruled yet). */
 export const booleanTruth = (requirementId: string, value: boolean | undefined): InformationTruth =>
-  knownTruth((given) => value !== undefined && given.requirementId === requirementId && given.kind === "boolean" && given.value === value);
+  knownTruth((given) => value !== undefined && given.requirementId === requirementId && given.kind === "boolean" && given.value === value,
+    // SV-5g: certainly false only once the answer is settled (before a Spy / Recluse ruling either answer may be true).
+    (given) => value !== undefined && given.requirementId === requirementId && given.kind === "boolean" && given.value !== value);
 
 /** The answers true under EVERY registration the Storyteller may rule: the intersection of each registration combination's answers.
  * A value some combination does not give is false under that ruling, so it is not certainly true. A ruling that gives no answer at
@@ -58,9 +61,11 @@ export const certainValues = <T>(perCombination: readonly (readonly T[])[]): T[]
   return usable.length ? usable[0]!.filter((value, index, first) => first.indexOf(value) === index && usable.every((answers) => answers.includes(value))) : [];
 };
 
-/** A number whose certainly true values are `certain` (see `certainValues`): only those are refused. */
-export const numberTruth = (requirementId: string, certain: readonly number[]): InformationTruth =>
-  knownTruth((given) => given.requirementId === requirementId && given.kind === "number" && certain.includes(given.value));
+/** A number whose certainly true values are `certain` (see `certainValues`): only those are refused. SV-5g: `possible` are the values
+ * true under SOME allowed registration (by default the certain ones); any other number is certainly false. */
+export const numberTruth = (requirementId: string, certain: readonly number[], possible: readonly number[] = certain): InformationTruth =>
+  knownTruth((given) => given.requirementId === requirementId && given.kind === "number" && certain.includes(given.value),
+    (given) => given.requirementId === requirementId && given.kind === "number" && !possible.includes(given.value));
 
 /** The numbers the Storyteller may give as false: `candidates` without the certainly true ones. */
 export const falseNumbers = (candidates: readonly number[], certain: readonly number[]): number[] =>

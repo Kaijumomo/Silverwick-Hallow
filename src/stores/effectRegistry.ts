@@ -92,6 +92,8 @@ const DEFINITIONS: Record<string, EffectDefinition> = {
     description: "One of the Juggler's first-Day guesses: a player and a character, and whether it was correct when made. A correct one draws the official CORRECT token." },
   jugglerGuessesDone: { type: "jugglerGuessesDone", label: "Juggler's guesses done", indicator: "marked",
     description: "The Juggler finished guessing that Day. It draws no token." },
+  abnormal: { type: "abnormal", label: "Abnormal", indicator: "marked",
+    description: "The Mathematician's ABNORMAL mark: this player's ability worked abnormally since dawn due to another character. Counted at the Mathematician's wake, cleared there, gone at dawn." },
   marked: { type: "marked", label: "Marked", indicator: "marked" },
   registersFalsely: { type: "registersFalsely", label: "Registers falsely", indicator: "registration" },
   fortuneTellerRedHerring: { type: "fortuneTellerRedHerring", label: "Red Herring", indicator: "redHerring",
@@ -101,9 +103,13 @@ const DEFINITIONS: Record<string, EffectDefinition> = {
 /** The order known indicators appear in; unknown ones follow. */
 const INDICATOR_ORDER = Object.keys(INDICATORS);
 
+/** Types recorded only through their own path, never offered by the advanced "Add effect" workflow: the Mathematician's ABNORMAL mark
+ * is one per player and gone at dawn (PO Q18 A), which its own placement keeps and a manual Effect would not. */
+const OWN_PATH_ONLY: ReadonlySet<string> = new Set(["abnormal"]);
+
 /** Known types offered by the advanced "Add effect" workflow (any other
  * type can still be typed in as a custom Effect). */
-export const KNOWN_EFFECT_TYPES: readonly EffectDefinition[] = Object.values(DEFINITIONS);
+export const KNOWN_EFFECT_TYPES: readonly EffectDefinition[] = Object.values(DEFINITIONS).filter((definition) => !OWN_PATH_ONLY.has(definition.type));
 
 const own = <T,>(map: Record<string, T>, key: string): T | undefined =>
   Object.prototype.hasOwnProperty.call(map, key) ? map[key] : undefined;

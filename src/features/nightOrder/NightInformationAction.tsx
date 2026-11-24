@@ -11,6 +11,7 @@ import { chefMaximumPairs } from "@/abilities/characters/chef";
 import { CLOCKMAKER_POSSIBLE, clockmakerAnswers, clockmakerMaximumSteps } from "@/abilities/characters/clockmaker";
 import { SEAMSTRESS_SAME } from "@/abilities/characters/seamstress";
 import { oracleChoices } from "@/abilities/characters/oracle";
+import { mathematicianChoices } from "@/abilities/characters/mathematician";
 import { FLOWERGIRL_DEMON_VOTED } from "@/abilities/characters/flowergirl";
 import { JUGGLER_MAX_GUESSES, JUGGLER_UNRECORDED } from "@/abilities/characters/juggler";
 import { createRulesQuery } from "@/stores/rulesQuery";
@@ -19,7 +20,7 @@ import { isDeathEvent } from "@/stores/lifeEvents";
 import { QuestionBlock } from "@/features/grimoire-v6/day/NominationExtras";
 import { SAGE, SAGE_PLAYERS, sageCauseQuestion } from "@/abilities/characters/sage";
 
-export const CALCULATED_INFORMATION_ROLES = new Set(["chef", "empath", "fortuneteller", "towncrier", "oracle", "clockmaker", "seamstress", "flowergirl", "juggler"]);
+export const CALCULATED_INFORMATION_ROLES = new Set(["chef", "empath", "fortuneteller", "towncrier", "oracle", "clockmaker", "seamstress", "flowergirl", "juggler", "mathematician"]);
 export const NIGHT_INFORMATION_ROLES = new Set([...CALCULATED_INFORMATION_ROLES, "undertaker", "ravenkeeper", "sage"]);
 const EMPTY_INPUTS: AbilityInputs = {};
 export type NightInformationHandle = { next: () => boolean };
@@ -207,6 +208,8 @@ export const NightInformationAction = forwardRef<NightInformationHandle, Props>(
     : step.effectiveRoleId === "oracle" ? oracleChoices(createRulesQuery(game, environment))
     // SV-5f: the Juggler learns 0 to 5.
     : step.effectiveRoleId === "juggler" ? Array.from({ length: JUGGLER_MAX_GUESSES + 1 }, (_, index) => index)
+    // SV-5g: the Mathematician offers 0 to 5 (the official ABNORMAL tokens), more only when the true count is higher.
+    : step.effectiveRoleId === "mathematician" ? mathematicianChoices(createRulesQuery(game, environment), step.participantId)
     : [0, 1, 2];
   // SV-5h: answers the Storyteller may not give (a Vortox: the true one) are left out.
   const choices = requirement?.kind === "boolean" ? [false, true] : numberChoices.filter((choice) => !requirement?.exclude?.includes(choice));

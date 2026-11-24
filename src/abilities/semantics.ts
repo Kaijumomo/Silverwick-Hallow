@@ -161,7 +161,10 @@ export type AbilityDescriptor = {
  * the truth cannot be worked out, so false information cannot be checked and the step is the Storyteller's, by hand.
  */
 export type InformationTruth =
-  | { known: true; isTrue: (value: AbilityInformationValue) => boolean }
+  | { known: true; isTrue: (value: AbilityInformationValue) => boolean;
+    /** SV-5g (the Mathematician): this delivered value is false however anyone whose registration is the Storyteller's call registers.
+     * Absent: falseness is not proven, so a drunk or poisoned player's answer is never marked ABNORMAL by the app. */
+    isFalse?: (value: AbilityInformationValue) => boolean }
   | { known: false; reason: string };
 
 /** One answered input, as the workspace collected it. Participant answers

@@ -41,7 +41,7 @@ const OFFICIAL: Record<string, Official> = {
 };
 const IDS = Object.keys(OFFICIAL);
 /** SV-5 part 1 made these guided (their own descriptor and tests); they stay on the reviewed interaction list. */
-const GUIDED_LATER = ["clockmaker", "seamstress", "dreamer", "flowergirl", "juggler"];
+const GUIDED_LATER = ["clockmaker", "seamstress", "dreamer", "flowergirl", "juggler", "mathematician"];
 
 describe("the ten reviewed information characters match the official data", () => {
   it.each(IDS)("%s: team, ability text, reminder tokens and night wakes", (id) => {
@@ -182,10 +182,11 @@ describe("jinxes with the reviewed characters stay Storyteller judgments", () =>
     expect(modifiers(["mathematician", "lunatic", "empath"])).toContain("jinx:mathematician+lunatic");
   });
 
-  it("the jinx is active and unverified, so it would gate the Mathematician if it ever gained an evaluator (it has none today)", () => {
+  it("the jinx is active and unverified, so it gates the guided Mathematician (SV-5g): its step goes to the Storyteller, by hand", () => {
     const g = proofGame(["mathematician", "drunk", "empath", "imp", "chef"]);
     expect(proofQuery(g).modifierGate("mathematician", ["information"]).kind).toBe("gated");
-    expect(CANONICAL_ABILITY_SEMANTICS.has("mathematician")).toBe(false);
+    expect(CANONICAL_ABILITY_SEMANTICS.has("mathematician")).toBe(true);
+    expect(plan(g, request(g, "p0", "mathematician"))).toMatchObject({ ok: false, code: "unsupported", message: "A rule affecting this action is not fully modeled." });
   });
 
   it("Clockmaker with Summoner and Juggler with Cannibal still send the table to Manual (those characters are not reviewed)", () => {
