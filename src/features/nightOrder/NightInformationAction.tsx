@@ -265,13 +265,12 @@ export const NightInformationAction = forwardRef<NightInformationHandle, Props>(
           {typeof choice === "boolean" ? choice ? "YES" : "NO" : choice}</button>)}</div>
     </>}
     {seamstress && resolved && !delivery && <p className="gv-choice-note">Not tonight: the ability is kept.</p>}
-    {seamstress && !resolved && targets.length < targetCount && <div className="gv-choice-actions" role="group" aria-label="The Seamstress's choice">
-      <button className="gv-choice-pill" type="button" onClick={notTonight}>Not Tonight</button>
-    </div>}
     {needsTargets && <>
       {/* PO review C04/C12: chosen players sit inline beside the prompt, as in V2; no cancel control. */}
       <p className="modern-night-pick">{targetCount === 1 ? "Choose a player on the board" : targets.length ? "Choose one more player on the board" : sage ? SAGE.presentation.action : "Choose two players on the board"}
-        {targets.map(target => <span key={target.participantId} className="night-pick-chip">{game.players[target.playerId]?.name}</span>)}</p>
+        {targets.map(target => <span key={target.participantId} className="night-pick-chip">{game.players[target.playerId]?.name}</span>)}
+        {/* PO 2026-11-25 (night card layout): the Seamstress's Not Tonight is the quiet pill at the far right of this prompt line, as the Professor's is; it adds no height. */}
+        {seamstress && <button className="gv-choice-pill is-small" type="button" style={{ margin: "-7px 0 -7px auto" }} onClick={notTonight}>Not Tonight</button>}</p>
     </>}
     {awaitingCause && causeQuestion && <QuestionBlock heading={causeQuestion.heading} note={causeQuestion.note}
       actions={[{ label: "Yes", onClick: () => { setError(null); setDraft({ game, inputs: { [causeQuestion.id]: { kind: "boolean", value: true } } }); } },

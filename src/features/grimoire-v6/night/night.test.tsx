@@ -53,6 +53,17 @@ it("starts on Dusk, and Next walks Dusk, tonight's steps, then Dawn", () => {
   expect(pos()).toBe("1 / 6");
 });
 
+it("Begin Day sits in the card header; Previous and Next are the strip's round buttons, not part of the card body (PO 2026-11-25)", () => {
+  render(<Screen />);
+  const card = screen.getByText(/^\d+ \/ \d+$/).closest("div")!.parentElement!.parentElement!;
+  expect(within(card).getByRole("button", { name: /^Begin Day 2$/ })).toBeInTheDocument();
+  expect(within(card).queryByRole("button", { name: "Next" })).toBeNull();
+  expect(within(card).queryByRole("button", { name: "Previous" })).toBeNull();
+  const strip = screen.getByRole("button", { name: "Next" }).parentElement!;
+  expect(within(strip).getByRole("button", { name: "Previous" })).toBeInTheDocument();
+  expect(within(strip).getByRole("button", { name: "Dusk" })).toBeInTheDocument();
+});
+
 it("Begin Day with unfinished work goes to Dawn first; continuing there is explicit and advances the phase", () => {
   render(<Screen />);
   press(/^Begin Day 2$/);
