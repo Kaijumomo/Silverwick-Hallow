@@ -1,5 +1,6 @@
 import { captureVotingContext, useStorytellerStore, type LifeCommandResult } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
+import { hasHiddenLife } from "@/stores/lifeState";
 import type { PlayerId } from "@/stores/types";
 
 export type LifeAction = "die" | "revive" | "spendVote" | "restoreVote";
@@ -23,6 +24,10 @@ export function runLifeAction(playerId: PlayerId, participantId: string | undefi
     : action === "revive" ? s.resurrect(playerId)
     : action === "spendVote" ? s.spendGhostVote(playerId)
     : s.restoreGhostVote(playerId);
-  if (result.ok) return result.manualReason ?? null;
-  return result.message;
+  if (!result.ok) return result.message;
+  // BM-2 (independent check S3): a Kill or Died that records a first death the player lives through says so, as the execution's result line.
+  // The wording names no hidden life: a toast can outlive the switch to Privacy Mode by a moment.
+  const after = action === "die" && !hasHiddenLife(player) ? store().game?.players[playerId] : undefined;
+  if (after && hasHiddenLife(after)) return `${player.name || "This player"} is recorded as dead. Announce that they died.${result.manualReason ? ` ${result.manualReason}` : ""}`;
+  return result.manualReason ?? null;
 }

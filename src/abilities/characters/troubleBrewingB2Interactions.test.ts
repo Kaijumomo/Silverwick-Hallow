@@ -99,9 +99,18 @@ describe("B2c: supported protection does not broaden unverified interactions", (
     expect(plan(game, request(game, "p2", "imp", { target: pick(game, "p3") }), environment)).toMatchObject({ ok: false, code: "unsupported" });
   });
 
-  it.each(["lleech", "zombuul"])("does not infer protection precedence for %s", role => {
+  it.each(["lleech"])("does not infer protection precedence for %s", role => {
     const game = patchPlayer(protect(proofGame(roles), "p3"), "p3", { actualRole: role });
     expect(proofQuery(game).protectedFrom(bind(game, "p3"), "demon")).toMatchObject({ known: false });
+    expect(attack(game, "p3")).toMatchObject({ ok: false, code: "unsupported" });
+  });
+
+  // BM-2a replaces the former Zombuul pin (PO-approved build, 2026-11-25): the Zombuul's row is modelled as a hidden extra life, which
+  // is not a prevention, so the Monk's protection is now read as for any player. An Imp attacking a Zombuul still means two living
+  // Demons, so the whole action stays Manual exactly as the old pin asserted.
+  it("BM-2a: Monk protection of a Zombuul is inferred; two living Demons keep the Imp's attack Manual", () => {
+    const game = patchPlayer(protect(proofGame(roles), "p3"), "p3", { actualRole: "zombuul" });
+    expect(proofQuery(game).protectedFrom(bind(game, "p3"), "demon")).toEqual({ known: true, value: true });
     expect(attack(game, "p3")).toMatchObject({ ok: false, code: "unsupported" });
   });
 

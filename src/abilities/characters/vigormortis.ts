@@ -1,6 +1,7 @@
 import type { AbilityDescriptor } from "../semantics";
+import { isTrulyAlive } from "@/stores/lifeState";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
-import { ask, deathAttempt, firstParticipant, followUpParticipant, lifeOperation, nameOf, nothing, survivedOutcome, tokenOutcome, requireLivingActor, subjectId } from "./shared";
+import { ask, deathAttempt, firstParticipant, followUpParticipant, lifeOperation, nameOf, nothing, survivedOutcome, tokenOutcome, requireLivingActor, subjectId, deathOf } from "./shared";
 import { scarletWomanSuccession } from "./scarletWoman";
 
 /**
@@ -44,13 +45,13 @@ export const VIGORMORTIS: AbilityDescriptor = {
     const { query } = context;
     const target = firstParticipant(context.inputs, "target");
     const victim = query.participant(target);
-    if (!victim?.alive) return nothing();
+    if (!victim || !isTrulyAlive(victim)) return nothing();
     const death = deathAttempt(context, target, "demon");
     if (death.kind === "ask") return ask(death.message, death.requirement);
     if (death.kind === "survives") return survivedOutcome(death);
     const succession = scarletWomanSuccession(query, target);
     if (succession.kind !== "none") return { kind: "unsupported", message: succession.kind === "manual" ? succession.reason : "A Scarlet Woman succession for this Demon is not modeled -- resolve manually." };
-    const kill = lifeOperation([{ kind: "death", target }]);
+    const kill = lifeOperation([deathOf(target, death)]);
 
     const isMinion = query.registersAsType(target, "minion", "vigormortis");
     if (!isMinion.known) return { kind: "unsupported", message: isMinion.reason };

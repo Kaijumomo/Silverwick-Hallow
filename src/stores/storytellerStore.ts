@@ -69,6 +69,7 @@ import { FIRST_LIVE_MOMENT, freshLifeEventWindow, pruneLifeEventWindow } from ".
 import {
   applyLifePlan,
   canonicalizeStartingLife,
+  hiddenLifeEffectRefusal,
   planLifeTransaction,
   type LifeEventSpec,
   type LifeConfirmationToken,
@@ -3123,6 +3124,8 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // caller observed, validates each intent in order against the
         // evolving working state, and returns a refusal, a true no-op, or the
         // complete effects[] + History plan.
+        const hidden = hiddenLifeEffectRefusal(game, transaction?.intents ?? []);
+        if (hidden) return { ok: false, code: "invalid", message: hidden };
         const result = planEffectTransaction(game, transaction);
         if (!result.ok) return result;
         if (!result.changed) return { ok: true, changed: false, effectIds: [] };

@@ -5,6 +5,7 @@ import { wakeIdentity } from "@/stores/wakeIdentity";
 import { evilInformationPolicy, type NightContext } from "@/rules/night/nightRules";
 import { publicTravelerRole, travelerNeedsFirstNight } from "@/stores/travelers";
 import { hasEffect } from "@/stores/effects";
+import { isTrulyAlive } from "@/stores/lifeState";
 import { TOYMAKER_DEMON_SKIP_OCCURRED } from "@/stores/gameRuleFacts";
 import { FANG_GU_ONCE } from "@/stores/gameRuleFactRegistry";
 import { participantScopedStepKey, participantStepKey, stepParticipantOf, travelerArrivalStepKey } from "@/stores/nightProgress";
@@ -230,8 +231,11 @@ export function computeNightOrder(
     // WP-5: a Minion the Vigormortis killed carries the official HAS ABILITY reminder, which already
     // says it keeps the ability: that row needs no advisory. Only an unmarked dead Minion keeps the old note.
     const markedKept = keptMinion && hasEffect(player, "retainsAbility");
-    const afterDeath = !isFirstNight && (DEATH_CHECKS.has(roleId) || roleId === "zombuul" || keptMinion);
-    if (!player.alive && !afterDeath) continue;
+    const afterDeath = !isFirstNight && (DEATH_CHECKS.has(roleId) || keptMinion);
+    // BM-2: the TRUE life. A Zombuul who registers as dead still wakes ("the Zombuul still attacks"); a truly dead one never does.
+    // Storyteller-only: the Night list is never projected.
+    const living = isTrulyAlive(player);
+    if (!living && !afterDeath) continue;
     // SOL-10F-L6: no generic suppression from prose-derived `oncePerGame`.
     // Usage authority is a verified AbilityDescriptor (enforced by the
     // coordinator); an unverified character stays visible (its "used" state is
@@ -251,7 +255,7 @@ export function computeNightOrder(
     if (!canonical) customOrders.set(order, roleId);
     if (markedKept) { /* the reminder token on the board carries the reason */ }
     else if (keptMinion) advisory += " Vigormortis: wake this dead Minion ONLY if the Vigormortis killed them at night (a Minion who died by execution or any other way has lost the ability), they are still a Minion, and they are not drunk or poisoned. Otherwise skip this step.";
-    else if (DEATH_CHECKS.has(roleId) || !player.alive) advisory += " Check the ability's death/event condition tonight; historical triggers are not tracked.";
+    else if (DEATH_CHECKS.has(roleId) || !living) advisory += " Check the ability's death/event condition tonight; historical triggers are not tracked.";
     if (hasEffect(player, "poisoned") || hasEffect(player, "drunk") || player.behaviorMode === "poisoned")
       advisory += " Impaired: simulate the procedure as appropriate; do not apply a functioning ability or assume truthful information.";
     if (COMPLEX_ABILITIES.has(player.actualRole))
@@ -267,7 +271,7 @@ export function computeNightOrder(
     steps.push({
       kind: "player", stepKey: participantStepKey(player.participantId, roleId), playerId: player.id,
       participantId: player.participantId,
-      playerName: player.name, seat: player.seat, alive: player.alive, abilityUsed: player.abilityUsed,
+      playerName: player.name, seat: player.seat, alive: living, abilityUsed: player.abilityUsed,
       effectiveRoleId: roleId, effectiveRoleName: roleDef.name, roleType: roleDef.type,
       prompt, reminder: roleDef.ability ?? "", order, advisory: advisory.trim(),
       isDeceived, actualRoleId: player.actualRole,

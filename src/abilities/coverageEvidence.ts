@@ -244,8 +244,8 @@ export const PARTIAL_SUPPORT: Readonly<Record<RoleId, readonly Piece[]>> = {
     { path: "src/rules/setup/setupPolicies.ts", what: "Marked as an uncertain composition: random setup and composition checks fall back to manual review." },
   ],
   zombuul: [
-    { path: "src/rules/night/nightOrder.ts", what: "Wakes after a death night (night list); the app does not track whether it has already used its ability." },
-    { path: "src/abilities/characters/passiveRules.ts", what: "Death-target gap: when an attack targets a functioning one, the app does not model it and the whole action goes manual." },
+    { path: "src/abilities/characters/passiveRules.ts", what: "BM-2a: a life-rules row: the first death of a sober and healthy Zombuul only registers (a Storyteller-only hidden life on the player); the Assassin kills it for real." },
+    { path: "src/stores/victoryEvidence.ts", what: "BM-2a: on the game-ending allow-list: every ending read uses its true life (the hidden life counts as alive; its real death is proved on the Day)." },
     { path: "src/stores/travelers.ts", what: "Counted as complex when a Traveller's Demon information is prepared: no automatic candidate is offered." },
   ],
 };
@@ -257,6 +257,7 @@ export const ENDING_EVIDENCE_ROLES: readonly RoleId[] = [
   "butler", "drunk", "recluse", "saint", "poisoner", "spy", "scarletwoman", "baron", "imp", "bureaucrat", "thief", "gunslinger", "scapegoat", "beggar", "cerenovus", "eviltwin",
   "clockmaker", "dreamer", "snakecharmer", "mathematician", "flowergirl", "towncrier", "oracle", "savant", "seamstress", "philosopher", "artist", "juggler", "sage",
   "mutant", "sweetheart", "barber", "klutz", "witch", "pithag", "fanggu", "vigormortis", "nodashii", "vortox",
+  "zombuul",
 ];
 
 /** Test files for guided and reviewed characters (the two most-referenced, or the loop that reviews them). */
@@ -297,6 +298,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   sailor: ["src/abilities/characters/sailor.test.ts", "src/abilities/characters/lifeRulesTable.test.ts"],
   exorcist: ["src/abilities/characters/exorcist.test.ts"],
   pacifist: ["src/abilities/characters/bm1Pacifist.test.ts", "src/abilities/characters/lifeRulesTable.test.ts"],
+  zombuul: ["src/abilities/characters/zombuul.test.ts", "src/stores/zombuulLife.test.ts", "src/abilities/characters/lifeRulesGateLs2.test.ts"],
   mutant: ["src/abilities/characters/informationCharacterReview.test.ts", "src/features/grimoire-v6/day/madnessExecution.test.tsx", "src/stores/sectsAndVioletsWholeGames.test.ts"],
   nodashii: ["src/abilities/characters/nodashii.test.ts", "src/rules/night/canonicalNightOrder.test.ts", "src/stores/sectsAndVioletsWholeGames.test.ts", "src/abilities/characters/sectsAndVioletsSv6GapPairs.test.ts"],
   oracle: ["src/abilities/characters/townCrierOraclePro.test.ts", "src/rules/night/canonicalNightOrder.test.ts", "src/stores/sectsAndVioletsWholeGames.test.ts", "src/abilities/characters/sectsAndVioletsSv6GapPairs.test.ts"],
@@ -348,7 +350,6 @@ export const COVERAGE_CAVEATS: Readonly<Record<RoleId, readonly string[]>> = {
 /** Why a "partial" character is partial, where the reason is NOT "a general support piece". Plain statements, no UI. */
 export const PARTIAL_CAVEATS: Readonly<Record<RoleId, string>> = {
   lleech: "Partial because the app REFUSES to automate: an attack on a functioning Lleech sends the whole action to Manual (death-target gap). No Lleech ability is modelled.",
-  zombuul: "Partial because the app REFUSES to automate: an attack on a functioning Zombuul sends the whole action to Manual (death-target gap); it only gets a night-list slot after a death night.",
   thief: "Partial for two narrow reasons only: it is on the game-ending allow-list and the night guide shows a one-line prompt. Its own ability (negative vote) is not supported.",
   gunslinger: "Partial for one narrow reason only: it is on the game-ending allow-list. Its own ability is not supported.",
   scapegoat: "Partial for one narrow reason only: it is on the game-ending allow-list. Its own ability is not supported.",

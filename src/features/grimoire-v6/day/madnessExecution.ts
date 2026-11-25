@@ -11,6 +11,8 @@ import type { ExecutionOutcome, STPlayerRecord, StorytellerLobbyRecord } from "@
 import type { VotingIntent } from "@/stores/votingTypes";
 import type { V6Ctx } from "../ctx";
 import { chooseAsk, confirmAsk, flash } from "../v6Store";
+import { hasHiddenLife } from "@/stores/lifeState";
+import { executedLine } from "./advance";
 
 /**
  * SV-4b: the Storyteller's own execution from a seat's menu -- the Cerenovus's penalty and the Mutant's "at any time"
@@ -39,7 +41,8 @@ export function executeOffered(ctx: V6Ctx, player: STPlayerRecord | undefined): 
   const { game } = ctx;
   if (!player || player.isEmpty || !player.participantId || ctx.privacy || ctx.ended || (game.phase !== "day" && game.phase !== "night")) return false;
   // A dead player can only be "executed" in the Day (recorded as already dead): at night there is no death left to record.
-  if (!player.alive && game.phase !== "day") return false;
+  // BM-2: a Zombuul who registers as dead but lives on can still die, Day or night.
+  if (!player.alive && !hasHiddenLife(player) && game.phase !== "day") return false;
   if (player.alive && player.actualRole === "mutant") return true;
   const query = createRulesQuery(game, { registry: ctx.registry, script: ctx.script ?? null, semantics: CANONICAL_ABILITY_SEMANTICS });
   return madnessAllowsExecution(query, { playerId: player.id, participantId: player.participantId });
@@ -133,13 +136,15 @@ export async function runExecute(ctx: V6Ctx, player: STPlayerRecord): Promise<vo
     }
     const result = store.getState().recordDeath(player.id, undefined, captureVotingContext());
     if (!result.ok) { flash(result.message); return; }
-    flash([`${name} is executed at night: recorded as a death. Today's execution is still free.`, nightExecutionWarning(current, game.players)].filter(Boolean).join(" "));
+    const livesOn = hasHiddenLife(store.getState().game?.players[current.id] ?? current) && current.alive;
+    flash([`${name} is executed at night: recorded as a death.${livesOn ? " Announce that they died." : ""} Today's execution is still free.`, nightExecutionWarning(current, game.players)].filter(Boolean).join(" "));
     return;
   }
 
   // Day: the outcome follows the rules gate, and the Storyteller is asked only where the gate says survival is possible.
   let outcome: ExecutionOutcome = "alreadyDead";
-  if (current.alive) {
+  // BM-2 (PO Q4): a Zombuul who registers as dead but lives on is asked like a living player.
+  if (current.alive || hasHiddenLife(current)) {
     const advice = executionAdvice(game, current.id, environment);
     const survivalKnown = executionSurvivalKnown(game, current.id, environment);
     const choices = survivalKnown ? [] : executionChoiceFor(game, current.id, environment);
@@ -166,5 +171,5 @@ export async function runExecute(ctx: V6Ctx, player: STPlayerRecord): Promise<vo
   if (!done) return;
   if (!done.ok) { flash(done.message); return; }
   flash(done.manualReason ?? (outcome === "survived" ? `${name} survives the execution. Begin the night when ready.`
-    : outcome === "alreadyDead" ? `${name} is already dead: the execution is recorded. Begin the night when ready.` : `${name} is executed. Begin the night when ready.`));
+    : outcome === "alreadyDead" ? `${name} is already dead: the execution is recorded. Begin the night when ready.` : executedLine(name, current.id)));
 }

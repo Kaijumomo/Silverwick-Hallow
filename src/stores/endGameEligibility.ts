@@ -1,4 +1,5 @@
 import type { StorytellerLobbyRecord } from "./types";
+import { isTrulyAlive } from "./lifeState";
 import type { RulesQueryEnvironment } from "./rulesQuery";
 import { validVictoryEvidence, victoryCoverageEligibility } from "./victoryEvidence";
 import { bindingOf, createRulesQuery } from "./rulesQuery";
@@ -94,7 +95,7 @@ function saintAfterDemonLine(game: StorytellerLobbyRecord, environment: RulesQue
   if (twinGoodWinBlock(game, environment)?.kind !== "blocked") return null;
   const players = Object.values(game.players).filter((player) => !player.isEmpty && !!player.participantId && !player.isTraveler);
   const isDemon = (player: (typeof players)[number]) => environment.registry.get(player.actualRole)?.type === "demon";
-  if (players.some((player) => player.alive && isDemon(player)) || !players.some((player) => !player.alive && isDemon(player))) return null;
+  if (players.some((player) => isTrulyAlive(player) && isDemon(player)) || !players.some((player) => !player.alive && isDemon(player))) return null;
   const events = executionsAt(game, { phase: "day", day: game.day });
   const saint = (events.status === "known" ? events.events : events.recorded).some((event) => event.kind === "execution" && event.outcome === "died" && event.actualRoleAtEvent === "saint");
   return saint ? "The Saint was executed after the Demon died, and both Twins live. Check before ending the game" : null;
@@ -126,7 +127,9 @@ function baseEligibility(game: StorytellerLobbyRecord, environment: RulesQueryEn
     return { kind: "verified", reason: saint ? "saint" : "mayor", team: type === SAINT_EXECUTION_EVIL_TEAM_LOST || type === MAYOR_DAY_END_GOOD_TEAM_WON ? "good" : "evil" };
   }
   const players = Object.values(game.players).filter(player => !player.isEmpty && !!player.participantId);
-  const living = players.filter(player => player.alive && !player.isTraveler);
+  // BM-2: the TRUE life. A Zombuul who registers as dead is a living Demon ("the game continues"), and counts for "two alive" ("the
+  // game continues if just two other players are alive"). https://wiki.bloodontheclocktower.com/Zombuul
+  const living = players.filter(player => isTrulyAlive(player) && !player.isTraveler);
   const demons = living.filter(player => environment.registry.get(player.actualRole)?.type === "demon");
   // An older or corrected execution has no event-time functioning/team proof.
   if (game.lifeEventWindow.events.some(event => event.kind === "execution" && event.outcome === "died" && event.actualRoleAtEvent === "saint" && !evidence.some(fact => isSaintNonqualifyingEvidenceType(fact.type) && fact.resolutionId === event.id)))
@@ -150,7 +153,8 @@ export function demonGoneAdvisory(game: StorytellerLobbyRecord, environment: Rul
   if (game.phase !== "day" && game.phase !== "night") return null;
   const players = Object.values(game.players).filter(player => !player.isEmpty && !!player.participantId && !player.isTraveler);
   const demon = (player: (typeof players)[number]) => environment.registry.get(player.actualRole)?.type === "demon";
-  if (players.some(player => player.alive && demon(player)) || !players.some(player => !player.alive && demon(player))) return null;
+  // BM-2: a Zombuul who registers as dead is a living Demon: nothing to advise.
+  if (players.some(player => isTrulyAlive(player) && demon(player)) || !players.some(player => !player.alive && demon(player))) return null;
   const living = (role: string) => players.some(player => player.alive && player.actualRole === role);
   if (living("scarletwoman")) return "The Demon is dead, but a Scarlet Woman is alive. Check before ending the game";
   if (living("mastermind")) return "The Demon is dead, but the Mastermind is alive. Check before ending the game";

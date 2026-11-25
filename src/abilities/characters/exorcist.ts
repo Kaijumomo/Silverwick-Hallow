@@ -1,4 +1,5 @@
 import type { AbilityOperation, ParticipantBinding } from "@/stores/abilityResolution";
+import { isTrulyAlive } from "@/stores/lifeState";
 import type { RulesQuery } from "@/stores/rulesQuery";
 import type { EffectRecord } from "@/stores/types";
 import type { AbilityDescriptor, AbilityEvaluation } from "../semantics";
@@ -64,7 +65,8 @@ function exorcisesTonight(query: RulesQuery, effect: EffectRecord): boolean {
   const sourcePlayer = Object.values(query.game.players).find((player) => !player.isEmpty && player.participantId === chooserId);
   if (!sourcePlayer?.participantId) return false;
   // The chooser must still be a living Exorcist: a dead one, or one turned into another character, no longer keeps the Demon asleep.
-  if (!sourcePlayer.alive || sourcePlayer.actualRole !== "exorcist") return false;
+  // BM-2: true life, so a player who registers as dead but secretly lives (a hidden life kept through a character change) still counts.
+  if (!isTrulyAlive(sourcePlayer) || sourcePlayer.actualRole !== "exorcist") return false;
   const functions = query.abilityFunctions({ playerId: sourcePlayer.id, participantId: sourcePlayer.participantId });
   return functions.known && functions.value;
 }
@@ -110,7 +112,7 @@ export const EXORCIST: AbilityDescriptor = {
     if (context.functioning) {
       const registers = query.registersAsType(target, "demon", "exorcist");
       // A dead former Demon (an Imp after its star pass) is not woken by default: the page is silent, so the Storyteller rules, nothing pre-selected.
-      if (registers.known && (!registers.value || picked.alive)) told = registers.value;
+      if (registers.known && (!registers.value || isTrulyAlive(picked))) told = registers.value;
       else {
         const id = exorcistRegistersAsDemonId(picked.participantId!);
         const answer = answerOf(context.inputs, id, "boolean");

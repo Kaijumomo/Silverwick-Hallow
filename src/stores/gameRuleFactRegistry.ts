@@ -1,4 +1,5 @@
 import type { GameRuleFactType, LiveGameMoment, GameRuleFactRecord, StorytellerLobbyRecord, LifeEvent } from "./types";
+import { isTrulyAlive } from "./lifeState";
 
 /**
  * Phase 10G: the Game Rule Fact REGISTRY (PHASE10G Section 4.2) -- the only
@@ -80,7 +81,8 @@ export const VICTORY_EVIDENCE_TYPES = [SAINT_EXECUTION_GOOD_TEAM_LOST, SAINT_EXE
 export const isVictoryEvidenceType = (type: string): boolean => (VICTORY_EVIDENCE_TYPES as readonly string[]).includes(type);
 /** SV-5p: the Demons whose death the resolved-death proof covers. The Imp on Day and Night (its night self-pass is checked); the four
  * Sects & Violets Demons on the Day only (an execution or a Slayer's shot; Q20 A): a night death of one stays the Storyteller's check. */
-export const PROVED_DEMONS = ["imp", "fanggu", "nodashii", "vigormortis", "vortox"] as const;
+/** BM-2: the Zombuul's REAL death (never its first, which only registers) is proved on the Day, like the S&V Demons'. */
+export const PROVED_DEMONS = ["imp", "fanggu", "nodashii", "vigormortis", "vortox", "zombuul"] as const;
 export const isProvedDemon = (role: unknown): boolean => typeof role === "string" && (PROVED_DEMONS as readonly string[]).includes(role);
 export const isDayOnlyProvedDemon = (role: unknown): boolean => isProvedDemon(role) && role !== "imp";
 export const isSaintNonqualifyingEvidenceType = (type: string): boolean => type === SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED || type === SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED;
@@ -195,7 +197,7 @@ export function victoryEvidenceInvalidReason(game: Pick<StorytellerLobbyRecord, 
     if (isDayOnlyProvedDemon(role) && fact.recordedAt.phase !== "day") return "This Demon's death is proved only on the Day.";
     const event = game.lifeEventWindow.events.find(event => event.id === fact.resolutionId);
     if (!event || !(event.kind === "death" || event.kind === "execution" && event.outcome === "died") || event.actualRoleAtEvent !== role || event.moment.phase !== fact.recordedAt.phase || event.moment.day !== fact.recordedAt.day || event.subject.participantId !== source.participantId || event.subject.playerId !== source.playerId) return "Demon resolution must reference its exact retained Demon death.";
-    if (player.actualRole !== role || player.alive || Object.values(game.players).some(player => !player.isEmpty && player.alive && player.actualRole === role)) return "Demon resolution requires its dead Demon identity and no living Demon of that character.";
+    if (player.actualRole !== role || isTrulyAlive(player) || Object.values(game.players).some(player => !player.isEmpty && isTrulyAlive(player) && player.actualRole === role)) return "Demon resolution requires its dead Demon identity and no living Demon of that character.";
   } else if (saint) {
     const event = game.lifeEventWindow.events.find(event => event.id === fact.resolutionId);
     if (!event || event.kind !== "execution" || event.outcome !== "died" || event.actualRoleAtEvent !== "saint" || event.moment.day !== fact.recordedAt.day || event.subject.participantId !== source.participantId || event.subject.playerId !== source.playerId) return "Saint qualification must reference its exact retained execution death.";

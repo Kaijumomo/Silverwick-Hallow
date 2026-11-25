@@ -177,6 +177,22 @@ export const isDeathEvent = (event: LifeEvent): boolean =>
   event.kind === "death" || ("outcome" in event && event.outcome === "died");
 
 /**
+ * BM-2 (independent check S1): whether this recorded event changed what the table sees, that is whether the player looked alive just
+ * before it. Read from the "life" History record that mirrors the event: a death of a player who already registers as dead (the
+ * Zombuul's real death after his first one) leaves `alive` unchanged. A missing record is treated as a change, as before BM-2.
+ */
+export function changedTableLife(game: Pick<StorytellerLobbyRecord, "history">, event: Pick<LifeEvent, "id">): boolean {
+  for (let i = game.history.length - 1; i >= 0; i--) {
+    const record = game.history[i]!;
+    if (record.category !== "life" || !record.lifeEvent) continue;
+    if (!record.lifeEvent.operations.some((operation) => operation.kind === "added" && operation.event.id === event.id)) continue;
+    const change = record.change;
+    return change?.kind === "value" && change.from.alive === true;
+  }
+  return true;
+}
+
+/**
  * Whether this recorded death may be a death AS `roleId`: its recorded character is `roleId`, or it has no character evidence at all (a
  * death recorded late through the correction path, an amend to another player, an old save). Such a death is never guessed either way
  * (SOL-10F-A9): a Day action or token that reads it stays offered and the Storyteller decides. A death recorded as ANOTHER character

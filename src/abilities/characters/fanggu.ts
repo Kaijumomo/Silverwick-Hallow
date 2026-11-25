@@ -1,4 +1,5 @@
 import { isCanonicalRole } from "@/data/canonical";
+import { isTrulyAlive } from "@/stores/lifeState";
 import { needsShownIdentity } from "@/stores/identity";
 import { participantStepKey } from "@/stores/nightProgress";
 import { toldRoleChangeIntents } from "@/stores/roleResolution";
@@ -9,7 +10,7 @@ import type { STPlayerRecord } from "@/stores/types";
 import type { AbilityDescriptor, AbilityEvaluation, AbilityEvaluationContext } from "../semantics";
 import { CONCEALED_MODES } from "./pithag";
 import { scarletWomanSuccession } from "./scarletWoman";
-import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nameOf, nothing, requireLivingActor, survivedOutcome, tokenOutcome } from "./shared";
+import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nameOf, nothing, requireLivingActor, survivedOutcome, tokenOutcome, deathOf } from "./shared";
 
 /**
  * Fang Gu -- GUIDED (SV-2b, Sects & Violets). https://wiki.bloodontheclocktower.com/Fang_Gu (saved revision 3175)
@@ -74,7 +75,7 @@ export const FANG_GU: AbilityDescriptor = {
     const me = context.actor.player;
     const target = firstParticipant(context.inputs, FANG_GU_TARGET);
     const victim = query.participant(target);
-    if (!victim?.alive) return nothing();
+    if (!victim || !isTrulyAlive(victim)) return nothing();
     const death = deathAttempt(context, target, "demon");
     if (death.kind === "ask") return ask(death.message, death.requirement);
     // "If the Fang Gu attacks an Outsider but that Outsider does not die, that Outsider does not become an evil Fang Gu."
@@ -82,7 +83,7 @@ export const FANG_GU: AbilityDescriptor = {
     const kill = (): AbilityEvaluation => {
       const succession = scarletWomanSuccession(query, target);
       if (succession.kind !== "none") return { kind: "unsupported", message: succession.kind === "manual" ? succession.reason : "A Scarlet Woman succession for this Demon is not modeled -- resolve manually." };
-      return tokenOutcome(context, "fanggu", [lifeOperation([{ kind: "death", target }])]);
+      return tokenOutcome(context, "fanggu", [lifeOperation([deathOf(target, death)])]);
     };
     const once = query.gameRuleFact(FANG_GU_ONCE);
     if (!once.known) return { kind: "unsupported", message: once.reason };

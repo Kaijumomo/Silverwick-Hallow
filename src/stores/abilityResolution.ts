@@ -23,7 +23,7 @@ import { applyAlignmentPlan, defaultAlignmentIds, planAlignmentTransaction, type
 import { applyEffectPlan, planEffectTransaction, type EffectIdSource, type EffectIntent } from "./effectResolution";
 import { applyGameRuleFactPlan, planGameRuleFactTransaction, type GameRuleFactIdSource, type GameRuleFactIntent } from "./gameRuleFacts";
 import { applyInformationDeliveryPlan, planInformationDelivery, planManualInformationDelivery } from "./informationDelivery";
-import { applyLifePlan, planLifeTransaction, type LifeConfirmationToken, type LifeIdSource, type LifeIntent, type LifeStatusTarget } from "./lifeResolution";
+import { applyLifePlan, hiddenLifeEffectRefusal, planLifeTransaction, type LifeConfirmationToken, type LifeIdSource, type LifeIntent, type LifeStatusTarget } from "./lifeResolution";
 import { nightTriggerStepKey, participantStepKey, planNightStepStatus } from "./nightProgress";
 import { applyReminderPlan, planReminderTransaction, type ReminderIdSource, type ReminderIntent } from "./reminderResolution";
 import { applyRolePlan, defaultRoleIds, planRoleTransaction, type RoleIdSource, type RoleIntent } from "./roleResolution";
@@ -85,7 +85,9 @@ export type ParticipantBinding = { playerId: PlayerId; participantId: Participan
  * working snapshot (Sol decision H-06). Window corrections (retract / amend /
  * late record) are correction workflows of their own, never ability outcomes. */
 export type AbilityLifeIntent =
-  | { kind: "death" | "resurrection" | "useAbility" | "spendGhostVote" | "restoreGhostVote"; target: ParticipantBinding }
+  /** BM-2: `livesOn` -- the Zombuul's first death, as ruled by the death gate or the Storyteller (see DeathIntent). */
+  | { kind: "death"; target: ParticipantBinding; livesOn?: boolean }
+  | { kind: "resurrection" | "useAbility" | "spendGhostVote" | "restoreGhostVote"; target: ParticipantBinding }
   | { kind: "execution"; target: ParticipantBinding; outcome: ExecutionOutcome; confirmations?: readonly LifeConfirmationToken[] }
   | { kind: "exile"; target: ParticipantBinding; outcome: ExileOutcome }
   | { kind: "correctStatus"; target: ParticipantBinding; status: LifeStatusTarget }
@@ -358,7 +360,10 @@ function translateLifeIntent(working: StorytellerLobbyRecord, intent: AbilityLif
   }
   const playerId = intent.target.playerId;
   switch (intent.kind) {
-    case "death": case "resurrection": case "useAbility": case "spendGhostVote": case "restoreGhostVote":
+    case "death":
+      if (intent.livesOn !== undefined && typeof intent.livesOn !== "boolean") return refuse("invalid", "Malformed Life outcome.");
+      return { kind: "death", playerId, ...(intent.livesOn !== undefined ? { livesOn: intent.livesOn } : {}) };
+    case "resurrection": case "useAbility": case "spendGhostVote": case "restoreGhostVote":
       return { kind: intent.kind, playerId };
     case "execution":
       return { kind: "execution", playerId, outcome: intent.outcome, ...(intent.confirmations?.length ? { confirmations: intent.confirmations } : {}) };
@@ -535,6 +540,8 @@ export function composeAbilityOutcome(
         break;
       }
       case "effect": {
+        const hidden = hiddenLifeEffectRefusal(working, operation.intents);
+        if (hidden) return refuse("invalid", hidden, { operationIndex });
         const result = planEffectTransaction(working, { intents: [...operation.intents], resolutionId, ...(context ? { context } : {}) }, ids.effect);
         if (!result.ok) return domainRefusal("effect", result);
         if (result.changed) working = applyEffectPlan(working, result.plan);

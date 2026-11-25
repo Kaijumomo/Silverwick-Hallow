@@ -2,7 +2,7 @@ import type { AbilityDescriptor } from "../semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
 import type { AbilityOperation } from "@/stores/abilityResolution";
-import { ask, deathAttempt, firstParticipant, lifeOperation, nothing, outcome, tokenOutcome } from "./shared";
+import { ask, deathAttempt, firstParticipant, lifeOperation, nothing, outcome, tokenOutcome, deathOf } from "./shared";
 
 export const MOONCHILD_CHOICE = "moonchildChoice";
 /** A choice the Storyteller recorded for an EVIL player: nothing happens, so it draws no token, but it is kept in the game (Undo reverses it)
@@ -81,6 +81,6 @@ export const MOONCHILD: AbilityDescriptor = {
     // The choice is spent tonight whatever happens to it (protected, or not killed): it never lingers into another night.
     const spent: AbilityOperation[] = [{ domain: "effect", intents: [{ kind: "remove", target: pending.target, effectId: pending.effectId }] }];
     if (death.kind === "survives") return outcome(death.spend ? [lifeOperation([{ kind: "useAbility", target: death.spend }]), ...spent] : spent, !!death.spend);
-    return tokenOutcome(context, "moonchild", [lifeOperation([{ kind: "death", target }]), ...spent], true);
+    return tokenOutcome(context, "moonchild", [lifeOperation([deathOf(target, death)]), ...spent], true);
   },
 };

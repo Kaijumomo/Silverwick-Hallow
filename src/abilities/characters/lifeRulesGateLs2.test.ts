@@ -13,7 +13,7 @@ import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { EffectRecord, StorytellerLobbyRecord } from "@/stores/types";
 import { bind, impair, patchPlayer, pick, plan, planned, proofGame, proofQuery, proofRegistry, request } from "@/test/proofFixtures";
 import { LIFE_RULES, lifeRuleOf, lifeRuleStops, passiveProtection, survivesFirstDeath } from "./passiveRules";
-import { deathAttempt, protectionJudgmentId } from "./shared";
+import { deathAttempt, deathOf, protectionJudgmentId } from "./shared";
 
 // ---- Frozen copy of the LS-1 gate (13855e9) -------------------------------------------------------------------------------
 type LegacyRule = { holder: "self" | "neighbours"; duration: "permanent" | "once"; needsFunctioning: boolean; causes: "demon" | "any";
@@ -147,9 +147,9 @@ const STATES: State[] = (() => {
   for (const dead of b) for (const used of b) for (const safe of b) for (const inn of b) for (const poisoned of b) for (const tea of b) out.push({ dead, used, safe, inn, poisoned, tea });
   return out;
 })();
-/** States whose answer an LS-2 package changes on purpose: LS-2b models the Tea Lady (any seated Tea Lady; her stamp also gains
- * the seating and the alignments). Those states are tested in teaLady.test.ts. */
-const changedOnPurpose = (role: string, state: State) => state.tea || role === "tealady";
+/** States whose answer a later package changes on purpose: LS-2b models the Tea Lady (any seated Tea Lady; her stamp also gains
+ * the seating and the alignments), tested in teaLady.test.ts; BM-2a models the Zombuul's hidden life, tested in zombuulLife.test.ts. */
+const changedOnPurpose = (role: string, state: State) => state.tea || role === "tealady" || role === "zombuul";
 
 describe("LS-2a: the gate is unchanged for the causes demon and any", () => {
   it("passiveProtection, survivesFirstDeath, protectedFrom, deathOutcome, judgment ids and stamps match 13855e9 for every role x state", () => {
@@ -190,7 +190,9 @@ describe("LS-2a: the gate is unchanged for the causes demon and any", () => {
 describe("LS-2a: rows", () => {
   it("every automatic or spending row is bypassed by the Assassin; gap rows are unmodelled; the Pacifist is the one choice row", () => {
     for (const id of ["soldier", "sailor", "fool", "tealady"]) expect(lifeRuleOf(id)?.bypassedBy, id).toEqual(["assassin"]);
-    for (const id of ["mayor", "lleech", "zombuul"]) expect(lifeRuleOf(id)?.decision, id).toBe("unmodelled");
+    for (const id of ["mayor", "lleech"]) expect(lifeRuleOf(id)?.decision, id).toBe("unmodelled");
+    // BM-2a: the Zombuul's row is modelled (a hidden extra life, not a prevention); the Assassin kills it for real.
+    expect(lifeRuleOf("zombuul")).toMatchObject({ decision: "auto", onSurvive: "hiddenLife", bypassedBy: ["assassin"] });
     expect(Object.entries(LIFE_RULES).filter(([, rule]) => rule!.decision === "choice").map(([id]) => id)).toEqual(["pacifist"]);
     expect(lifeRuleOf("pacifist")).toMatchObject({ holder: "anyGood", causes: "execution", bypassedBy: ["assassin"], onSurvive: "nothing" });
   });
@@ -249,6 +251,14 @@ describe("LS-2a: the assassin cause goes around every prevention", () => {
   });
 
   it("unmodelled rows still send the question to the Storyteller (their own rules are not modelled)", () => {
-    expect(assassinate(base("zombuul"), "p1")).toMatchObject({ kind: "ask" });
+    expect(assassinate(base("lleech"), "p1")).toMatchObject({ kind: "ask" });
+  });
+
+  it("BM-2a: the Assassin kills a Zombuul for real (no hidden life)", () => {
+    // BM-2 independent check S2: the gate carries the ruling, so the Life planner (which reads the rules without the cause) keeps no life.
+    const g = base("zombuul");
+    const decision = assassinate(g, "p1");
+    expect(decision).toEqual({ kind: "dies", livesOn: false });
+    expect(deathOf(bind(g, "p1"), decision as Extract<typeof decision, { kind: "dies" }>)).toEqual({ kind: "death", target: bind(g, "p1"), livesOn: false });
   });
 });

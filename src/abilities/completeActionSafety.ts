@@ -1,4 +1,5 @@
 import { participantStepKey } from "@/stores/nightProgress";
+import { isTrulyAlive } from "@/stores/lifeState";
 import type { AbilityLifeIntent, AbilityOutcome, ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
 import { scarletWomanSuccession } from "./characters/scarletWoman";
@@ -13,14 +14,15 @@ export function incompleteSuccessionReason(
   intents: readonly AbilityLifeIntent[] = outcome.operations.flatMap(op => op.domain === "life" ? op.intents : []),
   _after?: RulesQuery,
 ): string | undefined {
-  const deaths = intents.filter(intent => intent.kind === "death" && query.participant(intent.target)?.alive);
+  // BM-2: the real death of a player who registers as dead but secretly lives (the Zombuul) is a death too.
+  const deaths = intents.filter(intent => { const player = intent.kind === "death" ? query.participant(intent.target) : null; return !!player && isTrulyAlive(player); });
   // Multi-death batches can remove an impairment source before a later death.
   // B4 supports one death per automatic action; do not pretend a single query
   // proves every intermediate state in an exceptional compound batch.
   if (deaths.length > 1 && Object.values(query.game.players).some(p => !p.isEmpty && p.alive && p.actualRole === "scarletwoman"))
     return "Scarlet Woman succession across multiple deaths requires manual resolution.";
   for (const death of deaths) {
-    const succession = scarletWomanSuccession(query, death.target, action.roleId === "slayer" ? "slayer" : undefined);
+    const succession = scarletWomanSuccession(query, death.target, action.roleId === "slayer" ? "slayer" : undefined, death.kind === "death" ? death.livesOn : undefined);
     if (succession.kind === "manual") return succession.reason;
     if (succession.kind === "none") continue;
     const binding = succession.target;

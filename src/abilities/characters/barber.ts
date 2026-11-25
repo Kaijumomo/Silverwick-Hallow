@@ -1,6 +1,7 @@
 import { canonicalOrder, isCanonicalRole } from "@/data/canonical";
 import { needsShownIdentity } from "@/stores/identity";
 import { isDeathEvent, mayBeDeathAs } from "@/stores/lifeEvents";
+import { isTrulyAlive } from "@/stores/lifeState";
 import { nightTriggerStepKey, participantStepKey } from "@/stores/nightProgress";
 import { toldRoleChangeIntents } from "@/stores/roleResolution";
 import type { AbilityOperation, ParticipantBinding } from "@/stores/abilityResolution";
@@ -43,8 +44,9 @@ const ANOTHER_DEMON = "The Demon may not choose another Demon.";
 /** The Storyteller's ruling whether this chosen player registers as a Demon to the Barber (a Recluse). */
 export const barberRegistersAsDemonId = (participantId: string) => `barber:registersAsDemon:${JSON.stringify(participantId)}`;
 
+// BM-2: a Demon who registers as dead but secretly lives (the Zombuul after his first death) is still a living Demon who may choose.
 const livingDemons = (query: RulesQuery): STPlayerRecord[] =>
-  Object.values(query.game.players).filter((p) => !p.isEmpty && !!p.participantId && p.alive && query.roleOf(p.actualRole)?.type === "demon");
+  Object.values(query.game.players).filter((p) => !p.isEmpty && !!p.participantId && isTrulyAlive(p) && query.roleOf(p.actualRole)?.type === "demon");
 const bindingOf = (p: STPlayerRecord): ParticipantBinding => ({ playerId: p.id, participantId: p.participantId! });
 
 /** True while this dead, real Barber's swap is still owed: from a Day death until the Night step is done, or from a Night death until it

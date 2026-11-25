@@ -58,7 +58,9 @@ describe("coverage level and evidence (Stage 5A-1)", () => {
     // BM-1a moved the Pacifist from partial to reviewed (no night step; its prompt narrowed to when it could matter).
     // BM-1c moved the Exorcist from generic to guided (a wake: the pick, the Storyteller's ruling, one source-free CHOSEN fact).
     // BM-1b moved the Sailor from partial to guided (a wake: the choice, the Storyteller's ruling, one sourced DRUNK Effect).
-    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 43, reviewed: 22, partial: 57, generic: 59 });
+    // BM-2a moved the Zombuul from partial to reviewed (a life-rules row: the hidden extra life; on the ending list).
+    // BM-2b moved the Zombuul from reviewed to guided (a wake: no wake after a Day death, the Demon kill).
+    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 44, reviewed: 22, partial: 56, generic: 59 });
   });
 
   it("level follows the facts the gates read", () => {
@@ -128,7 +130,7 @@ describe("coverage level and evidence (Stage 5A-1)", () => {
       expect(e.caveats?.includes(NOT_ON_ENDING_LIST_CAVEAT) ?? false, e.id).toBe(!ENDING_EVIDENCE_ROLES.includes(e.id));
     }
     for (const id of Object.keys(PARTIAL_CAVEATS)) expect(byId.get(id)!.caveats, id).toContain(PARTIAL_CAVEATS[id]);
-    for (const id of ["lleech", "zombuul"]) expect(byId.get(id)!.caveats!.join(" "), id).toMatch(/REFUSES to automate/);
+    for (const id of ["lleech"]) expect(byId.get(id)!.caveats!.join(" "), id).toMatch(/REFUSES to automate/);
   });
 
   it("evidence has one code entry per file", () => {

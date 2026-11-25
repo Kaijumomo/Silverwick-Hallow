@@ -4,7 +4,7 @@ import { toldRoleChangeIntents } from "@/stores/roleResolution";
 import type { AbilityDescriptor, AbilityEvaluation, AbilityEvaluationContext } from "../semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
-import { answerOf, ask, deathAttempt, mayorBounceOffered, firstParticipant, followUpParticipant, lifeOperation, nameOf, nothing, subjectId, survivedOutcome, tokenOutcome, requireLivingActor } from "./shared";
+import { answerOf, ask, deathAttempt, mayorBounceOffered, firstParticipant, followUpParticipant, lifeOperation, nameOf, nothing, subjectId, survivedOutcome, tokenOutcome, requireLivingActor, deathOf } from "./shared";
 import { scarletWomanSuccession } from "./scarletWoman";
 
 /**
@@ -110,7 +110,9 @@ export const IMP: AbilityDescriptor = {
     if (context.simulated || !context.functioning) return nothing();
     const target = firstParticipant(context.inputs, "target");
     const self = target.participantId === context.actor.binding.participantId;
-    if (!context.query.participant(target)?.alive) return nothing();
+    // BM-2: "attacks a dead player": nothing; a player who registers as dead but secretly lives (the Zombuul) can die for real.
+    const targetAlive = context.query.trulyAlive(target);
+    if (!targetAlive.known || !targetAlive.value) return nothing();
     // The Mayor: "another player might die instead". The Storyteller's Night card asks the first question as soon as a certainly working,
     // unprotected Mayor is tapped, and the answers arrive here; without the answer (any other route) the attack stays wholly Manual, as ever.
     // A protected Mayor never reaches this: the death gate answers "survives" (nobody dies, no bounce).
@@ -143,7 +145,7 @@ export const IMP: AbilityDescriptor = {
       return { kind: "illegal", message: `${nameOf(context, victim)} is protected and does not die. Choose another player.` };
     }
     if (death.kind === "survives") return survivedOutcome(death);
-    const kill = lifeOperation([{ kind: "death", target: victim }]);
+    const kill = lifeOperation([death.kind === "dies" ? deathOf(victim, death) : { kind: "death", target: victim }]);
     if (!self) {
       const succession = scarletWomanSuccession(context.query, victim);
       if (succession.kind === "manual") return { kind: "unsupported", message: succession.reason };
