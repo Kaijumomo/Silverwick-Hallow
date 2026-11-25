@@ -111,6 +111,12 @@ describe("Exorcist: a drunk or poisoned Exorcist", () => {
     expect(impStep(next)).toMatchObject({ ok: false, code: "notApplicable" });
     expect(impStep(impair(next, "p0", "poisoned"))).toMatchObject({ ok: true });
   });
+  it("an Exorcist who dies, or becomes another character, later the same night no longer stops the Demon", () => {
+    const next = planned(choose(proofGame(ROLES), "p2"));
+    expect(impStep(next)).toMatchObject({ ok: false, code: "notApplicable" });
+    expect(impStep(patchPlayer(next, "p0", { alive: false }))).toMatchObject({ ok: true });
+    expect(impStep(patchPlayer(next, "p0", { actualRole: "chef" }))).toMatchObject({ ok: true });
+  });
 });
 
 describe("Exorcist: a player who might register as the Demon", () => {

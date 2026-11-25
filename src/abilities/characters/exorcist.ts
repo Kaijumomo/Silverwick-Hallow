@@ -63,6 +63,8 @@ function exorcisesTonight(query: RulesQuery, effect: EffectRecord): boolean {
   const chooserId = chooser.participants[0].participantId;
   const sourcePlayer = Object.values(query.game.players).find((player) => !player.isEmpty && player.participantId === chooserId);
   if (!sourcePlayer?.participantId) return false;
+  // The chooser must still be a living Exorcist: a dead one, or one turned into another character, no longer keeps the Demon asleep.
+  if (!sourcePlayer.alive || sourcePlayer.actualRole !== "exorcist") return false;
   const functions = query.abilityFunctions({ playerId: sourcePlayer.id, participantId: sourcePlayer.participantId });
   return functions.known && functions.value;
 }
