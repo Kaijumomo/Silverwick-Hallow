@@ -31,6 +31,13 @@ afterEach(() => { cleanup(); vi.useRealTimers(); });
 // p0 seamstress, p1 barber, p2 clockmaker, p3 fanggu, p4 sweetheart, p5 witch
 const ROLES = ["seamstress", "barber", "clockmaker", "fanggu", "sweetheart", "witch"];
 
+it("Not Tonight sits at the far right of the prompt line, not in a row of its own (PO 2026-11-25)", () => {
+  open(proofGame(ROLES, "night", 2));
+  const prompt = screen.getByText("Choose two players on the board");
+  expect(prompt).toContainElement(screen.getByRole("button", { name: "Not Tonight" }));
+  expect(screen.getByRole("button", { name: "Not Tonight" })).toHaveClass("gv-choice-pill", "is-small");
+});
+
 it("Not Tonight closes tonight's step, uses nothing, and she wakes again the next night", () => {
   open(proofGame(ROLES, "night", 2));
   expect(screen.getByText("Choose two players on the board")).toBeInTheDocument();

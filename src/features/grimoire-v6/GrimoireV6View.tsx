@@ -379,11 +379,14 @@ const S353: React.CSSProperties = { "flex": "none", "display": "flex", "alignIte
 const S354: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "30px", "lineHeight": "1", "color": "#f2ece0" };
 const S355: React.CSSProperties = { "fontSize": "16px", "lineHeight": "1.4", "color": "#ece6da", "textWrap": "pretty" };
 const S356: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "10px" };
-const S357: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "8px", "marginTop": "2px" };
-const S358: React.CSSProperties = { "height": "44px", "padding": "0 14px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.22)", "background": "transparent", "color": "#ece6da", "fontFamily": "inherit", "fontSize": "13px", "fontWeight": "600", "cursor": "pointer" };
-const S359: React.CSSProperties = { "height": "44px", "padding": "0 18px", "borderRadius": "10px", "border": "1px solid #c0392e", "background": "rgba(192,57,46,.18)", "color": "#ffb4a6", "fontFamily": "inherit", "fontSize": "13px", "fontWeight": "700", "cursor": "pointer" };
 const S360: React.CSSProperties = { "width": "16px", "height": "16px", "fill": "none", "stroke": "currentColor", "strokeWidth": "1.7", "strokeLinecap": "round" };
-const S361: React.CSSProperties = { "position": "relative", "alignSelf": "stretch", "height": "94px", "overflow": "hidden", "WebkitMaskImage": "linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent)", "maskImage": "linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent)" };
+const S361: React.CSSProperties = { "position": "relative", "flex": "1 1 0", "minWidth": "0", "height": "94px", "overflow": "hidden", "WebkitMaskImage": "linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent)", "maskImage": "linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent)" };
+// PO 2026-11-25 (night card layout): Begin Day sits in the card header, Previous / Next are the round buttons at the strip's ends, and the card body holds only the character's own controls.
+const NIGHT_HEADER_ACTIONS: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "12px" };
+const NIGHT_STRIP_ROW: React.CSSProperties = { "display": "flex", "alignItems": "flex-start", "alignSelf": "stretch", "gap": "0" };
+const NIGHT_CHEVRON: React.CSSProperties = { "flex": "none", "width": "44px", "height": "44px", "marginTop": "16px", "padding": "0", "borderRadius": "50%", "border": "1px solid rgba(176,186,204,.3)", "background": "rgba(9,10,15,.6)", "color": "#ece6da", "display": "flex", "alignItems": "center", "justifyContent": "center", "cursor": "pointer" };
+const NIGHT_CHEVRON_NEXT: React.CSSProperties = { ...NIGHT_CHEVRON, "border": "1px solid #c0392e", "background": "rgba(192,57,46,.18)", "color": "#ffb4a6" };
+const NIGHT_CHEVRON_ICON: React.CSSProperties = { "width": "18px", "height": "18px", "fill": "none", "stroke": "currentColor", "strokeWidth": "2", "strokeLinecap": "round", "strokeLinejoin": "round" };
 const S362: React.CSSProperties = { "position": "absolute", "left": "0", "right": "0", "top": "38px", "height": "1px", "background": "linear-gradient(90deg, transparent, rgba(176,186,204,.3), transparent)" };
 const S363: React.CSSProperties = { "position": "absolute", "left": "50%", "top": "50%", "width": "26px", "height": "26px", "margin": "-13px 0 0 -13px", "fill": "none", "stroke": "#e6ecf8", "strokeWidth": "1.6", "strokeLinecap": "round", "strokeLinejoin": "round" };
 const S364: React.CSSProperties = { "position": "absolute", "right": "-2px", "top": "-2px", "width": "22px", "height": "22px", "borderRadius": "50%", "background": "#14151d", "border": "1px solid rgba(143,207,149,.7)", "color": "#8fcf95", "display": "flex", "alignItems": "center", "justifyContent": "center" };
@@ -2740,11 +2743,19 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                       {T(vm.strip?.pos)}
                     </span>
                   </div>
-                  <button onClick={vm.closePanel} title="Close night order" className={["", "gv-hr"].filter(Boolean).join(' ')} style={S238}>
-                    <svg viewBox="0 0 24 24" style={S46}>
-                      <path d="M18 6 6 18M6 6l12 12" />
-                    </svg>
-                  </button>
+                  <div style={NIGHT_HEADER_ACTIONS}>
+                    <button type="button" onClick={vm.beginDay} className="gv-choice-pill is-small" style={css(`border-color:${vm.strip?.dayBorder ?? ''}; background:${vm.strip?.dayBg ?? ''}; color:#f2c46a; font-weight:700; display:flex; align-items:center; gap:7px;`)}>
+                      <svg viewBox="0 0 24 24" style={S360}>
+                        <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+                      </svg>
+                      {T(vm.night?.dayButton)}
+                    </button>
+                    <button onClick={vm.closePanel} title="Close night order" className={["", "gv-hr"].filter(Boolean).join(' ')} style={S238}>
+                      <svg viewBox="0 0 24 24" style={S46}>
+                        <path d="M18 6 6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
                 {vm.night?.cur?.isRole && (
                   <>
@@ -2901,21 +2912,13 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                   </div>
                   </>
                 )}
-                <div style={S357}>
-                  <button onClick={vm.prevStep} className={["", "gv-hx"].filter(Boolean).join(' ')} style={S358}>
-                    Previous
-                  </button>
-                  <button onClick={vm.nextStep} className={["", "gv-hz"].filter(Boolean).join(' ')} style={S359}>
-                    Next
-                  </button>
-                  <button onClick={vm.beginDay} style={css(`margin-left:auto; height:44px; padding:0 14px; border-radius:10px; border:1px solid ${vm.strip?.dayBorder ?? ''}; background:${vm.strip?.dayBg ?? ''}; color:#f2c46a; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:8px; white-space:nowrap;`)}>
-                    <svg viewBox="0 0 24 24" style={S360}>
-                      <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
-                    </svg>
-                    {T(vm.night?.dayButton)}
-                  </button>
-                </div>
               </div>
+              <div style={NIGHT_STRIP_ROW}>
+                <button type="button" onClick={vm.prevStep} aria-label="Previous" title="Previous" className="gv-hx" style={NIGHT_CHEVRON}>
+                  <svg viewBox="0 0 24 24" style={NIGHT_CHEVRON_ICON}>
+                    <path d="M15 6l-6 6 6 6" />
+                  </svg>
+                </button>
               <div style={S361}>
                 <div aria-hidden="true" style={S362} />
                 <div style={css(`position:absolute; left:50%; top:10px; display:flex; gap:12px; align-items:center; height:56px; transform:translateX(${vm.strip?.x ?? ''}px); transition:transform .7s cubic-bezier(.2,.8,.2,1);`)}>
@@ -2950,6 +2953,12 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                     </Fragment>
                   ))}
                 </div>
+              </div>
+                <button type="button" onClick={vm.nextStep} aria-label="Next" title="Next" className="gv-hz" style={NIGHT_CHEVRON_NEXT}>
+                  <svg viewBox="0 0 24 24" style={NIGHT_CHEVRON_ICON}>
+                    <path d="M9 6l6 6-6 6" />
+                  </svg>
+                </button>
               </div>
             </div>
             </>
