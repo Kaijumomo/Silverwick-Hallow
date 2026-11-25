@@ -8,6 +8,7 @@ import { currentVotingState } from "@/stores/voting";
 import { ownsAbilityUseReminder } from "@/stores/abilityUseReminders";
 import { butlerReminderOrigin } from "@/stores/butlerSelection";
 import { isDeathEvent } from "@/stores/lifeEvents";
+import { isTrulyAlive } from "@/stores/lifeState";
 import { teaLadyCovers } from "@/abilities/characters/passiveRules";
 import { haircutsTonight } from "@/abilities/characters/barber";
 import { demonVotedOn, flowergirlDay } from "@/abilities/characters/flowergirl";
@@ -88,6 +89,23 @@ function undertakerDiedToday({ game, query }: MarkEnv, player: STPlayerRecord): 
   if (day < 1) return false;
   const executions = query.lifeEvents({ phase: "day", day }, (event) => event.kind === "execution" && event.outcome === "died" && event.subject.participantId === player.participantId);
   return executions.status === "known" && executions.events.length > 0;
+}
+
+/**
+ * BM-2c: the Zombuul's official DIED TODAY token (https://wiki.bloodontheclocktower.com/Zombuul: "Each day, mark every player who
+ * dies with DIED TODAY", the Zombuul's own apparent death included). On every player with a death during the Day the token follows
+ * (this Day, or the Day just ended until dawn), while a real Zombuul (actual character) is in play and truly alive (a Zombuul who
+ * registers as dead still counts; a drunk or poisoned one too, since its wake is still decided by these deaths). The same record the
+ * wake reads (`isDeathEvent`: an execution of a player already dead, a survived execution and night deaths do not count). Drawn from
+ * the Life Event Window, never stored; it stacks with the Godfather's and the Undertaker's DIED TODAY (PO decision 2026-11-25 Q5).
+ */
+function zombuulDiedToday({ game, query }: MarkEnv, player: STPlayerRecord): boolean {
+  if (!query) return false;
+  if (!Object.values(game.players).some((other) => !other.isEmpty && other.actualRole === "zombuul" && isTrulyAlive(other))) return false;
+  const day = diedTodayDay(query);
+  if (day < 1) return false;
+  const deaths = query.lifeEvents({ phase: "day", day }, (event) => isDeathEvent(event) && event.subject.participantId === player.participantId);
+  return deaths.status === "known" && deaths.events.length > 0;
 }
 
 /**
@@ -194,6 +212,12 @@ export function playerMarks(env: MarkEnv, player: STPlayerRecord): Mark[] {
     const source = officialNotationRole("undertaker", "Died Today") ?? registry.get("undertaker");
     marks.push({ key: "derived:undertaker-died-today", kind: "effect", label: "Died Today", title: "Undertaker: Died Today", src: source ? iconUrlFor(source) : "", size: ROLE_SIZE,
       removal: { type: "derived", reason: "This follows the Day's execution. It ends at dawn." } });
+  }
+  // BM-2c: the Zombuul's official DIED TODAY token on every player who died during the Day, derived like the Undertaker's.
+  if (zombuulDiedToday(env, player)) {
+    const source = officialNotationRole("zombuul", "Died Today") ?? registry.get("zombuul");
+    marks.push({ key: "derived:zombuul-died-today", kind: "effect", label: "Died Today", title: "Zombuul: Died Today", src: source ? iconUrlFor(source) : "", size: ROLE_SIZE,
+      removal: { type: "derived", reason: "This follows the Day's deaths. It ends at dawn." } });
   }
   // The Tea Lady's official CANNOT DIE token, derived like the Godfather's and the Undertaker's DIED TODAY.
   for (const teaLady of teaLadyGuards(env, player)) {
