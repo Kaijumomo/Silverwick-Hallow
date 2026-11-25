@@ -196,7 +196,7 @@ export const PARTIAL_SUPPORT: Readonly<Record<RoleId, readonly Piece[]>> = {
     { path: "src/stores/endGameEligibility.ts", what: "Game-end advisory: Demon dead but Mastermind alive, check before ending." },
   ],
   pacifist: [
-    { path: "src/abilities/characters/passiveRules.ts", what: "Life-rules Storyteller-choice row (LS-2d): while a Pacifist is alive, the execution prompt on the nomination and voting screens reminds the Storyteller that the Pacifist may apply; the Storyteller decides, the gate never does." },
+    { path: "src/abilities/characters/passiveRules.ts", what: "Life-rules Storyteller-choice row (LS-2d): BM-1a: the execution prompt on the nomination, voting and seat-menu screens asks only when a Pacifist could matter (alive, certainly working, executed player certainly good or unknown); the Storyteller decides, the gate never does. A drunk or poisoned Pacifist, or an evil executed player, never sees the question." },
   ],
   plaguedoctor: [
     { path: "src/rules/night/nightOrder.ts", what: "Death-check wake slot: the night list shows this character after a death night with a 'check the death condition' advisory; historical triggers are not tracked." },
@@ -297,6 +297,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   mayor: ["src/stores/b8Independent.test.ts", "src/stores/victoryEvidence.test.ts"],
   monk: ["src/stores/abilityResolution.test.ts", "src/features/grimoire-v6/night/nightGuide.port.test.tsx"],
   moonchild: ["src/abilities/characters/godfatherMoonchild.test.ts", "src/features/grimoire-v6/night/nightGuide.port.test.tsx"],
+  pacifist: ["src/abilities/characters/bm1Pacifist.test.ts", "src/abilities/characters/lifeRulesTable.test.ts"],
   mutant: ["src/abilities/characters/informationCharacterReview.test.ts", "src/features/grimoire-v6/day/madnessExecution.test.tsx", "src/stores/sectsAndVioletsWholeGames.test.ts"],
   nodashii: ["src/abilities/characters/nodashii.test.ts", "src/rules/night/canonicalNightOrder.test.ts", "src/stores/sectsAndVioletsWholeGames.test.ts", "src/abilities/characters/sectsAndVioletsSv6GapPairs.test.ts"],
   oracle: ["src/abilities/characters/townCrierOraclePro.test.ts", "src/rules/night/canonicalNightOrder.test.ts", "src/stores/sectsAndVioletsWholeGames.test.ts", "src/abilities/characters/sectsAndVioletsSv6GapPairs.test.ts"],

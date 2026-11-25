@@ -1,6 +1,6 @@
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 import { madnessAllowsExecution } from "@/abilities/characters/cerenovus";
-import { executionAdvice, executionChoiceNames, executionDeathKnown, executionSpendsAbility } from "@/stores/executionAdvice";
+import { executionAdvice, executionChoiceFor, executionDeathKnown, executionSpendsAbility, executionSurvivalKnown } from "@/stores/executionAdvice";
 import { executionsAt } from "@/stores/lifeEvents";
 import { createRulesQuery } from "@/stores/rulesQuery";
 import { captureVotingContext, useStorytellerStore } from "@/stores/storytellerStore";
@@ -111,11 +111,13 @@ export async function runExecute(ctx: V6Ctx, player: STPlayerRecord): Promise<vo
     // The same question as the Day, because the death gate (the Fool, a sober Sailor, unknown protection) concerns an execution too; the answer
     // only decides whether an ordinary death is recorded (the Life Event model records no execution at night, so today's execution stays free).
     const advice = executionAdvice(game, current.id, environment);
-    const choices = executionChoiceNames(game.players);
+    const survivalKnown = executionSurvivalKnown(game, current.id, environment);
+    const choices = survivalKnown ? [] : executionChoiceFor(game, current.id, environment);
     let died = true;
-    if (advice || choices.length || !executionDeathKnown(game, current.id, environment)) {
+    if (survivalKnown) died = false;
+    else if (advice || choices.length || !executionDeathKnown(game, current.id, environment)) {
       const body = [notWorking ? `${MUTANT_NOT_WORKING} ${notWorkingBody}` : null, ...choices.map((who) => `${who} may apply: you decide whether an executed good player survives.`), advice?.note ?? null].filter(Boolean).join(" ");
-      const answer = await chooseAsk(`Did ${name} die?`, body, "Yes · died", "No · survived");
+      const answer = choices.length ? await chooseAsk(`Does ${name} die?`, body, "Dies", "Survives") : await chooseAsk(`Did ${name} die?`, body, "Yes · died", "No · survived");
       if (!answer) return;
       died = answer === "first";
     } else if (!(await confirmNotWorking())) return;
@@ -139,11 +141,15 @@ export async function runExecute(ctx: V6Ctx, player: STPlayerRecord): Promise<vo
   let outcome: ExecutionOutcome = "alreadyDead";
   if (current.alive) {
     const advice = executionAdvice(game, current.id, environment);
-    const choices = executionChoiceNames(game.players);
-    // The Storyteller is asked unless the rules positively establish that the execution kills (unknown or generic protection is theirs to judge).
-    if (advice || choices.length || !executionDeathKnown(game, current.id, environment)) {
+    const survivalKnown = executionSurvivalKnown(game, current.id, environment);
+    const choices = survivalKnown ? [] : executionChoiceFor(game, current.id, environment);
+    // The Storyteller is asked unless the rules positively establish that the execution kills or (BM-1) certainly does not kill
+    // (unknown or generic protection is theirs to judge).
+    if (survivalKnown) {
+      outcome = "survived";
+    } else if (advice || choices.length || !executionDeathKnown(game, current.id, environment)) {
       const body = [notWorking ? `${MUTANT_NOT_WORKING} ${notWorkingBody}` : null, ...choices.map((who) => `${who} may apply: you decide whether an executed good player survives.`), advice?.note ?? null].filter(Boolean).join(" ");
-      const answer = await chooseAsk(`Did ${name} die?`, body, "Yes · died", "No · survived");
+      const answer = choices.length ? await chooseAsk(`Does ${name} die?`, body, "Dies", "Survives") : await chooseAsk(`Did ${name} die?`, body, "Yes · died", "No · survived");
       if (!answer) return;
       outcome = answer === "first" ? "died" : "survived";
     } else {

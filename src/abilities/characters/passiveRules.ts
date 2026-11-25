@@ -370,4 +370,6 @@ export const REVIEWED_INTERACTION_ROLES: ReadonlySet<string> = new Set([
   // Information-only characters (Sects & Violets / Bad Moon Rising): each only reads game state and changes none, so it has no
   // passive effect on another character's ability. Their own answers stay with the Storyteller (REVIEWED_MANUAL, classification.ts).
   "clockmaker", "dreamer", "mathematician", "flowergirl", "savant", "seamstress", "artist", "juggler", "mutant", "chambermaid",
+  // BM-1a: the Pacifist has no night step; its Storyteller-choice row only decides whether the execution prompt asks (executionChoiceFor).
+  "pacifist",
 ]);

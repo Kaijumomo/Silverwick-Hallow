@@ -505,4 +505,11 @@ describe("the Pacifist note in the execution prompt", () => {
     act(() => { setRole("Ada", { alive: false }); setRole("Cleo", { alive: false }); });
     expect(asked(m)).toBeNull();
   });
+
+  // BM-1a: a Pacifist that certainly does not work cannot matter, so the prompt is the ordinary question without its note.
+  it("is not shown for a lone drunk or poisoned Pacifist", () => {
+    setRole("Ada", { actualRole: "pacifist", effects: [{ id: "fx", type: "poisoned", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "day", day: 2 } }] });
+    const m = prompt();
+    expect(asked(m)).toBeNull();
+  });
 });

@@ -1,4 +1,4 @@
-import { executionAdvice, executionChoiceNames } from "@/stores/executionAdvice";
+import { executionAdvice, executionChoiceFor } from "@/stores/executionAdvice";
 import { captureVotingContext } from "@/stores/storytellerStore";
 import { executionsAt } from "@/stores/lifeEvents";
 import { currentVotingState, virginNominationOutcome, votingContextChanged } from "@/stores/voting";
@@ -181,12 +181,15 @@ function buildFinish(ctx: V6Ctx, finish: FinishFn, extra: (actions?: ExtraAction
     flash(outcome === "survived" ? `${player.name} survives the execution. Begin the night when ready.` : `${player.name} is executed. Begin the night when ready.`);
   };
   if (player) {
-    const choices = executionChoiceNames(game.players);
+    const env = ctx.script ? { script: ctx.script, registry: ctx.registry } : undefined;
+    const choices = executionChoiceFor(game, player.id, env);
     // The question and its answers sit together like every other prompt: the heading above, the answers on one row.
     if (!player.alive) return extra([{ label: "Record execution", onClick: record("alreadyDead") }, { label: "No execution", onClick: begin }], null, `${player.name} is already dead`);
-    return extra([{ label: "Yes · died", onClick: record("died") }, { label: "No · survived", onClick: record("survived") }, { label: "No execution", onClick: begin }],
+    // BM-1: when a Pacifist could matter the question is the Pacifist's own, with its own two answers.
+    const pacifist = choices.length > 0;
+    return extra([{ label: pacifist ? "Dies" : "Yes · died", onClick: record("died") }, { label: pacifist ? "Survives" : "No · survived", onClick: record("survived") }, { label: "No execution", onClick: begin }],
       [...choices.map((name) => `${name} may apply: you decide whether an executed good player survives.`),
-        executionAdvice(game, player.id, ctx.script ? { script: ctx.script, registry: ctx.registry } : undefined)?.note ?? null].filter(Boolean).join(" ") || null, `Did ${player.name} die?`);
+        executionAdvice(game, player.id, env)?.note ?? null].filter(Boolean).join(" ") || null, pacifist ? `Does ${player.name} die?` : `Did ${player.name} die?`);
   }
   return finish("No execution", query.status === "unknown" ? "Earlier execution coverage is unknown. Confirm the actual outcome." : "No one will be executed today.", "#ddd6c8", `No execution · Begin Night ${game.day + 1}`, begin);
 }

@@ -55,7 +55,8 @@ describe("coverage level and evidence (Stage 5A-1)", () => {
     // SV-5k moved the Vortox from reviewed to guided (a wake: the Demon kill; false Townsfolk information and the no-execution line are rules).
     // SV-5f moved the Juggler from reviewed to guided (the night count read from the Day's recorded guesses; the CORRECT tokens drawn from them).
     // SV-5g moved the Mathematician from reviewed to guided (a wake every night: the count of ABNORMAL marks, cleared at its commit).
-    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 41, reviewed: 21, partial: 59, generic: 60 });
+    // BM-1a moved the Pacifist from partial to reviewed (no night step; its prompt narrowed to when it could matter).
+    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 41, reviewed: 22, partial: 58, generic: 60 });
   });
 
   it("level follows the facts the gates read", () => {

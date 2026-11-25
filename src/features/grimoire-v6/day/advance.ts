@@ -1,5 +1,5 @@
 import { captureVotingContext, useStorytellerStore } from "@/stores/storytellerStore";
-import { executionAdvice, executionChoiceNames, executionDeathKnown } from "@/stores/executionAdvice";
+import { executionAdvice, executionChoiceFor, executionDeathKnown, executionSurvivalKnown } from "@/stores/executionAdvice";
 import { executionsAt } from "@/stores/lifeEvents";
 import { currentVotingState } from "@/stores/voting";
 import type { StorytellerLobbyRecord } from "@/stores/types";
@@ -51,9 +51,11 @@ export function executeBlockIfKnown(ctx: V6Ctx): boolean {
   const player = game.players[block.nominee.playerId];
   if (!player || player.isEmpty || !player.alive || !player.participantId || player.participantId !== block.nominee.participantId) return false;
   const env = { script: ctx.script, registry: ctx.registry };
-  if (executionAdvice(game, player.id, env) || executionChoiceNames(game.players).length || !executionDeathKnown(game, player.id, env)) return false;
-  if (!voting.run({ kind: "execution", target: { playerId: player.id, participantId: player.participantId }, outcome: "died" }, captureVotingContext())) return false;
+  // BM-1 (PO Q1 A): a certain survival (a sober Sailor, a Tea Lady's neighbour) is recorded as "survived" the same way.
+  const survives = executionSurvivalKnown(game, player.id, env);
+  if (!survives && (executionAdvice(game, player.id, env) || executionChoiceFor(game, player.id, env).length || !executionDeathKnown(game, player.id, env))) return false;
+  if (!voting.run({ kind: "execution", target: { playerId: player.id, participantId: player.participantId }, outcome: survives ? "survived" : "died" }, captureVotingContext())) return false;
   voting.close();
-  flash(`${player.name} is executed. Begin the night when ready.`);
+  flash(survives ? `${player.name} is executed but survives. Begin the night when ready.` : `${player.name} is executed. Begin the night when ready.`);
   return true;
 }

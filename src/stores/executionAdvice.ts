@@ -1,7 +1,7 @@
 import { interactionCoverageEligibility } from "@/abilities/automationEligibility";
 import { lifeRuleCreditedRoles, lifeRuleOf } from "@/abilities/characters/passiveRules";
 import { canonicalRoles, isCanonicalRole } from "@/data/canonical";
-import { createRulesQuery, type RulesQueryEnvironment } from "./rulesQuery";
+import { bindingOf, createRulesQuery, type RulesQueryEnvironment } from "./rulesQuery";
 import type { PlayerId, STPlayerRecord, StorytellerLobbyRecord } from "./types";
 
 /**
@@ -72,6 +72,46 @@ export function executionChoiceNames(players: Readonly<Record<string, STPlayerRe
     if (role && isCanonicalRole(role)) names.add(role.name);
   }
   return [...names];
+}
+
+/**
+ * BM-1a: the Storyteller-choice characters that matter for THIS execution (the Pacifist). A choice row matters only while its holder
+ * is alive, its ability certainly works (a drunk, poisoned or changed holder saves nobody) and the executed player certainly is the
+ * kind it covers (a good player, as they register). Anything unknown still counts: the Storyteller is asked. With no environment the
+ * rules cannot be read, so every living holder counts as before. Never decides; only says whether to ask.
+ */
+export function executionChoiceFor(game: StorytellerLobbyRecord, playerId: PlayerId, environment?: RulesQueryEnvironment): string[] {
+  const names = executionChoiceNames(game.players);
+  const target = game.players[playerId];
+  if (!names.length || !environment || !target || target.isEmpty || !target.participantId) return names;
+  const query = createRulesQuery(game, environment);
+  const covered = new Set<string>();
+  for (const holder of Object.values(game.players)) {
+    if (holder.isEmpty || !holder.alive || !holder.participantId || !holder.actualRole) continue;
+    const rule = lifeRuleOf(holder.actualRole);
+    if (!rule || rule.decision !== "choice" || rule.holder !== "anyGood" || rule.causes !== "execution") continue;
+    const works = query.abilityFunctions(bindingOf(holder));
+    if (works.known && !works.value) continue;
+    const alignment = query.registration(bindingOf(target)).alignment;
+    if (alignment.known && alignment.value !== "good") continue;
+    const role = canonicalRoles([holder.actualRole])[0];
+    if (role && isCanonicalRole(role)) covered.add(role.name);
+  }
+  return [...covered];
+}
+
+/**
+ * BM-1 (PO Q1 A, 2026-11-24): the rules are CERTAIN this execution does not kill and nothing is spent: a sober Sailor, a Tea Lady's
+ * neighbour, a Devil's Advocate's chosen player. Execute then records "survived" by itself, as it records "died" when certain. A
+ * survival that uses up an ability (the Fool), an ambiguous one and anything unknown still ask. A Pacifist is irrelevant here: the
+ * survival is already certain, so nobody is asked and nothing shows which ability did it.
+ */
+export function executionSurvivalKnown(game: StorytellerLobbyRecord, playerId: PlayerId, environment?: RulesQueryEnvironment): boolean {
+  const advice = executionAdvice(game, playerId, environment);
+  if (!environment || advice?.kind !== "survives" || advice.spends) return false;
+  const player = game.players[playerId];
+  // A Fabled or Loric rule that touches death (the Ventriloquist) is the Storyteller's to apply: never a certain survival.
+  return !!player && createRulesQuery(game, environment).modifierGate(player.actualRole, ["death"]).kind === "clear";
 }
 
 /** Whether recording `survived` for this execution also records the player's own ability use (the Fool). Pure; used by the voting plan. */
