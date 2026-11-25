@@ -65,9 +65,9 @@ export function lifeStatusOf(player: LifeFields): LifeStatus {
  * vote. A dead participant whose death was an exile is published as Exiled
  * whatever their current Role (Phase 10D, ASTRA-10D-C01).
  *
- * Future public-registration mechanics (e.g. a Zombuul that registers as
- * dead while alive) belong to the future ability engine and would be applied
- * HERE, once, rather than in every consumer. Phase 10A implements none. */
+ * BM-2: the Zombuul's "register as dead" needs nothing here: its stored life
+ * IS the registered (dead) life, and its hidden truth is a Storyteller-only
+ * Effect this function never reads (HIDDEN_LIFE below). */
 export function publicLifeOf(player: LifeFields): Pick<PlayerPublicRecord, "alive" | "ghostVote" | "exiled"> {
   const { state } = lifeStatusOf(player);
   switch (state) {
@@ -78,6 +78,23 @@ export function publicLifeOf(player: LifeFields): Pick<PlayerPublicRecord, "aliv
     case "exiledVoteUsed": return { alive: false, ghostVote: false, exiled: true };
   }
 }
+
+/**
+ * BM-2 (Zombuul, model B1 approved 2026-11-12): "The 1st time you die, you live but register as dead." The stored Life fields above
+ * stay THE TABLE'S life (what votes, counts, phones and the Public Display read); the truth for a player who registers as dead while
+ * still alive is one Storyteller-only Effect of this type on the PLAYER (not the character: it survives a character change, PO ruling
+ * 2026-11-12 17:51Z). It is never projected (Effects never are) and `publicLifeOf` never reads it. Only the reviewed truth readers ask
+ * `isTrulyAlive`: the ending, the night wake, kill targets, succession and the Storyteller's own seat look.
+ * https://wiki.bloodontheclocktower.com/Zombuul
+ */
+export const HIDDEN_LIFE = "livesOn";
+
+/** Whether this player registers as dead but is secretly alive (an active hidden-life Effect while the stored life is dead). */
+export const hasHiddenLife = (player: Pick<STPlayerRecord, "alive" | "effects">): boolean =>
+  !player.alive && (player.effects ?? []).some((effect) => effect.type === HIDDEN_LIFE && effect.state === "active");
+
+/** The TRUE life: alive at the table, or registered dead with a hidden life. Storyteller-side rules only, never a projection. */
+export const isTrulyAlive = (player: Pick<STPlayerRecord, "alive" | "effects">): boolean => player.alive || hasHiddenLife(player);
 
 /**
  * Phase 10F (v24, Section 10): whether public/player-town projection withholds

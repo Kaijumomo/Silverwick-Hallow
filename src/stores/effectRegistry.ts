@@ -96,6 +96,8 @@ const DEFINITIONS: Record<string, EffectDefinition> = {
     description: "The Juggler finished guessing that Day. It draws no token." },
   abnormal: { type: "abnormal", label: "Abnormal", indicator: "marked",
     description: "The Mathematician's ABNORMAL mark: this player's ability worked abnormally since dawn due to another character. Counted at the Mathematician's wake, cleared there, gone at dawn." },
+  livesOn: { type: "livesOn", label: "Lives on", indicator: "abilityState",
+    description: "Storyteller-only: the Zombuul registers as dead but lives on after its first death. Recorded and ended only by the life controls; never shown to players." },
   marked: { type: "marked", label: "Marked", indicator: "marked" },
   registersFalsely: { type: "registersFalsely", label: "Registers falsely", indicator: "registration" },
   fortuneTellerRedHerring: { type: "fortuneTellerRedHerring", label: "Red Herring", indicator: "redHerring",
@@ -106,8 +108,9 @@ const DEFINITIONS: Record<string, EffectDefinition> = {
 const INDICATOR_ORDER = Object.keys(INDICATORS);
 
 /** Types recorded only through their own path, never offered by the advanced "Add effect" workflow: the Mathematician's ABNORMAL mark
- * is one per player and gone at dawn (PO Q18 A), which its own placement keeps and a manual Effect would not. */
-const OWN_PATH_ONLY: ReadonlySet<string> = new Set(["abnormal"]);
+ * is one per player and gone at dawn (PO Q18 A), which its own placement keeps and a manual Effect would not; the Zombuul's hidden
+ * life (BM-2) is Life state, changed only by the life controls. */
+const OWN_PATH_ONLY: ReadonlySet<string> = new Set(["abnormal", "livesOn"]);
 
 /** Known types offered by the advanced "Add effect" workflow (any other
  * type can still be typed in as a custom Effect). */

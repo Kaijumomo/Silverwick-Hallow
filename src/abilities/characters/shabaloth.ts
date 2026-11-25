@@ -1,4 +1,5 @@
 import type { AbilityDescriptor } from "../semantics";
+import { isTrulyAlive } from "@/stores/lifeState";
 import type { AbilityOperation, ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
 import { ask, deathAttempt, lifeOperation, nothing, outcome, participantsOf, requireLivingActor } from "./shared";
@@ -84,7 +85,8 @@ export const SHABALOTH: AbilityDescriptor = {
     const spends: { kind: "useAbility"; target: NonNullable<typeof first> }[] = [];
     let query = context.query;
     for (const [index, target] of [first!, second!].entries()) {
-      if (!query.participant(target)?.alive) continue;
+      const chosen = query.participant(target);
+      if (!chosen || !isTrulyAlive(chosen)) continue;
       const scope = { id: `shabaloth:${index + 1}:${JSON.stringify([first!.participantId, second!.participantId])}`, label: `attack ${index + 1}` };
       const death = deathAttempt(context, target, "demon", query, scope);
       if (death.kind === "ask") return ask(death.message, death.requirement);

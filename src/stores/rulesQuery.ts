@@ -1,5 +1,5 @@
 import { isCanonicalRole } from "@/data/canonical";
-import { causeBypassesEffectProtection, drunksGainedCharacter, isNeighbourPoisoner, lifeRuleReadsSeating, observerRegistrationDecision, passiveProtection, passiveInformationModifiers, passiveRegistrationOptions, survivesFirstDeath, type LifeRuleCause } from "@/abilities/characters/passiveRules";
+import { causeBypassesEffectProtection, drunksGainedCharacter, isNeighbourPoisoner, lifeRuleReadsSeating, livesOnAfterDeath, observerRegistrationDecision, passiveProtection, passiveInformationModifiers, passiveRegistrationOptions, survivesFirstDeath, type LifeRuleCause } from "@/abilities/characters/passiveRules";
 import { isInnkeeperSelfEffect, isPoisonerSelfEffect, isSailorSelfEffect } from "@/abilities/characters/poisonerRules";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { activeModifiers, gateEvaluation, type HookScope, type ModifierDefinition, type ModifierGate } from "@/abilities/modifiers";
@@ -7,6 +7,7 @@ import { resolveAbilitySemantics, type AbilitySemanticsRegistry } from "@/abilit
 import { currentLiveMoment, lifeEventsAt, type LifeEventQueryResult } from "./lifeEvents";
 import { gameRuleFactActive, gameRuleFactDefinition } from "./gameRuleFacts";
 import { gainedRoleOf } from "./gainedAbility";
+import { HIDDEN_LIFE, isTrulyAlive } from "./lifeState";
 import type { ParticipantBinding } from "./abilityResolution";
 import type { Alignment, EffectRecord, LifeEvent, LiveGameMoment, RoleDef, RoleId, RoleType, STPlayerRecord, Script, StorytellerLobbyRecord } from "./types";
 
@@ -61,7 +62,8 @@ const unknown = <T,>(reason: string): QueryAnswer<T> => ({ known: false, reason 
  *  - madness (SV-4a): the bearer is "mad" about being a character; it applies
  *    while its source (the Cerenovus) functions and decides nothing by itself.
  */
-export type DeathOutcomeAnswer = { kind: "dies" } | { kind: "survives"; spends: boolean };
+/** BM-2: `dies` with `livesOn` -- the table sees the death but the player secretly lives on (the Zombuul's first death). */
+export type DeathOutcomeAnswer = { kind: "dies"; livesOn?: true } | { kind: "survives"; spends: boolean };
 export type EffectSemantics = "impairment" | "noAbility" | "demonProtection" | "deathImmunity" | "executionProtection" | "genericProtection" | "judgment" | "storytellerFact" | "curse" | "retainedAbility" | "gainedAbility" | "madness";
 export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>> = {
   drunk: "impairment",
@@ -116,6 +118,10 @@ export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>
    * Storyteller fact: it blocks choosing the same player two nights running and says whether the Demon was told (stores/abilityResolution
    * reads it through exorcisedDemonReason). It moves when the Exorcist chooses again. */
   exorcistChosen: "storytellerFact",
+  /** BM-2: the Zombuul's hidden life ("you live but register as dead"): the player's stored life is the table's (dead) and this
+   * source-free fact on the PLAYER says they are truly alive. Read through `isTrulyAlive` (stores/lifeState.ts) by the reviewed truth
+   * readers only; it draws no token and is never projected. Written and removed only by the Life planner. */
+  [HIDDEN_LIFE]: "storytellerFact",
 };
 export const effectSemanticsOf = (type: string): EffectSemantics | undefined =>
   Object.prototype.hasOwnProperty.call(APPROVED_EFFECT_SEMANTICS, type) ? APPROVED_EFFECT_SEMANTICS[type] : undefined;
@@ -162,6 +168,9 @@ export type RulesQuery = {
    * (empty seat, another occupant -- stale). */
   participant: (binding: ParticipantBinding) => STPlayerRecord | null;
   isAlive: (binding: ParticipantBinding) => QueryAnswer<boolean>;
+  /** BM-2: the TRUE life -- alive at the table, or registered dead with the Zombuul's hidden life. For the reviewed truth readers
+   * (wake, kill targets, succession, ending); everything the table counts keeps reading `isAlive`. */
+  trulyAlive: (binding: ParticipantBinding) => QueryAnswer<boolean>;
   /** Whether a stored Effect currently applies MECHANICALLY (derived). */
   effectApplies: (holder: ParticipantBinding, effect: EffectRecord) => QueryAnswer<boolean>;
   /** Whether a (dead) Minion still has its ability because a living, functioning Vigormortis killed it (derived, never stored). */
@@ -183,7 +192,8 @@ export type RulesQuery = {
   protectedFrom: (binding: ParticipantBinding, cause: LifeRuleCause) => QueryAnswer<boolean>;
   /** LS-1: what a death attempt of `cause` does to this player, INCLUDING a character that survives its first death at a cost
    * (the Fool). Other protection is checked first and spends nothing. `spends` says the survival uses up the player's own
-   * ability; the caller records that use. Unknown stays a Storyteller judgment, exactly as for `protectedFrom`. */
+   * ability; the caller records that use. Unknown stays a Storyteller judgment, exactly as for `protectedFrom`. BM-2: `dies` with
+   * `livesOn` is the Zombuul's first death (the table sees a death; the Life planner keeps the player's hidden life). */
   deathOutcome: (binding: ParticipantBinding, cause: LifeRuleCause) => QueryAnswer<DeathOutcomeAnswer>;
   /** SOL-10F-C2: a deterministic, EXACT (never hashed) stamp of every piece of
    * authoritative Current State this query can consult when answering
@@ -304,7 +314,7 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     // departed / unseated source stays unknown, above.)
     const next = new Set(visiting).add(key);
     // SV-1b: an ability that works while its holder is dead (the Sweetheart) does not end at death; impairment still pauses it below.
-    if (!sourcePlayer.alive && declared === "whileSourceFunctions") {
+    if (!isTrulyAlive(sourcePlayer) && declared === "whileSourceFunctions") {
       // A dead Minion the Vigormortis killed keeps its ability, so what it sourced still applies.
       const kept = retained(sourcePlayer, next);
       if (!kept.known || !kept.value) return kept.known ? known(false) : kept;
@@ -360,7 +370,7 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
   const noDashiiPoison = (holder: STPlayerRecord, visiting: Set<string>): QueryAnswer<boolean> => {
     let undetermined: string | null = null;
     for (const source of seated()) {
-      if (!isNeighbourPoisoner(source.actualRole) || !source.alive || source.id === holder.id) continue;
+      if (!isNeighbourPoisoner(source.actualRole) || !isTrulyAlive(source) || source.id === holder.id) continue;
       const role = environment.registry.get(source.actualRole);
       if (!role || !isCanonicalRole(role)) continue;
       const key = `nodashii:${source.participantId}:${holder.participantId}`;
@@ -384,7 +394,7 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     if (!holder.actualRole) return known(false);
     let undetermined: string | null = null;
     for (const source of seated()) {
-      if (source.id === holder.id || !source.alive || !drunksGainedCharacter(source.actualRole) || gainedRoleOf(source) !== holder.actualRole) continue;
+      if (source.id === holder.id || !isTrulyAlive(source) || !drunksGainedCharacter(source.actualRole) || gainedRoleOf(source) !== holder.actualRole) continue;
       const role = environment.registry.get(source.actualRole);
       if (!role || !isCanonicalRole(role)) continue;
       const key = `gained:${source.participantId}:${holder.participantId}`;
@@ -560,6 +570,7 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     moment: () => currentLiveMoment(game),
     participant,
     isAlive: (binding) => require(binding, (player) => known(player.alive)),
+    trulyAlive: (binding) => require(binding, (player) => known(isTrulyAlive(player))),
     nearestTownsfolk: (binding) => require(binding, (player) => {
       const sides = ([1, -1] as const).map((step) => nearestTownsfolk(player, step));
       const unsure = sides.find((side) => !side.known);
@@ -579,7 +590,12 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
       if (!survives.known) return survives;
       const other = protection(binding, cause, true);
       if (!other.known) return other;
-      return known<DeathOutcomeAnswer>(other.value ? { kind: "survives", spends: false } : survives.value ? { kind: "survives", spends: true } : { kind: "dies" });
+      if (other.value) return known<DeathOutcomeAnswer>({ kind: "survives", spends: false });
+      if (survives.value) return known<DeathOutcomeAnswer>({ kind: "survives", spends: true });
+      // BM-2: after every protection, the Zombuul's first death: the table sees it, the player lives on. Unknown sobriety stays unknown.
+      const lives = livesOnAfterDeath(self, binding, cause);
+      if (!lives.known) return lives;
+      return known<DeathOutcomeAnswer>(lives.value ? { kind: "dies", livesOn: true } : { kind: "dies" });
     },
     protectionDependencyStamp: () => protectionDependencies(),
     registration: (binding, observer) => {
@@ -619,7 +635,9 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     assumingAlive: (binding, alive) => {
       const player = participant(binding);
       if (!player) return self;
-      return createRulesQuery({ ...game, players: { ...game.players, [player.id]: { ...player, alive } } }, { ...environment, modifiers });
+      // BM-2: a hypothetical death is a real one -- the overlay takes a hidden life away with it.
+      const effects = alive ? player.effects : player.effects.filter((effect) => effect.type !== HIDDEN_LIFE);
+      return createRulesQuery({ ...game, players: { ...game.players, [player.id]: { ...player, alive, effects } } }, { ...environment, modifiers });
     },
   };
   return self;

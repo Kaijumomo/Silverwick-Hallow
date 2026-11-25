@@ -76,7 +76,8 @@ describe("LS-1b: the life-rules table equals the LS-1 branches", () => {
     let checked = 0;
     for (const role of ROLES) for (const dead of bools) for (const used of bools) for (const safe of bools) for (const poisoned of bools) for (const tea of bools) {
       // LS-2b models the Tea Lady on purpose: games with a Tea Lady seated are compared in teaLady.test.ts instead.
-      if (tea || role === "tealady") { checked += 4; continue; }
+      // BM-2a models the Zombuul's hidden life on purpose: compared in zombuulLife.test.ts instead.
+      if (tea || role === "tealady" || role === "zombuul") { checked += 4; continue; }
       const g = make(role, { dead, used, safe, poisoned, tea });
       const query = proofQuery(g);
       const target = bind(g, "p3");

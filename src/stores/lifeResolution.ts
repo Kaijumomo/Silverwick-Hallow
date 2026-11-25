@@ -1,7 +1,10 @@
 import { cloneOwned, durableProvenance, historyId, type MutationContext } from "./history";
 import { participantRefOf } from "./participants";
 import { applySourceAbilityLossPlan, planSourceAbilityLoss, type SourceAbilityLossPlan } from "./sourceAbilityLifecycle";
-import type { RulesQueryEnvironment } from "./rulesQuery";
+import { createRulesQuery, type RulesQueryEnvironment } from "./rulesQuery";
+import { applyEffectPlan, planEffectTransaction, type EffectIntent, type EffectPlan } from "./effectResolution";
+import { HIDDEN_LIFE, hasHiddenLife } from "./lifeState";
+import { lifeRuleHidesLife, livesOnAfterDeath } from "@/abilities/characters/passiveRules";
 import { currentLiveMoment, previousLiveMoment, sameMoment } from "./lifeEvents";
 import type {
   CurrentParticipantRef,
@@ -50,8 +53,16 @@ import type {
 // Intents
 // ---------------------------------------------------------------------------
 
-/** A death not represented by an execution/exile (Night or Day). */
-export type DeathIntent = { kind: "death"; playerId: PlayerId };
+/**
+ * BM-2: `livesOn` on a death (and an execution that `died`) is the explicit ruling on the Zombuul's first death -- "you live but
+ * register as dead" (https://wiki.bloodontheclocktower.com/Zombuul): `true`, the table sees the death (the stored life becomes dead,
+ * exactly like any death, Life Event included) and the player keeps a Storyteller-only hidden life (lifeState.ts HIDDEN_LIFE); `false`,
+ * the death is real. Absent, the planner reads the life-rules row itself (livesOnAfterDeath, with the rules environment). When the
+ * rules cannot tell whether the ability works and nobody ruled, the hidden life is KEPT: a wrong real death would advise "the Demon is
+ * dead", while a wrong hidden life is undone by switching the seat to Died (PO decision 2026-11-25 Q2). A player who already registers as
+ * dead with a hidden life dies for real: the stored life does not change, the hidden life ends, and the event is recorded.
+ */
+export type DeathIntent = { kind: "death"; playerId: PlayerId; livesOn?: boolean };
 /** The ACTUAL executee (not necessarily the nominee), Day only. */
 export type ExecutionIntent = {
   kind: "execution";
@@ -69,6 +80,8 @@ export type ExecutionIntent = {
    * same name or UID) or at any other moment refuses the whole transaction
    * as stale; it never authorizes the new context. */
   confirmations?: readonly LifeConfirmationToken[];
+  /** BM-2: as on DeathIntent, for an execution that `died`. */
+  livesOn?: boolean;
 };
 /** A Traveler exile, Day only. Never assumed to kill. */
 export type ExileIntent = { kind: "exile"; playerId: PlayerId; outcome: ExileOutcome };
@@ -174,6 +187,8 @@ export type LifeRefusal =
 /** What an accepted transaction changes -- nothing is applied yet. */
 export type LifePlan = {
   sourceAbilityLoss?: SourceAbilityLossPlan;
+  /** BM-2: the hidden lives this transaction starts or ends (the Zombuul's), applied right after the Life fields. */
+  hiddenLife?: EffectPlan;
   /** The complete next life fields of every player whose fields change. */
   playerPatches: Record<PlayerId, LifeFieldPatch>;
   lifeEventWindow: StorytellerLobbyRecord["lifeEventWindow"];
@@ -197,6 +212,25 @@ export const newLifeEventId = (): LifeEventId =>
   "le-" + (globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`);
 
 export type LifeIdSource = { eventId: () => LifeEventId; historyId: () => string };
+/** BM-2: the hidden-life Effect's id (ordinary Effect ids are allocated by the Effect planner the same way). */
+/** BM-2: the hidden life is Life state, recorded and ended only by the Life planner (a death, the second death, a resurrection or the
+ * Alive/Died switch), so Undo and history stay one resolution. A generic Effect change that would add, remove, suspend or amend it is
+ * refused: the reason names the controls that do change it. */
+export function hiddenLifeEffectRefusal(game: StorytellerLobbyRecord, intents: readonly EffectIntent[]): string | null {
+  for (const intent of Array.isArray(intents) ? intents : []) {
+    if (!intent || typeof intent !== "object") continue;
+    if ((intent.kind === "apply" || intent.kind === "correctApply") && intent.effect?.type === HIDDEN_LIFE) return HIDDEN_LIFE_REFUSAL;
+    if (intent.kind === "correctAmend" && intent.amendment?.type === HIDDEN_LIFE) return HIDDEN_LIFE_REFUSAL;
+    if ("effectId" in intent) {
+      const player = game.players[intent.target?.playerId as PlayerId];
+      if (player?.effects.some((effect) => effect.id === intent.effectId && effect.type === HIDDEN_LIFE)) return HIDDEN_LIFE_REFUSAL;
+    }
+  }
+  return null;
+}
+const HIDDEN_LIFE_REFUSAL = "This life changes only through the life controls: a death, or the Alive / Died switch.";
+
+const newHiddenLifeId = (): string => "fx-" + (globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`);
 const DEFAULT_IDS: LifeIdSource = { eventId: newLifeEventId, historyId };
 
 // ---------------------------------------------------------------------------
@@ -275,12 +309,8 @@ export function applyLifePlan(game: StorytellerLobbyRecord, plan: LifePlan): Sto
   for (const [playerId, patch] of Object.entries(plan.playerPatches)) {
     players[playerId] = applyLifeFieldPatch(players[playerId]!, patch);
   }
-  return applySourceAbilityLossPlan({
-    ...game,
-    players,
-    lifeEventWindow: plan.lifeEventWindow,
-    history: [...game.history, ...plan.history],
-  }, plan.sourceAbilityLoss, game);
+  const lived: StorytellerLobbyRecord = { ...game, players, lifeEventWindow: plan.lifeEventWindow, history: [...game.history, ...plan.history] };
+  return applySourceAbilityLossPlan(plan.hiddenLife ? applyEffectPlan(lived, plan.hiddenLife) : lived, plan.sourceAbilityLoss, game);
 }
 
 // ---------------------------------------------------------------------------
@@ -347,6 +377,9 @@ export function planLifeTransaction(
   const working = new Map<PlayerId, LifeFields>();
   const lostAbilities = new Set<ParticipantId>();
   const fieldsOf = (p: STPlayerRecord) => working.get(p.id) ?? lifeFieldsOf(p);
+  // BM-2: whether each player holds a hidden life in the evolving working state (only players this transaction touches change).
+  const hiddenWorking = new Map<PlayerId, boolean>();
+  const hiddenOf = (p: STPlayerRecord) => hiddenWorking.get(p.id) ?? hasHiddenLife(p);
   let events = [...game.lifeEventWindow.events];
   const touched = new Map<ParticipantId, Touched>();
 
@@ -363,13 +396,35 @@ export function planLifeTransaction(
     }
     return entry;
   };
-  const setFields = (player: STPlayerRecord, participant: CurrentParticipantRef, next: LifeFields) => {
+  const setFields = (player: STPlayerRecord, participant: CurrentParticipantRef, next: LifeFields, keepsAbility = false) => {
     // Remember intermediate loss even when death + resurrection restores the
     // starting life fields. Resurrection gains a new ability, never the old
     // persistent effect; this set is plan-local, not stored game state.
-    if (fieldsOf(player).alive !== next.alive) lostAbilities.add(participant.participantId);
+    // BM-2: a death the player secretly lives through (the Zombuul's first) ends no ability.
+    if (fieldsOf(player).alive !== next.alive && !keepsAbility) lostAbilities.add(participant.participantId);
     working.set(player.id, next);
     touch(participant, player).after = next;
+  };
+  /** BM-2: starts or ends a hidden life in the working state. Ending one is the player's real death: their ability ends with it. */
+  const setHidden = (player: STPlayerRecord, participant: CurrentParticipantRef, hidden: boolean) => {
+    if (hiddenOf(player) === hidden) return;
+    if (!hidden) lostAbilities.add(participant.participantId);
+    hiddenWorking.set(player.id, hidden);
+    touch(participant, player);
+  };
+  /** BM-2: whether this death of a player the table sees alive is the Zombuul's first (a hidden life), or a refusal. */
+  const firstDeathLivesOn = (s: { player: STPlayerRecord; ref: CurrentParticipantRef }, ruling: unknown): boolean | LifeRefusal => {
+    if (ruling !== undefined && typeof ruling !== "boolean") return refuse("Invalid life change.");
+    if (ruling === false) return false;
+    if (!lifeRuleHidesLife(s.player.actualRole)) return ruling === true ? refuse(`${displayName(s.player)} has no ability to live through this death.`) : false;
+    // No rules environment: as for an unknown answer, keep the hidden life (the Alive / Died switch makes the death real; Undo reverses).
+    if (!environment) return true;
+    // The rules read the evolving working life (an earlier death in this transaction may have ended a poison, say).
+    const players = { ...game.players };
+    for (const [id, fields] of working) players[id] = applyLifeFieldPatch(players[id]!, fields);
+    const rule = livesOnAfterDeath(createRulesQuery({ ...game, players }, environment), { playerId: s.player.id, participantId: s.ref.participantId });
+    if (ruling === true) return rule.known && !rule.value ? refuse(`${displayName(s.player)} cannot live through this death.`) : true;
+    return rule.known ? rule.value : true;
   };
   // 10A-ASTRA-004: one participant may receive several ordered events in
   // one atomic resolution (e.g. resurrection then death). Legality comes
@@ -458,8 +513,17 @@ export function planLifeTransaction(
       case "death": {
         const s = seated(intent.playerId); if ("ok" in s) return s;
         const f = fieldsOf(s.player);
-        if (!f.alive) return refuse(`${displayName(s.player)} is already dead.`);
-        setFields(s.player, s.ref, DEAD(f, false));
+        if (!f.alive) {
+          if (!hiddenOf(s.player)) return refuse(`${displayName(s.player)} is already dead.`);
+          if (intent.livesOn === true) return refuse(`${displayName(s.player)} already registers as dead: this death is real.`);
+          // BM-2: the real death of a player who registers as dead. Nothing the table sees changes; the hidden life ends.
+          setHidden(s.player, s.ref, false);
+        } else {
+          const lives = firstDeathLivesOn(s, intent.livesOn);
+          if (typeof lives !== "boolean") return lives;
+          setFields(s.player, s.ref, DEAD(f, false), lives);
+          if (lives) setHidden(s.player, s.ref, true);
+        }
         const refusal = addEvent({ ...liveEventCommon(s), kind: "death", moment: { ...current } });
         if (refusal) return refusal;
         break;
@@ -470,7 +534,11 @@ export function planLifeTransaction(
         const f = fieldsOf(s.player);
         if (!["died", "survived", "alreadyDead"].includes(intent.outcome)) return refuse("Choose an execution outcome.");
         if (intent.outcome === "alreadyDead" && f.alive) return refuse(`${displayName(s.player)} is alive -- choose Died or Survived.`);
-        if (intent.outcome !== "alreadyDead" && !f.alive) return refuse(`${displayName(s.player)} is already dead -- choose Already dead.`);
+        // BM-2: a player who registers as dead but secretly lives (the Zombuul) is executed like a living player: Died is their real death.
+        const hidden = hiddenOf(s.player);
+        if (intent.outcome === "alreadyDead" && hidden) return refuse(`${displayName(s.player)} still lives -- choose Died or Survived.`);
+        if (intent.outcome !== "alreadyDead" && !f.alive && !hidden) return refuse(`${displayName(s.player)} is already dead -- choose Already dead.`);
+        if (intent.livesOn !== undefined && intent.outcome !== "died") return refuse("Invalid life change.");
         // 10A-ASTRA-002: every presented confirmation must name THIS
         // participation instance at THIS moment -- a PlayerId, name or UID
         // match is never enough.
@@ -491,7 +559,15 @@ export function planLifeTransaction(
           return { ok: false, code: "needsConfirmation", confirmation: token("additionalExecution"),
             message: `An execution is already recorded for Day ${current.day}. Record an additional execution?` };
         }
-        if (intent.outcome === "died") setFields(s.player, s.ref, DEAD(f, false));
+        if (intent.outcome === "died" && !f.alive) {
+          if (intent.livesOn === true) return refuse(`${displayName(s.player)} already registers as dead: this death is real.`);
+          setHidden(s.player, s.ref, false);
+        } else if (intent.outcome === "died") {
+          const lives = firstDeathLivesOn(s, intent.livesOn);
+          if (typeof lives !== "boolean") return lives;
+          setFields(s.player, s.ref, DEAD(f, false), lives);
+          if (lives) setHidden(s.player, s.ref, true);
+        }
         const refusal = addEvent({ ...liveEventCommon(s), kind: "execution", moment: current as DayGameMoment, outcome: intent.outcome });
         if (refusal) return refusal;
         break;
@@ -516,6 +592,8 @@ export function planLifeTransaction(
         // longer exile-dead, and their ability (once-per-game included)
         // restored.
         setFields(s.player, s.ref, { alive: true, ghostVote: true, exiled: false, abilityUsed: false });
+        // BM-2: a player alive at the table holds no hidden life.
+        if (hiddenOf(s.player)) { hiddenWorking.set(s.player.id, false); touch(s.ref, s.player); }
         const refusal = addEvent({ ...liveEventCommon(s), kind: "resurrection", moment: { ...current } });
         if (refusal) return refusal;
         break;
@@ -561,6 +639,9 @@ export function planLifeTransaction(
         }
         // A correction never restores a used ability (no resurrection).
         setFields(s.player, s.ref, next);
+        // BM-2 (PO decision Q2, 2026-11-25): correcting a player who secretly lives to dead is their real death, like any correction;
+        // correcting them to alive makes the table's life the truth again. Either way the hidden life ends.
+        if (hiddenOf(s.player)) setHidden(s.player, s.ref, false);
         break;
       }
       case "retractEvent": {
@@ -622,9 +703,27 @@ export function planLifeTransaction(
       ...(provenance ? { provenance } : {}),
     }));
   }
+  // BM-2: the hidden lives started or ended, as one Effect plan (Storyteller-only History, like every Effect change).
+  const hiddenIntents: EffectIntent[] = [];
+  for (const [playerId, hidden] of hiddenWorking) {
+    const player = game.players[playerId]!;
+    if (hidden === hasHiddenLife(player)) continue;
+    const target = { playerId, participantId: player.participantId! };
+    if (hidden) hiddenIntents.push({ kind: correction ? "correctApply" : "apply", target, effect: { type: HIDDEN_LIFE, lifetime: { kind: "manual" } } });
+    else for (const effect of player.effects) {
+      if (effect.type === HIDDEN_LIFE && effect.state === "active") hiddenIntents.push({ kind: correction ? "correctRemove" : "remove", target, effectId: effect.id });
+    }
+  }
+  let hiddenLife: EffectPlan | undefined;
+  if (hiddenIntents.length) {
+    const planned = planEffectTransaction(game, { intents: hiddenIntents, ...(resolutionId ? { resolutionId } : {}),
+      ...(transaction.context ? { context: transaction.context } : {}) }, { historyId: ids.historyId, effectId: newHiddenLifeId });
+    if (!planned.ok) return refuse(planned.message);
+    if (planned.changed) hiddenLife = planned.plan;
+  }
   // True no-op: nothing about Current State, the window or History changes.
-  if (history.length === 0) return { ok: true, changed: false };
-  const loss = planSourceAbilityLoss(game, lostAbilities, environment, ids.historyId, resolutionId);
+  if (history.length === 0 && !hiddenLife) return { ok: true, changed: false };
+  const loss = planSourceAbilityLoss(hiddenLife ? applyEffectPlan(game, hiddenLife) : game, lostAbilities, environment, ids.historyId, resolutionId);
   if (!loss.ok) return refuse(loss.message);
   return {
     ok: true,
@@ -632,6 +731,7 @@ export function planLifeTransaction(
     plan: {
       playerPatches,
       sourceAbilityLoss: loss.plan,
+      ...(hiddenLife ? { hiddenLife } : {}),
       // The window object is replaced only when an event was added or
       // removed; a vote-token change or status correction leaves it as is.
       lifeEventWindow: [...touched.values()].some((entry) => entry.operations.length > 0)

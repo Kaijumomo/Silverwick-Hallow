@@ -1,4 +1,5 @@
 import { isCanonicalRole } from "@/data/canonical";
+import { isTrulyAlive } from "./lifeState";
 import { scarletWomanSuccession } from "@/abilities/characters/scarletWoman";
 import { bindingOf, createRulesQuery, effectSemanticsOf, type RulesQueryEnvironment } from "./rulesQuery";
 import { applyGameRuleFactPlan, planCapturedDayEndFact, planCapturedVictoryEvidence, planGameRuleFactTransaction } from "./gameRuleFacts";
@@ -14,7 +15,10 @@ const accepted = (game: StorytellerLobbyRecord): VictoryEvidenceResult => ({ ok:
 const supportedRoles = new Set(["washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller", "undertaker", "monk", "ravenkeeper", "virgin", "slayer", "soldier", "mayor", "butler", "drunk", "recluse", "saint", "poisoner", "spy", "scarletwoman", "baron", "imp", "bureaucrat", "thief", "gunslinger", "scapegoat", "beggar", "cerenovus", "eviltwin",
   // SV-5o: the rest of Sects & Violets, each reviewed against the ending rules (docs/ai/SECTS_AND_VIOLETS_SV5H_PAIRS.md).
   "clockmaker", "dreamer", "snakecharmer", "mathematician", "flowergirl", "towncrier", "oracle", "savant", "seamstress", "philosopher", "artist", "juggler", "sage",
-  "mutant", "sweetheart", "barber", "klutz", "witch", "pithag", "fanggu", "vigormortis", "nodashii", "vortox"]);
+  "mutant", "sweetheart", "barber", "klutz", "witch", "pithag", "fanggu", "vigormortis", "nodashii", "vortox",
+  // BM-2: the Zombuul. Every ending read below uses its TRUE life (isTrulyAlive): its first death only registers ("the game continues"),
+  // "the game continues if just two other players are alive", and its real death is proved on the Day like the S&V Demons'.
+  "zombuul"]);
 /** SV-5o: game-rule facts reviewed against the ending rules, which do not by themselves make the ending manual. The Fang Gu's ONCE only
  * records that a jump happened (no ending meaning); the Vortox's dusk facts carry their own advisory line and never contradict a verified
  * route (a Vortox alive at dusk cannot have died by a proved route, and two alive is evil's either way). Every other fact keeps the game
@@ -49,7 +53,8 @@ export function victoryCoverageEligibility(game: StorytellerLobbyRecord, environ
 
 const participants = (game: StorytellerLobbyRecord) => Object.values(game.players).filter(player => !player.isEmpty && !!player.participantId);
 const ordinaryEndingAlreadyReached = (game: StorytellerLobbyRecord, environment: RulesQueryEnvironment) => {
-  const livingOrdinary = participants(game).filter(player => player.alive && environment.registry.get(player.actualRole)?.type !== "traveler");
+  // BM-2: the TRUE life -- a Zombuul who registers as dead is a living Demon, and counts among the living for "two alive".
+  const livingOrdinary = participants(game).filter(player => isTrulyAlive(player) && environment.registry.get(player.actualRole)?.type !== "traveler");
   return livingOrdinary.length <= 2 || !livingOrdinary.some(player => environment.registry.get(player.actualRole)?.type === "demon");
 };
 const sameGame = (before: StorytellerLobbyRecord, after: StorytellerLobbyRecord) => before.code === after.code && before.scriptId === after.scriptId;
@@ -179,16 +184,17 @@ export function captureResolvedDemonDeath(before: StorytellerLobbyRecord, after:
   const demonRole = environment.registry.get(demon!);
   if (!demonRole || !isCanonicalRole(demonRole)) return accepted(after);
   const source = before.players[event.subject.playerId];
-  if (!source || !source.alive || source.actualRole !== demon || source.participantId !== event.subject.participantId || !sameSource(source, after.players[source.id]) || after.players[source.id]!.alive) return accepted(after);
+  // BM-2: the TRUE life before and after: a Zombuul's first death (they live on in secret) is not a Demon death; their real one is.
+  if (!source || !isTrulyAlive(source) || source.actualRole !== demon || source.participantId !== event.subject.participantId || !sameSource(source, after.players[source.id]) || isTrulyAlive(after.players[source.id]!)) return accepted(after);
   if (victoryCoverageEligibility(before, environment).kind !== "automated" || victoryCoverageEligibility(after, environment).kind !== "automated") return accepted(after);
-  const livingDemons = (game: StorytellerLobbyRecord) => participants(game).filter(player => player.alive && environment.registry.get(player.actualRole)?.type === "demon");
+  const livingDemons = (game: StorytellerLobbyRecord) => participants(game).filter(player => isTrulyAlive(player) && environment.registry.get(player.actualRole)?.type === "demon");
   if (livingDemons(before).length !== 1 || livingDemons(after).length !== 0 || ordinaryEndingAlreadyReached(before, environment)) return accepted(after);
   const prior = before.gameRuleFacts.filter(fact => isVictoryEvidenceType(fact.type));
   if (prior.some(fact => !isSaintNonqualifyingEvidenceType(fact.type))) return accepted(after);
   const query = createRulesQuery(before, environment);
   if (query.modifierGate(demon!, ["death", "role", "registration"]).kind !== "clear" || scarletWomanSuccession(query, bindingOf(source)).kind !== "none") return accepted(after);
   if (mode === "recordedNight" || mode === "automaticImp") {
-    for (const candidate of participants(before).filter(player => player.alive && !player.isTraveler && player.participantId !== source.participantId)) {
+    for (const candidate of participants(before).filter(player => isTrulyAlive(player) && !player.isTraveler && player.participantId !== source.participantId)) {
       const eligible = query.registersAsType(bindingOf(candidate), "minion", "imp");
       if (!eligible.known || eligible.value) return accepted(after);
     }

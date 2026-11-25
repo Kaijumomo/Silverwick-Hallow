@@ -5,6 +5,7 @@ import { createRulesQuery, type RulesQueryEnvironment } from "./rulesQuery";
 import { historyId } from "./history";
 import { captureSaintQualification, captureResolvedDemonDeath } from "./victoryEvidence";
 import { captureMastermindFinalDay } from "./mastermindFinalDay";
+import { isTrulyAlive } from "./lifeState";
 import type { LifeEventId, StorytellerLobbyRecord } from "./types";
 
 export type RecordedLifePlanResult = {
@@ -28,7 +29,8 @@ export function planRecordedLifeOutcome(
   const intent = list.length === 1 || ownUse ? lead : undefined;
   const deathIntent = intent && (intent.kind === "death" || intent.kind === "execution" && intent.outcome === "died") ? intent : undefined;
   const dying = deathIntent ? game.players[deathIntent.playerId] : undefined;
-  const ruling = dying?.participantId && dying.alive
+  // BM-2: a player who registers as dead but secretly lives (the Zombuul) dies for real here: succession is ruled as for any Demon.
+  const ruling = dying?.participantId && isTrulyAlive(dying)
     ? environment ? scarletWomanSuccession(createRulesQuery(game, environment), { playerId: dying.id, participantId: dying.participantId })
       : { kind: "manual" as const, reason: "The character rules are unavailable." }
     : { kind: "none" as const };

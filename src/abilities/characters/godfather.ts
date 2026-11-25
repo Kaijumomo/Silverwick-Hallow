@@ -2,7 +2,7 @@ import { isDeathEvent } from "@/stores/lifeEvents";
 import { passiveRegistrationOptions } from "./passiveRules";
 import type { AbilityDescriptor } from "../semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
-import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nameOf, nothing, survivedOutcome, subjectId, tokenOutcome, requireLivingActor } from "./shared";
+import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nameOf, nothing, survivedOutcome, subjectId, tokenOutcome, requireLivingActor, deathOf } from "./shared";
 
 /**
  * Godfather -- GUIDED-PARTIAL (Treacherous 30th, owner-authorized; shared protection
@@ -67,10 +67,12 @@ export const GODFATHER: AbilityDescriptor = {
     if (!happened) return { kind: "notApplicable", message: "No Outsider died during the Day: the Godfather does not act tonight." };
 
     const target = firstParticipant(context.inputs, "target");
-    if (!query.participant(target)?.alive) return nothing();
+    // BM-2: a player who registers as dead but secretly lives (the Zombuul) can be killed for real.
+    const targetAlive = query.trulyAlive(target);
+    if (!targetAlive.known || !targetAlive.value) return nothing();
     const death = deathAttempt(context, target, "any");
     if (death.kind === "ask") return ask(death.message, death.requirement);
     if (death.kind === "survives") return survivedOutcome(death);
-    return tokenOutcome(context, "godfather", [lifeOperation([{ kind: "death", target }])]);
+    return tokenOutcome(context, "godfather", [lifeOperation([deathOf(target, death)])]);
   },
 };

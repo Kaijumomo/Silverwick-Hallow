@@ -53,8 +53,9 @@ describe("SV-5o: all 25 Sects & Violets characters on the game-ending list", () 
     expect(endGameEligibility(g, env)).toEqual({ kind: "none" });
   });
 
-  it("a character from outside Trouble Brewing and Sects & Violets still makes the ending manual (the Zombuul, the Mastermind)", () => {
-    for (const role of ["zombuul", "mastermind", "lunatic"]) expect(victoryCoverageEligibility(proofGame(["vortox", role, "oracle"], "day", 2), env).kind, role).toBe("manual");
+  it("a character from outside Trouble Brewing and Sects & Violets still makes the ending manual (the Mastermind, the Lunatic)", () => {
+    // BM-2a: the Zombuul joined the reviewed ending list (its true life is read everywhere an ending reads life).
+    for (const role of ["mastermind", "lunatic", "pukka"]) expect(victoryCoverageEligibility(proofGame(["vortox", role, "oracle"], "day", 2), env).kind, role).toBe("manual");
   });
 
   describe("game-rule facts", () => {

@@ -1,4 +1,5 @@
-import { mayorBounceApplies, survivesFirstDeath, type LifeRuleCause } from "./passiveRules";
+import { livesOnAfterDeath, mayorBounceApplies, survivesFirstDeath, type LifeRuleCause } from "./passiveRules";
+import { isTrulyAlive } from "@/stores/lifeState";
 import type { AbilityEvaluation, AbilityEvaluationContext, AbilityInputRequirement, AbilityInputs, AbilityInputValue } from "../semantics";
 import type { AbilityOperation, AbilityOutcome, ParticipantBinding } from "@/stores/abilityResolution";
 import type { ReminderIntent } from "@/stores/reminderResolution";
@@ -85,7 +86,8 @@ export function followUpParticipant(context: AbilityEvaluationContext, values: A
  * keeps the coordinator authoritative for a crafted request.
  */
 export function requireLivingActor(context: AbilityEvaluationContext): AbilityEvaluation | null {
-  if (context.actor.player.alive) return null;
+  // BM-2: a Zombuul who registers as dead is truly alive and keeps acting ("the Zombuul still attacks").
+  if (isTrulyAlive(context.actor.player)) return null;
   // A Minion the Vigormortis killed keeps its ability (derived from the official HAS ABILITY Effect, never assumed).
   const kept = context.query.retainsAbility(context.actor.binding);
   if (kept.known && kept.value) return null;
@@ -150,8 +152,20 @@ export const PIT_HAG_PROTECTED = "protected";
 export const hasPitHagProtection = (query: AbilityEvaluationContext["query"], target: ParticipantBinding): boolean =>
   !!query.participant(target)?.effects.some((effect) => effect.state === "active" && effect.type === PIT_HAG_PROTECTED && effect.sourceCharacter === PIT_HAG_SOURCE);
 
+/**
+ * BM-2: the judgment id asked when the death gate cannot tell whether a Zombuul's ability works at its first death (sobriety unknown).
+ * Bound like protectionJudgmentId (target, cause, dependency stamp, attempt scope), and kept apart from it: "protected" and "lives on"
+ * are different questions.
+ */
+export const livesOnJudgmentId = (cause: DeathCause, binding: ParticipantBinding, dependency: string, scope?: DeathAttemptScope) =>
+  scope === undefined
+    ? `livesOn:${cause}:${JSON.stringify([binding.participantId, dependency])}`
+    : `livesOn:${cause}@${JSON.stringify([scope.id, binding.participantId, dependency])}`;
+
 export type DeathDecision =
-  | { kind: "dies" }
+  /** `livesOn` (BM-2): the Zombuul's first death -- the table sees the death, the player secretly lives on. `false` is an explicit
+   * ruling that this death is real; absent, the Life planner reads the rules itself. */
+  | { kind: "dies"; livesOn?: boolean }
   /** `spend`: the survival uses up this player's own ability (the Fool). Absent for every prevented death. */
   | { kind: "survives"; spend?: ParticipantBinding }
   | { kind: "ask"; requirement: AbilityInputRequirement; message: string };
@@ -195,7 +209,26 @@ export function deathAttempt(
     };
   }
   const answer = query.deathOutcome(target, cause);
-  if (answer.known) return answer.value.kind === "survives" ? (answer.value.spends ? { kind: "survives", spend: target } : { kind: "survives" }) : { kind: "dies" };
+  if (answer.known) return answer.value.kind === "survives" ? (answer.value.spends ? { kind: "survives", spend: target } : { kind: "survives" })
+    : answer.value.livesOn ? { kind: "dies", livesOn: true } : { kind: "dies" };
+  // BM-2: a Zombuul's first death whose ability may or may not work, with every protection settled: ask exactly that, never guess.
+  const firstDeath = (): DeathDecision => {
+    const lives = livesOnAfterDeath(query, target, cause);
+    if (lives.known) return lives.value ? { kind: "dies", livesOn: true } : { kind: "dies" };
+    const livesId = livesOnJudgmentId(cause, target, query.protectionDependencyStamp(target, cause), attempt);
+    const ruled = answerOf(context.judgments, livesId, "boolean");
+    if (ruled) return { kind: "dies", livesOn: ruled.value };
+    const role = query.roleOf(query.participant(target)?.actualRole ?? "")?.name ?? "Zombuul";
+    return {
+      kind: "ask",
+      message: `Silverwick cannot tell whether ${nameOf(context, target)}'s ${role} ability works (${lives.reason}) You decide: if it works, this first death only registers.`,
+      requirement: { id: livesId, kind: "boolean", source: "judgment",
+        label: `${nameOf(context, target)}'s ${role} ability works${attempt?.label ? ` (${attempt.label})` : ""} (Yes: they register as dead but live on; No: they die)` },
+    };
+  };
+  const protectedNow = query.protectedFrom(target, cause);
+  const ownNow = survivesFirstDeath(query, target, cause);
+  if (protectedNow.known && !protectedNow.value && ownNow.known && !ownNow.value) return firstDeath();
   // SOL-10F-C2: the id binds the dependency stamp of the queried state.
   const id = protectionJudgmentId(cause, target, query.protectionDependencyStamp(target, cause), attempt);
   const judged = answerOf(context.judgments, id, "boolean");
@@ -203,7 +236,7 @@ export function deathAttempt(
     if (judged.value) return { kind: "survives" };
     // "Not protected by the unknown thing" still leaves a Fool's own first-death survival to apply.
     const own = survivesFirstDeath(query, target, cause);
-    return own.known && own.value ? { kind: "survives", spend: target } : { kind: "dies" };
+    return own.known && own.value ? { kind: "survives", spend: target } : firstDeath();
   }
   return {
     kind: "ask",
@@ -237,8 +270,20 @@ export const FOOL_SPEND_MANUAL = "A Fool survives this death and its ability is 
 export const survivedOutcome = (death: Extract<DeathDecision, { kind: "survives" }>): AbilityEvaluation =>
   death.spend ? outcome([lifeOperation([{ kind: "useAbility", target: death.spend }])]) : nothing();
 
-export const lifeOperation = (intents: { kind: "death" | "resurrection" | "useAbility"; target: ParticipantBinding }[]): AbilityOperation =>
+export const lifeOperation = (intents: ({ kind: "death"; target: ParticipantBinding; livesOn?: boolean } | { kind: "resurrection" | "useAbility"; target: ParticipantBinding })[]): AbilityOperation =>
   ({ domain: "life", intents });
+
+/** BM-2: the death intent for a `dies` decision, carrying the gate's (or the Storyteller's) Zombuul ruling when there is one. */
+export const deathOf = (target: ParticipantBinding, death: Extract<DeathDecision, { kind: "dies" }>) =>
+  ({ kind: "death" as const, target, ...(death.livesOn !== undefined ? { livesOn: death.livesOn } : {}) });
+
+/** BM-2: whether this death intent records the Zombuul's first death (a hidden life) -- the ruling it carries, else the rules. An
+ * unknown answer only comes from a hidden-life holder, and the Life planner then keeps the life (stores/lifeResolution.ts). */
+function firstDeathLivesOn(query: RulesQuery, intent: { target: ParticipantBinding; livesOn?: boolean }): boolean {
+  if (intent.livesOn !== undefined) return intent.livesOn;
+  const rule = livesOnAfterDeath(query, intent.target);
+  return rule.known ? rule.value : true;
+}
 
 /**
  * Draws the acting character's own official "Dead" / "Alive" reminder token on each player its ability
@@ -251,6 +296,8 @@ export function withLifeTokens(context: AbilityEvaluationContext, roleId: string
     for (const intent of operation.intents) {
       const label = intent.kind === "death" ? "Dead" : intent.kind === "resurrection" ? "Alive" : undefined;
       if (!label || !("target" in intent) || !intent.target) continue;
+      // BM-2: the Zombuul's first death draws no DEAD token: the Storyteller's seat keeps looking alive (PO 2026-11-12 17:53Z).
+      if (intent.kind === "death" && firstDeathLivesOn(context.query, intent)) continue;
       intents.push({ kind: "place", target: intent.target, reminder: { label, sourceCharacter: roleId, source: context.actor.binding } });
     }
   }

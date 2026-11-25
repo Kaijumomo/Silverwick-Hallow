@@ -177,10 +177,24 @@ describe("SV-5m: the trigger", () => {
   });
 
   describe("the jinxes and the Zombuul are the Storyteller's ruling", () => {
-    it.each(["zombuul", "alhadikhia", "lleech"])("%s executed and dead", (demon) => {
+    it.each(["alhadikhia", "lleech"])("%s executed and dead", (demon) => {
       openInStore(day([demon, ...ROLES.slice(1)]));
       execute("p0");
       expect(facts()).toEqual([MASTERMIND_FINAL_DAY_RULING]);
+    });
+    // BM-2a: the Zombuul's first execution is not a death of the Demon (he registers as dead but lives on), so nothing triggers;
+    // his second (real) death is the Storyteller's ruling, as before.
+    it("zombuul: the first execution triggers nothing; the second, real death is the ruling", () => {
+      openInStore(day(["zombuul", ...ROLES.slice(1)]));
+      const first = execute("p0");
+      expect(facts()).toEqual([]);
+      expect(first.players.p0!.alive).toBe(false);
+      expect(first.players.p0!.effects.map((effect) => effect.type)).toEqual(["livesOn"]);
+      advance(); advance();
+      expect(game()).toMatchObject({ phase: "day", day: 3 });
+      execute("p0");
+      expect(facts()).toEqual([MASTERMIND_FINAL_DAY_RULING]);
+      expect(game().players.p0!.effects.filter((effect) => effect.state === "active")).toEqual([]);
     });
     it("an Alchemist in play", () => {
       openInStore(day(["imp", "mastermind", "alchemist", "empath", "saint", "monk"]));

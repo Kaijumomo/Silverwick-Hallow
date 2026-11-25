@@ -2,7 +2,7 @@ import type { AbilityDescriptor } from "../semantics";
 import { toldRoleChangeIntents } from "@/stores/roleResolution";
 import { scarletWomanSuccession } from "./scarletWoman";
 import { recluseRegistrationChoice } from "./informationSupport";
-import { answerOf, ask, deathAttempt, firstParticipant, FOOL_SPEND_MANUAL, lifeOperation, nameOf, outcome } from "./shared";
+import { answerOf, ask, deathAttempt, firstParticipant, FOOL_SPEND_MANUAL, lifeOperation, nameOf, outcome, deathOf } from "./shared";
 
 /**
  * Slayer -- GUIDED Day public claim. docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md
@@ -40,7 +40,8 @@ export const SLAYER: AbilityDescriptor = {
     // A Drunk or Marionette shown the Slayer has no ability: the shot is spent and nobody dies, exactly as when poisoned.
     if (context.simulated || !context.functioning) return spent();
     const target = firstParticipant(context.inputs, "target");
-    const alive = context.query.isAlive(target);
+    // BM-2: a player who registers as dead but secretly lives (the Zombuul) is still the Demon, and can die.
+    const alive = context.query.trulyAlive(target);
     if (!alive.known || !alive.value) return spent();
     const registration = context.query.registersAsType(target, "demon", "slayer");
     let demon: boolean;
@@ -67,7 +68,7 @@ export const SLAYER: AbilityDescriptor = {
     if (death.kind !== "dies") return spent();
     const succession = scarletWomanSuccession(context.query, target, "slayer");
     if (succession.kind === "manual") return { kind: "unsupported", message: succession.reason };
-    const kill = lifeOperation([use, { kind: "death", target }]);
+    const kill = lifeOperation([use, deathOf(target, death)]);
     return outcome(succession.kind === "successor"
       ? [kill, { domain: "role", intents: toldRoleChangeIntents(context.query.participant(succession.target)!, "imp") }]
       : [kill], succession.kind === "successor");

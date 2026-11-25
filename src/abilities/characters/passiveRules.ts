@@ -3,6 +3,7 @@ import type { ModifierDefinition } from "../modifiers";
 import type { RulesQuery, QueryAnswer } from "@/stores/rulesQuery";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { Alignment, EffectRecord, RoleId, RoleType } from "@/stores/types";
+import { hasHiddenLife, isTrulyAlive } from "@/stores/lifeState";
 
 /** Official Spy/Recluse almanacs: optional registration per interaction,
  * including while dead. These are possible forms, never an identity choice.
@@ -39,9 +40,10 @@ export const passiveRegistrationOptions = (roleId: RoleId) =>
  *    row answers "no protection" without asking anything, and a spending row spends nothing.
  *  - decision: "auto" (the gate answers), "choice" (the Storyteller chooses; the app only shows the row's advice and the gate
  *    never answers from it) or "unmodelled" (not modelled: the whole action stays Manual while the holder's ability may work).
- *  - onSurvive: "nothing" (the death simply does not happen) or "spend" (the ability is used up: abilityUsed + NO ABILITY).
- *    A union so "hiddenLife" can be added as a value; NOTE the gate's RESULT types (DeathOutcomeAnswer in rulesQuery.ts, DeathDecision
- *    in shared.ts) still carry only a yes/no spend, so LS-3 must widen them and their readers (survivedOutcome, executionAdvice, voting).
+ *  - onSurvive: "nothing" (the death simply does not happen), "spend" (the ability is used up: abilityUsed + NO ABILITY) or (BM-2)
+ *    "hiddenLife": NOT a prevention -- the table sees the death (stored life dead, ghost vote, every projection), and the player keeps a
+ *    Storyteller-only hidden life (stores/lifeState.ts HIDDEN_LIFE) until their next death, which is real. The gate answers it as
+ *    `dies` with `livesOn` (DeathOutcomeAnswer, DeathDecision); the Life planner records it (livesOnAfterDeath, below).
  *  - alsoCreditedTo: roles whose own protection could equally be the reason for a survival; a spending survival then becomes
  *    ambiguous and nothing is spent automatically (the Storyteller chooses).
  *  - earlyProtection: a named helper for a reviewed rule that cannot be plain data (checked before the row applies).
@@ -64,7 +66,7 @@ export type LifeRule = {
   readonly causes: "demon" | "execution" | "any";
   readonly bypassedBy?: readonly LifeRuleCause[];
   readonly decision: "auto" | "choice" | "unmodelled";
-  readonly onSurvive: "nothing" | "spend";
+  readonly onSurvive: "nothing" | "spend" | "hiddenLife";
   readonly alsoCreditedTo?: readonly RoleId[];
   readonly earlyProtection?: (query: RulesQuery, target: ParticipantBinding, cause: LifeRuleCause) => boolean;
   readonly covers?: (query: RulesQuery, holder: ParticipantBinding, target: ParticipantBinding) => QueryAnswer<boolean>;
@@ -167,7 +169,10 @@ export const LIFE_RULES: Readonly<Partial<Record<RoleId, LifeRule>>> = Object.fr
   // Not modelled: the whole action stays Manual while the holder's ability may be working.
   mayor: { ...GAP, earlyProtection: monkProtectsFromDemon },
   lleech: GAP,
-  zombuul: GAP,
+  // BM-2: "The 1st time you die, you live but register as dead." Every cause (the page: "for any reason"); the Assassin kills for real
+  // (PO table ruling 2026-11-12 14:07Z, page silent); a drunk or poisoned Zombuul dies for real ("If a drunk or poisoned Zombuul dies,
+  // good wins"). `once` is the hidden life itself: a player who already registers as dead has used it. https://wiki.bloodontheclocktower.com/Zombuul
+  zombuul: { holder: "self", duration: "once", needsFunctioning: true, causes: "any", bypassedBy: ASSASSIN, decision: "auto", onSurvive: "hiddenLife" },
   // LS-2b: "If both your alive neighbors are good, they can't die." Every cause but the Assassin. Not the Tea Lady herself.
   tealady: { holder: "neighbours", duration: "permanent", needsFunctioning: true, causes: "any", bypassedBy: ASSASSIN, decision: "auto", onSurvive: "nothing", covers: teaLadyCovers },
 });
@@ -239,6 +244,27 @@ export function survivesFirstDeath(query: RulesQuery, target: ParticipantBinding
   return rule.needsFunctioning ? query.abilityFunctions(target) : { known: true, value: true };
 }
 
+/**
+ * BM-2: whether a death of `target` now is the Zombuul's FIRST death -- "you live but register as dead". Known true for a player the
+ * table sees alive, whose actual (canonical) character has a hidden-life row, whose ability certainly works; known false for every
+ * other player, a player who already registers as dead (their hidden life is spent: this death is real), a cause that bypasses the row
+ * (the Assassin) or a drunk or poisoned holder (the death is real: "If a drunk or poisoned Zombuul dies, good wins"). UNKNOWN when
+ * the holder's sobriety cannot be established: never guessed (the death gate asks; see deathAttempt). Another character's protection
+ * is the caller's, checked first: "a Devil's Advocate-protected Zombuul keeps their first death".
+ * https://wiki.bloodontheclocktower.com/Zombuul
+ */
+export function livesOnAfterDeath(query: RulesQuery, target: ParticipantBinding, cause?: LifeRuleCause): QueryAnswer<boolean> {
+  const player = query.participant(target);
+  const role = player && query.roleOf(player.actualRole);
+  const rule = player && lifeRuleOf(player.actualRole);
+  if (!player || !player.alive || hasHiddenLife(player) || !role || !isCanonicalRole(role) || !rule || rule.onSurvive !== "hiddenLife") return { known: true, value: false };
+  if (cause !== undefined && rule.bypassedBy?.includes(cause)) return { known: true, value: false };
+  return rule.needsFunctioning ? query.abilityFunctions(target) : { known: true, value: true };
+}
+
+/** BM-2: whether `roleId`'s own row is a hidden-life row (the Zombuul). */
+export const lifeRuleHidesLife = (roleId: RoleId): boolean => lifeRuleOf(roleId)?.onSurvive === "hiddenLife";
+
 /** `spendHandled`: the caller (the death gate) resolves a spending survival itself, after other protection, so the "spending rows
  * are not modelled here" gap must not fire. Every other caller keeps the Manual fallback for a spending row that would apply. */
 export function passiveProtection(query: RulesQuery, target: ParticipantBinding, cause: LifeRuleCause, spendHandled = false): QueryAnswer<boolean> {
@@ -246,7 +272,7 @@ export function passiveProtection(query: RulesQuery, target: ParticipantBinding,
   const role = player && query.roleOf(player.actualRole);
   if (!player || !role || !isCanonicalRole(role)) return { known: false, reason: "This character's protection rules are not verified. Resolve the whole action manually." };
   for (const other of Object.values(query.game.players)) {
-    const rule = !other.isEmpty && other.participantId && other.alive ? lifeRuleOf(other.actualRole) : undefined;
+    const rule = !other.isEmpty && other.participantId && isTrulyAlive(other) ? lifeRuleOf(other.actualRole) : undefined;
     // A Storyteller-choice row only advises (the execution prompt); the gate never answers from it.
     if (!rule || rule.holder === "self" || rule.decision === "choice") continue;
     const definition = query.roleOf(other.actualRole);
@@ -267,10 +293,12 @@ export function passiveProtection(query: RulesQuery, target: ParticipantBinding,
     const functioning = query.abilityFunctions(holder);
     if (!functioning.known || functioning.value) return { known: false, reason: `${definition.name} protection is not modeled. Resolve the whole action manually.` };
   }
-  if (!player.alive) return { known: true, value: false };
+  if (!isTrulyAlive(player)) return { known: true, value: false };
   const functioning = query.abilityFunctions(target);
   const rule = lifeRuleOf(player.actualRole);
   if (!rule || rule.holder !== "self") return { known: true, value: false };
+  // BM-2: a hidden-life row never prevents the death the table sees (livesOnAfterDeath decides what is recorded).
+  if (rule.onSurvive === "hiddenLife") return { known: true, value: false };
   if (rule.earlyProtection?.(query, target, cause)) return { known: true, value: true };
   if (rule.decision === "unmodelled") {
     if (!functioning.known || functioning.value) return { known: false, reason: unmodelledDeathReason(role.name) };
@@ -376,4 +404,7 @@ export const REVIEWED_INTERACTION_ROLES: ReadonlySet<string> = new Set([
   "sailor",
   // BM-1c: the Exorcist records a source-free CHOSEN fact; the Demon's ordinary wake is suppressed by ONE shared planner rule (exorcisedDemonReason).
   "exorcist",
+  // BM-2: the Zombuul's first death is its life-rules row (a hidden life recorded by the Life planner, read by the truth readers through
+  // isTrulyAlive); its attack goes through the shared Demon death gate; its wake reads the Day's deaths from the Life Event Window.
+  "zombuul",
 ]);

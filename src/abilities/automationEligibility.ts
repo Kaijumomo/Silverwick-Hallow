@@ -1,4 +1,5 @@
 import { isCanonicalRole } from "@/data/canonical";
+import { isTrulyAlive } from "@/stores/lifeState";
 import { REVIEWED_INTERACTION_ROLES, gainedAbilityReviewed } from "./characters/passiveRules";
 import type { AbilityDescriptor, AbilityInputs, InformationConstraint } from "./semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
@@ -57,7 +58,7 @@ export function automationEligibility({ query, descriptor, actor, roleId, simula
   }
   const coverage = interactionCoverageEligibility(query);
   if (coverage.kind === "manual") return coverage;
-  if (descriptor.hooks.includes("death") && Object.values(query.game.players).filter(p => !p.isEmpty && p.alive && query.roleOf(p.actualRole)?.type === "demon").length > 1) return manual("Death interactions with multiple living Demons are not fully modeled.");
+  if (descriptor.hooks.includes("death") && Object.values(query.game.players).filter(p => !p.isEmpty && isTrulyAlive(p) && query.roleOf(p.actualRole)?.type === "demon").length > 1) return manual("Death interactions with multiple living Demons are not fully modeled.");
   // A token shown as information does not introduce that character's ability
   // into play. The delivery planner still validates the selected token against
   // the registry; actual represented characters retain the coverage gate above.

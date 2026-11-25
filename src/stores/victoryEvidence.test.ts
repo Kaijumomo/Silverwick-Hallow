@@ -85,7 +85,7 @@ describe("B8 finite temporal qualification", () => {
   it("multiple Saints or Mayors and unverified game-ending roles remain manual", () => {
     expect(saintCapture(proofGame(["saint", "saint", "imp"], "day", 2)).gameRuleFacts).toEqual([]);
     expect(mayorCapture(proofGame(["mayor", "mayor", "imp"], "day", 2)).gameRuleFacts).toEqual([]);
-    expect(victoryCoverageEligibility(proofGame(["saint", "zombuul", "chef"], "day", 2), env).kind).toBe("manual");
+    expect(victoryCoverageEligibility(proofGame(["saint", "pukka", "chef"], "day", 2), env).kind).toBe("manual");
     expect(saintCapture({ ...saint(), fabled: ["spiritofivory"] }).gameRuleFacts).toEqual([]);
   });
   it.each(VICTORY_EVIDENCE_TYPES)("generic apply cannot forge %s", type => {

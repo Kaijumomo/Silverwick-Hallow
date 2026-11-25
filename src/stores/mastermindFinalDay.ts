@@ -1,4 +1,5 @@
 import { isCanonicalRole } from "@/data/canonical";
+import { isTrulyAlive } from "./lifeState";
 import { bindingOf, createRulesQuery, type RulesQueryEnvironment } from "./rulesQuery";
 import { applyGameRuleFactPlan, planCapturedMastermindFact, planGameRuleFactTransaction } from "./gameRuleFacts";
 import { MASTERMIND_FINAL_DAY, MASTERMIND_FINAL_DAY_RULING, isMastermindFinalDayType } from "./gameRuleFactRegistry";
@@ -43,14 +44,16 @@ export function captureMastermindFinalDay(before: StorytellerLobbyRecord, after:
   const event = after.lifeEventWindow.events.find((event) => event.id === eventId);
   if (!event || event.kind !== "execution" || event.outcome !== "died" || event.moment.day !== before.day) return accepted(after);
   const executed = before.players[event.subject.playerId];
-  if (!executed || executed.isEmpty || executed.participantId !== event.subject.participantId || !executed.alive || executed.isTraveler) return accepted(after);
+  // BM-2: the TRUE life. A Zombuul's first execution only registers ("The Mastermind ... the first execution does not trigger it"); the
+  // execution that really kills them does.
+  if (!executed || executed.isEmpty || executed.participantId !== event.subject.participantId || !isTrulyAlive(executed) || executed.isTraveler) return accepted(after);
   const now = after.players[executed.id];
-  if (!now || now.participantId !== executed.participantId || now.alive) return accepted(after);
+  if (!now || now.participantId !== executed.participantId || isTrulyAlive(now)) return accepted(after);
   const isDemon = (player: STPlayerRecord) => environment.registry.get(player.actualRole)?.type === "demon";
   if (!isDemon(executed) || event.actualRoleAtEvent !== executed.actualRole) return accepted(after);
   // Another living Demon: the game would not end. The same after every consequence (a succession made the successor a Demon).
-  const livingBefore = ordinary(before).filter((player) => player.alive);
-  if (livingBefore.filter(isDemon).length !== 1 || ordinary(after).some((player) => player.alive && isDemon(player))) return accepted(after);
+  const livingBefore = ordinary(before).filter((player) => isTrulyAlive(player));
+  if (livingBefore.filter(isDemon).length !== 1 || ordinary(after).some((player) => isTrulyAlive(player) && isDemon(player))) return accepted(after);
   // Two or fewer alive with a living Demon: the game had already ended before this execution.
   if (livingBefore.length <= 2) return accepted(after);
   // A second trigger while a final day is already running (a Pit-Hag's new Demon): the running final day's lines decide.
@@ -118,7 +121,7 @@ export function reconcileMastermindFinalDay(game: StorytellerLobbyRecord): Maste
     if (!event || event.kind !== "execution" || event.outcome !== "died" || event.moment.day !== fact.recordedAt.day) return true;
     const subject = game.players[event.subject.playerId];
     // A correction of the executed player's character (they were not the Demon after all) takes it away too.
-    return !subject || subject.isEmpty || subject.participantId !== event.subject.participantId || subject.alive
+    return !subject || subject.isEmpty || subject.participantId !== event.subject.participantId || isTrulyAlive(subject)
       || (!!event.actualRoleAtEvent && subject.actualRole !== event.actualRoleAtEvent);
   });
   if (!remove.length) return accepted(game);
@@ -143,7 +146,7 @@ export function isMastermindFinalDay(game: Pick<StorytellerLobbyRecord, "phase" 
 
 /** A living, non-Traveller Demon (a Pit-Hag's new Demon, or a correction): the final day's rule no longer reads plainly. */
 const livingDemon = (game: Pick<StorytellerLobbyRecord, "players">, environment: Pick<RulesQueryEnvironment, "registry">) =>
-  Object.values(game.players).some((player) => !player.isEmpty && !!player.participantId && !player.isTraveler && player.alive && environment.registry.get(player.actualRole)?.type === "demon");
+  Object.values(game.players).some((player) => !player.isEmpty && !!player.participantId && !player.isTraveler && isTrulyAlive(player) && environment.registry.get(player.actualRole)?.type === "demon");
 
 export const MASTERMIND_TRIGGER_LINE = "The Demon was executed and died, but the Mastermind’s ability keeps the game going for one more day";
 export const MASTERMIND_TRIGGER_RULING_LINE = "The Demon was executed and died, and the Mastermind may keep the game going for one more day. Your ruling";
@@ -212,7 +215,7 @@ export function mastermindNightDeathLine(game: StorytellerLobbyRecord, environme
   if (activeMastermindFact(game)) return null;
   const players = ordinary(game);
   const isDemonRole = (role: string | undefined) => !!role && environment.registry.get(role)?.type === "demon";
-  if (players.some((player) => player.alive && isDemonRole(player.actualRole))) return null;
+  if (players.some((player) => isTrulyAlive(player) && isDemonRole(player.actualRole))) return null;
   if (!players.some((player) => player.alive && player.actualRole === "mastermind")) return null;
   const night = game.lifeEventWindow.events.some((event) => event.kind === "death" && event.moment.phase === "night"
     && isDemonRole(event.actualRoleAtEvent ?? game.players[event.subject.playerId]?.actualRole));
