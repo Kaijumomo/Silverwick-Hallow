@@ -118,7 +118,7 @@ describe("BM-2 independent check: what the table saw stays what is shown", () =>
     const kill = m.result.current.board.rad.items.find((item: any) => item.label === "Kill");
     act(() => kill.onClick());
     expect(isTrulyAlive(game().players[z]!)).toBe(true);
-    expect(useV6Ui.getState().toast).toBe(`${game().players[z]!.name} registers as dead. Announce that they died.`);
+    expect(useV6Ui.getState().toast).toBe(`${game().players[z]!.name} is recorded as dead. Announce that they died.`);
     act(() => useV6Ui.getState().set({ toast: null } as never));
     act(() => state().selectPlayer(null));
     act(() => state().selectPlayer(z));
