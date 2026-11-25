@@ -1,5 +1,5 @@
 import { interactionCoverageEligibility } from "@/abilities/automationEligibility";
-import { lifeRuleCreditedRoles, lifeRuleOf } from "@/abilities/characters/passiveRules";
+import { lifeRuleCreditedRoles, lifeRuleHidesLife, lifeRuleOf, livesOnAfterDeath } from "@/abilities/characters/passiveRules";
 import { canonicalRoles, isCanonicalRole } from "@/data/canonical";
 import { bindingOf, createRulesQuery, type RulesQueryEnvironment } from "./rulesQuery";
 import type { PlayerId, STPlayerRecord, StorytellerLobbyRecord } from "./types";
@@ -17,7 +17,9 @@ import type { PlayerId, STPlayerRecord, StorytellerLobbyRecord } from "./types";
  * Cause: "execution" (LS-2a; it was "any", which answers the same for every character built before LS-2). The Soldier and the
  * Monk protect from the Demon only, so they never advise on an execution.
  */
-export type ExecutionAdvice = { kind: "survives"; spends: boolean; note: string } | { kind: "ambiguous"; note: string };
+export type ExecutionAdvice = { kind: "survives"; spends: boolean; note: string } | { kind: "ambiguous"; note: string }
+  /** BM-2: a Zombuul whose sobriety is not recorded: a death is recorded as its first (it registers as dead but lives on). */
+  | { kind: "livesOnAssumed"; note: string };
 
 export function executionAdvice(game: StorytellerLobbyRecord, playerId: PlayerId, environment?: RulesQueryEnvironment): ExecutionAdvice | null {
   const player = game.players[playerId];
@@ -28,6 +30,13 @@ export function executionAdvice(game: StorytellerLobbyRecord, playerId: PlayerId
   if (interactionCoverageEligibility(query, [...lifeRuleCreditedRoles]).kind === "manual") return null;
   const credited = lifeRuleOf(player.actualRole)?.alsoCreditedTo ?? [];
   const outcome = query.deathOutcome({ playerId, participantId: player.participantId }, "execution");
+  if (!outcome.known && lifeRuleHidesLife(player.actualRole)) {
+    // BM-2: the Life planner keeps the hidden life when it cannot tell whether the ability works (a wrong real death would advise
+    // that the Demon is dead); the note says so, and how to correct it.
+    const lives = livesOnAfterDeath(query, { playerId, participantId: player.participantId });
+    const role = query.roleOf(player.actualRole)?.name ?? player.actualRole;
+    if (!lives.known) return { kind: "livesOnAssumed", note: `${player.name} is the ${role} and it is not recorded whether their ability works: if they die, it is recorded as their first death (they register as dead but live on). If their ability did not work, switch them to Died afterwards.` };
+  }
   if (!outcome.known || outcome.value.kind !== "survives") return null;
   // A rival whose ability is known not to work (a drunk or poisoned Pacifist) saves nobody, so it is no rival: the Fool's own ability did it.
   const rivals = credited.filter(id => Object.values(game.players).some(p => {

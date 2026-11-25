@@ -1,6 +1,7 @@
 import { captureVotingContext, useStorytellerStore } from "@/stores/storytellerStore";
 import { executionAdvice, executionChoiceFor, executionDeathKnown, executionSurvivalKnown } from "@/stores/executionAdvice";
 import { executionsAt } from "@/stores/lifeEvents";
+import { hasHiddenLife } from "@/stores/lifeState";
 import { currentVotingState } from "@/stores/voting";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import type { V6Ctx } from "../ctx";
@@ -40,6 +41,15 @@ export function advanceToNight(ctx: V6Ctx): boolean {
 }
 
 /**
+ * The result line after an execution recorded as "died". BM-2 (PO Q1 B, 2026-11-25): at the Zombuul's first death (he now registers
+ * as dead but lives on) one plain sentence is added to the same line; nothing else marks it.
+ */
+export function executedLine(name: string, playerId: string): string {
+  const after = useStorytellerStore.getState().game?.players[playerId];
+  return after && hasHiddenLife(after) ? `${name} is executed. Announce that they died. Begin the night when ready.` : `${name} is executed. Begin the night when ready.`;
+}
+
+/**
  * The dock's "Execute <name>": when the rules positively establish that the execution kills the nominee on the block (no Fool, sober
  * Sailor, Pacifist in play or unknown protection), it is recorded as "died" right away and the dock offers Begin Night, as after any
  * execution. Anything less certain returns false and the existing "Did they die?" card opens instead.
@@ -56,6 +66,6 @@ export function executeBlockIfKnown(ctx: V6Ctx): boolean {
   if (!survives && (executionAdvice(game, player.id, env) || executionChoiceFor(game, player.id, env).length || !executionDeathKnown(game, player.id, env))) return false;
   if (!voting.run({ kind: "execution", target: { playerId: player.id, participantId: player.participantId }, outcome: survives ? "survived" : "died" }, captureVotingContext())) return false;
   voting.close();
-  flash(survives ? `${player.name} is executed but survives. Begin the night when ready.` : `${player.name} is executed. Begin the night when ready.`);
+  flash(survives ? `${player.name} is executed but survives. Begin the night when ready.` : executedLine(player.name, player.id));
   return true;
 }

@@ -5,10 +5,11 @@ import { currentVotingState, virginNominationOutcome, votingContextChanged } fro
 import type { CurrentParticipantRef, StorytellerLobbyRecord } from "@/stores/types";
 import type { V6Ctx } from "../ctx";
 import { flash } from "../v6Store";
-import { advanceToNight, blockNominee } from "./advance";
+import { advanceToNight, blockNominee, executedLine } from "./advance";
 import { blockBefore, pipBackground, resultCopy, roundOrdinal, votesNeeded } from "./dayModel";
 import { nominationExtras, type ExtraAction } from "./NominationExtras";
 import { curseNotice, golemNotice } from "./curses";
+import { hasHiddenLife } from "@/stores/lifeState";
 
 /** The faces the nomination card takes. The V2 design draws pick / accuse / vote / result; the rest reuse its result face. */
 type Stage = "nominator" | "nominee" | "accuse" | "vote" | "result" | "virgin" | "context" | "finish" | "history";
@@ -178,13 +179,14 @@ function buildFinish(ctx: V6Ctx, finish: FinishFn, extra: (actions?: ExtraAction
     const done = voting.run({ kind: "execution", target: bind(player), outcome }, captureVotingContext());
     if (!done) return;
     voting.close();
-    flash(outcome === "survived" ? `${player.name} survives the execution. Begin the night when ready.` : `${player.name} is executed. Begin the night when ready.`);
+    flash(outcome === "survived" ? `${player.name} survives the execution. Begin the night when ready.` : executedLine(player.name, player.id));
   };
   if (player) {
     const env = ctx.script ? { script: ctx.script, registry: ctx.registry } : undefined;
     const choices = executionChoiceFor(game, player.id, env);
     // The question and its answers sit together like every other prompt: the heading above, the answers on one row.
-    if (!player.alive) return extra([{ label: "Record execution", onClick: record("alreadyDead") }, { label: "No execution", onClick: begin }], null, `${player.name} is already dead`);
+    // BM-2 (PO Q4): a Zombuul who registers as dead but lives on is asked "Did X die?" with the usual answers (Died is his real death).
+    if (!player.alive && !hasHiddenLife(player)) return extra([{ label: "Record execution", onClick: record("alreadyDead") }, { label: "No execution", onClick: begin }], null, `${player.name} is already dead`);
     // BM-1: when a Pacifist could matter the question is the Pacifist's own, with its own two answers.
     const pacifist = choices.length > 0;
     return extra([{ label: pacifist ? "Dies" : "Yes · died", onClick: record("died") }, { label: pacifist ? "Survives" : "No · survived", onClick: record("survived") }, { label: "No execution", onClick: begin }],

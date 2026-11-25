@@ -12,6 +12,7 @@ import type { ExecutionOutcome, STPlayerRecord } from "@/stores/types";
 import { useTargetPicker } from "@/features/abilities/abilityUi";
 import { historyId } from "@/stores/history";
 import "./voting.css";
+import { hasHiddenLife } from "@/stores/lifeState";
 
 type WithoutScope<T> = T extends VotingScope ? Omit<T, keyof VotingScope> : never;
 type Action = WithoutScope<VotingIntent>;
@@ -206,6 +207,8 @@ function FinishDay() {
   const adviceEnvironment = useMemo(() => script ? { script, registry: buildRegistry(script) } : undefined, [script]);
   const choices = player ? executionChoiceFor(game, player.id, adviceEnvironment) : [];
   const advice = player ? executionAdvice(game, player.id, adviceEnvironment) : null;
+  // BM-2 (PO Q4): a Zombuul who registers as dead but lives on is executed like a living player: "Did X die?" with the usual answers.
+  const executable = !!player && (player.alive || hasHiddenLife(player));
   const advance = () => {
     if (ui.round?.status === "voting") { setError("Complete or deliberately abandon the active vote first."); return; }
     if (staleTarget && !events.length) { setError("The selected participant changed. Choose the actual outcome again."); return; }
@@ -222,7 +225,7 @@ function FinishDay() {
     {events.length ? <><strong>Execution recorded</strong><p>{events.map(e => `${e.subject.nameAtTime}${"outcome" in e ? ` · ${e.outcome === "alreadyDead" ? "already dead" : e.outcome}` : ""}`).join("; ")}</p><button className="voting-primary" onClick={advance}>Begin Night {game.day + 1}</button></> : <>
       <details className="voting-targets"><summary>Execution outcome · {staleTarget ? "Choose again" : player?.name ?? "No execution"}</summary><div className="voting-actions"><button className="voting-secondary" aria-pressed={!target} onClick={() => setTarget(null)}>No execution</button>{game.seatOrder.map(id => game.players[id]).filter(p => p && !p.isEmpty && !p.isTraveler).map(p => <button className="voting-secondary" key={p.id} aria-pressed={target?.participantId === p.participantId} onClick={() => setTarget(bind(p))}>{p.name}</button>)}</div></details>
       {staleTarget && <p role="alert">The selected participant changed. Choose the actual outcome again.</p>}
-      {player ? <><strong>{player.alive ? `Did ${player.name} die?` : `${player.name} is already dead`}</strong>{choices.map(name => <p key={name} className="voting-note">{`${name} may apply. You decide whether an executed good player survives.`}</p>)}{advice && <p className="voting-note">{advice.note}</p>}<div className="voting-actions">{player.alive ? <><button className="voting-primary" onClick={() => record("died")}>Yes · died</button><button className="voting-secondary" onClick={() => record("survived")}>No · survived</button></> : <button className="voting-primary" onClick={() => record("alreadyDead")}>Record execution</button>}</div></> : <><p>{currentVotingState(game).block?.nominee ? "This differs from the block recommendation." : query.status === "unknown" ? "Earlier execution coverage is unknown. Confirm the actual outcome." : "No execution will be recorded."}</p><button className="voting-primary" onClick={advance}>No execution · Begin Night {game.day + 1}</button></>}
+      {player ? <><strong>{executable ? `Did ${player.name} die?` : `${player.name} is already dead`}</strong>{choices.map(name => <p key={name} className="voting-note">{`${name} may apply. You decide whether an executed good player survives.`}</p>)}{advice && <p className="voting-note">{advice.note}</p>}<div className="voting-actions">{executable ? <><button className="voting-primary" onClick={() => record("died")}>Yes · died</button><button className="voting-secondary" onClick={() => record("survived")}>No · survived</button></> : <button className="voting-primary" onClick={() => record("alreadyDead")}>Record execution</button>}</div></> : <><p>{currentVotingState(game).block?.nominee ? "This differs from the block recommendation." : query.status === "unknown" ? "Earlier execution coverage is unknown. Confirm the actual outcome." : "No execution will be recorded."}</p><button className="voting-primary" onClick={advance}>No execution · Begin Night {game.day + 1}</button></>}
     </>}
     {error && <p className="voting-error" role="alert">{error}</p>}
   </div>;

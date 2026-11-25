@@ -14,6 +14,7 @@ import { createRulesQuery } from "@/stores/rulesQuery";
 import { currentLiveMoment, isDeathEvent, lifeEventsAt } from "@/stores/lifeEvents";
 import { arrivalsAreTravelers, publicTravelerRole } from "@/stores/travelers";
 import { gainedTokenShownOf } from "@/stores/gainedAbility";
+import { hasHiddenLife } from "@/stores/lifeState";
 import type { PlayerId, RoleDef, STPlayerRecord } from "@/stores/types";
 import type { V6Ctx } from "../ctx";
 import { ICON, TEAM_COLOR, TEAM_LABEL } from "../icons";
@@ -197,7 +198,9 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
     const ringColor = deco.ringOn && deco.ringColor ? deco.ringColor : seatHere ? RING_SEAT : swapHere ? RING_SWAP : RING_DEFAULT;
     const unnamed = !p.name;
     const dimName = wizPre || unnamed;
-    const dead = !p.alive && !unrevealedDeaths.has(id);
+    // BM-2 (PO 2026-11-12 17:53Z): a Zombuul who registers as dead but lives on keeps looking alive on the Storyteller's own board (no
+    // shroud) until his real death; shown to a player (Privacy Mode), the seat shows what the table saw.
+    const dead = !p.alive && !(!privacy && hasHiddenLife(p)) && !unrevealedDeaths.has(id);
     const acting = id === litActorId;
     const glow = deco.glow ?? (acting ? seatGlow(2.6) : null);
     const dragging = drag.ghost?.id === id;
@@ -274,11 +277,13 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
   };
   const startSwap = () => { if (!sel) return; ui.set({ swapFrom: sel.id, card: false }); selectPlayer(null); };
 
+  const selLooksAlive = !!sel && (sel.alive || (!privacy && hasHiddenLife(sel)));
   let rad: Record<string, unknown> = { on: false };
   if (sel && selPos && !ui.card && !ui.swapFrom && !ctx.voting?.open && !(ui.slay && game.phase === "day") && !picking && !ui.picker && !wizPre) {
     const list: Array<{ label: string; icon: string; onClick: () => void; color: string; border: string }> = [];
     const plain = { color: "#ece6da", border: "rgba(176,186,204,.35)" };
-    if (!ended && live) list.push(sel.alive
+    // BM-2 (PO Q2, Q3): a seat that lives on offers Kill (his real death), and keeps Spend vote / Give vote (the table saw him die).
+    if (!ended && live) list.push(selLooksAlive
       ? { label: "Kill", icon: RADIAL_ICON.kill, onClick: life("die"), color: "#ff8a78", border: "rgba(232,88,74,.6)" }
       : { label: "Revive", icon: RADIAL_ICON.revive, onClick: life("revive"), color: "#8fcf95", border: "rgba(143,207,149,.55)" });
     // SV-4b: the Storyteller's own execution of a mad player (while the Cerenovus's MAD applies) or of a living Mutant; never Privacy Mode.
@@ -332,7 +337,8 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
     };
     const guard = (fn: () => void) => () => { if (segMoved.current) return; fn(); };
     const lifeEditable = live && !ended;
-    const setAlive = guard(life("revive")), setDead = guard(life("die"));
+    // BM-2: Alive on a seat that lives on is where the switch already stands, so it changes nothing (a revive would end the hidden life).
+    const setAlive = guard(selLooksAlive && !sel.alive ? () => {} : life("revive")), setDead = guard(life("die"));
     const toggleGhost = life(sel.ghostVote ? "spendVote" : "restoreVote");
 
     // A segmented control that can also be slid: dragging past the middle picks the other side.
@@ -394,9 +400,10 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
       typeColor: privacy ? NO_ROLE_RING : TEAM_COLOR[role?.type ?? "townsfolk"],
       img: hasRole ? iconUrlFor(role!) : "",
       ability: privacy ? "" : role ? role.ability ?? "" : "No character yet. Choose one below or distribute roles.",
-      dead: !sel.alive,
-      aliveBg: sel.alive ? "rgba(176,186,204,.2)" : "transparent", aliveFg: sel.alive ? "#ffb4a6" : "rgba(222,216,204,.55)",
-      deadBg: !sel.alive ? "rgba(232,138,122,.16)" : "transparent", deadFg: !sel.alive ? "#f0b0a4" : "rgba(222,216,204,.55)",
+      // BM-2 (PO Q2): the Alive / Died switch of a seat that lives on stands on Alive; Died is his real death.
+      dead: !selLooksAlive,
+      aliveBg: selLooksAlive ? "rgba(176,186,204,.2)" : "transparent", aliveFg: selLooksAlive ? "#ffb4a6" : "rgba(222,216,204,.55)",
+      deadBg: !selLooksAlive ? "rgba(232,138,122,.16)" : "transparent", deadFg: !selLooksAlive ? "#f0b0a4" : "rgba(222,216,204,.55)",
       ghostDot: sel.ghostVote ? "#e8dcc0" : "transparent",
       setAlive, setDead, toggleGhost,
       rems: marks.map((m) => {
@@ -420,7 +427,7 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
       change: () => openChoosePicker(sel.id),
       showPlayer,
       showRole: !privacy, priv: privacy, editable: lifeEditable, actions: !ended && !privacy, readOnly: ended && !privacy, showRems: !privacy,
-      statusText: privacy ? "" : `${sel.alive ? "Survived" : "Died"} · ${alignmentText(sel, role)} team`,
+      statusText: privacy ? "" : `${selLooksAlive ? "Survived" : "Died"} · ${alignmentText(sel, role)} team`,
       modeMain: ui.popMode === "main", modeMore: ui.popMode === "more",
       toMore: () => ui.set({ popMode: "more" }), toMain: () => ui.set({ popMode: "main" }),
       swap: startSwap,
@@ -428,10 +435,10 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
       travelerText: sel.isTraveler ? "Yes" : "No", travelerColor: sel.isTraveler ? "#b994d4" : "rgba(222,216,204,.6)",
       alignment: privacy ? "" : alignmentText(sel, role),
       remove: removeFromGame,
-      ...slide("life", sel.alive ? 0 : 1), ...slide("list", ui.remAll ? 1 : 0),
+      ...slide("life", selLooksAlive ? 0 : 1), ...slide("list", ui.remAll ? 1 : 0),
       lifeDown: segDown("life", (v) => (v ? setDead() : setAlive())),
       listDown: segDown("list", (v) => ui.set({ remAll: !!v })),
-      lifeThumb: sel.alive ? "rgba(176,186,204,.22)" : "rgba(150,50,45,.35)", listThumb: "rgba(176,186,204,.2)",
+      lifeThumb: selLooksAlive ? "rgba(176,186,204,.22)" : "rgba(150,50,45,.35)", listThumb: "rgba(176,186,204,.2)",
     };
   }
 

@@ -247,6 +247,9 @@ describe("BM-2a architecture: the truth readers are a pinned list", () => {
     "abilities/characters/shabaloth.ts", "abilities/characters/shared.ts", "abilities/characters/slayer.ts",
     "abilities/characters/vigormortis.ts", "abilities/characters/vortox.ts", "abilities/characters/zombuul.ts",
     "features/grimoire-v6/board/marks.ts" /* Storyteller board: the Zombuul in play for its DIED TODAY */,
+    // BM-2d: Storyteller-only screens, each also hidden or neutral in Privacy Mode: the seat looks alive, Did X die?, the result line.
+    "features/grimoire-v6/day/advance.ts", "features/grimoire-v6/day/madnessExecution.ts", "features/grimoire-v6/day/nomination.tsx",
+    "features/grimoire-v6/vm/board.tsx", "features/voting/VotingWorkspace.tsx",
     "rules/night/nightOrder.ts",
     "stores/deathResolution.ts", "stores/effectRegistry.ts" /* its name and OWN_PATH_ONLY only */, "stores/endGameEligibility.ts", "stores/gameRuleFactRegistry.ts", "stores/lifeResolution.ts",
     "stores/lifeState.ts", "stores/mastermindFinalDay.ts", "stores/rulesQuery.ts", "stores/victoryEvidence.ts",
