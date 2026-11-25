@@ -7,7 +7,7 @@ import { useSessionRuntime } from "@/firebase/storytellerSync";
 import type { VotingBinding, VotingIntent, VotingRound, VotingScope } from "@/stores/votingTypes";
 import type { LifeConfirmationToken } from "@/stores/lifeResolution";
 import { executionsAt } from "@/stores/lifeEvents";
-import { executionAdvice, executionChoiceNames } from "@/stores/executionAdvice";
+import { executionAdvice, executionChoiceFor } from "@/stores/executionAdvice";
 import type { ExecutionOutcome, STPlayerRecord } from "@/stores/types";
 import { useTargetPicker } from "@/features/abilities/abilityUi";
 import { historyId } from "@/stores/history";
@@ -202,9 +202,9 @@ function FinishDay() {
   const player = selected?.participantId === target?.participantId ? selected : null;
   const staleTarget = !!target && !player;
   const context = captureVotingContext();
-  const choices = executionChoiceNames(game.players);
   const script = useStorytellerStore(s => selectScriptById(s, game.scriptId));
   const adviceEnvironment = useMemo(() => script ? { script, registry: buildRegistry(script) } : undefined, [script]);
+  const choices = player ? executionChoiceFor(game, player.id, adviceEnvironment) : [];
   const advice = player ? executionAdvice(game, player.id, adviceEnvironment) : null;
   const advance = () => {
     if (ui.round?.status === "voting") { setError("Complete or deliberately abandon the active vote first."); return; }

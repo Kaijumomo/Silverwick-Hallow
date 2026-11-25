@@ -72,9 +72,10 @@ describe("Slice 7 guards: authority boundaries", () => {
     expect(VERIFIED_DESCRIPTORS.filter((d) => d.nightTrigger).map((d) => d.roleId)).toEqual(["ravenkeeper", "sage", "sweetheart", "barber"]);
   });
 
-  it("SOL-10F-S7-F2: independent Storyteller facts -- declared only by the Fortune Teller and (LS-2c) the Devil's Advocate, only storytellerFact types, guarded generically", () => {
+  it("SOL-10F-S7-F2: independent Storyteller facts -- declared only by the Fortune Teller, (LS-2c) the Devil's Advocate and (BM-1c) the Exorcist, only storytellerFact types, guarded generically", () => {
+    // BM-1c: the Exorcist's CHOSEN is recorded the same way (a drunk Exorcist's pick still counts).
     // LS-2c: the Devil's Advocate's remembered choice is recorded even when it is drunk or poisoned ("whether or not that player was saved").
-    expect(VERIFIED_DESCRIPTORS.filter((d) => d.independentFacts?.length).map((d) => [d.roleId, d.independentFacts])).toEqual([["fortuneteller", ["fortuneTellerRedHerring"]], ["devilsadvocate", ["devilsAdvocateChoice"]]]);
+    expect(VERIFIED_DESCRIPTORS.filter((d) => d.independentFacts?.length).map((d) => [d.roleId, d.independentFacts])).toEqual([["fortuneteller", ["fortuneTellerRedHerring"]], ["devilsadvocate", ["devilsAdvocateChoice"]], ["exorcist", ["exorcistChosen"]]]);
     for (const d of VERIFIED_DESCRIPTORS) for (const type of d.independentFacts ?? []) expect(effectSemanticsOf(type), type).toBe("storytellerFact");
     const coordinator = read(join(SRC, "stores/abilityResolution.ts"));
     // The exception is generic (no character named) and keeps every narrowing condition.

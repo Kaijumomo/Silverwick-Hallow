@@ -3,6 +3,8 @@ import { PhilosopherNightAction } from "./PhilosopherNightAction";
 import { DreamerNightAction } from "./DreamerNightAction";
 import { CerenovusResult } from "./CerenovusResult";
 import { PitHagResult } from "./PitHagResult";
+import { SailorResult } from "./SailorResult";
+import { ExorcistResult } from "./ExorcistResult";
 import { PitHagArbitrary } from "./PitHagArbitrary";
 import { EvilTwinNightAction } from "./EvilTwinNightAction";
 import { Fragment, useRef, useState, type ReactNode, type RefObject } from "react";
@@ -174,11 +176,24 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
             <button className="gv-choice-answer" type="button" onClick={() => engine.answerTapRuling(true)}>Another Player Dies</button>
           </div>
         </div>);
+      } else
+      // BM-1b: the Sailor chose another player: who is drunk until dusk? Two answers, the two names, nothing pre-selected.
+      if (held.kind === "sailor") {
+        rows.push(<div key="tap-ruling" className="gv-choice">
+          <hr className="gv-choice-divider" />
+          <ChoicePrompt text="Who is drunk until dusk?"
+            action={<button className="gv-choice-pill is-small" type="button" onClick={() => engine.answerTapRuling(null)}>Choose again</button>} />
+          <div className="gv-choice-slots">{slotOf(current.playerId)}<ChoiceSwapIcon />{slotOf(held.target.playerId)}</div>
+          <div className="gv-choice-actions" role="group" aria-label="Your ruling">
+            <button className="gv-choice-answer" type="button" onClick={() => engine.answerTapRuling(false)}>{nameOf(current.playerId)}</button>
+            <button className="gv-choice-answer" type="button" onClick={() => engine.answerTapRuling(true)}>{nameOf(held.target.playerId)}</button>
+          </div>
+        </div>);
       } else rows.push(<div key="tap-ruling" className="gv-choice">
         <hr className="gv-choice-divider" />
         <ChoicePrompt text={`Does ${nameOf(held.target.playerId)} register as ${demon ? "a Demon" : "an Outsider"}?`}
           action={<button className="gv-choice-pill is-small" type="button" onClick={() => engine.answerTapRuling(null)}>Choose again</button>} />
-        <div className="gv-choice-slots">{demon ? <>{slotOf(current.playerId)}<ChoiceSwapIcon />{slotOf(held.target.playerId)}</> : slotOf(held.target.playerId)}</div>
+        <div className="gv-choice-slots">{demon && current.effectiveRoleId === "snakecharmer" ? <>{slotOf(current.playerId)}<ChoiceSwapIcon />{slotOf(held.target.playerId)}</> : slotOf(held.target.playerId)}</div>
         <div className="gv-choice-actions" role="group" aria-label="Your ruling">
           <button className="gv-choice-answer" type="button" onClick={() => engine.answerTapRuling(true)}>Yes</button>
           <button className="gv-choice-answer" type="button" onClick={() => engine.answerTapRuling(false)}>No</button>
@@ -223,6 +238,14 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
       // SV-4a: the Cerenovus's choice is tapped on the board; the card shows what was chosen and the Wake row with the two reveal tokens.
       if (current.effectiveRoleId === "cerenovus" && !current.gainedFrom && engine.ability?.kind === "guided" && (engine.eligible || done)) {
         rows.push(<CerenovusResult key={`cerenovus:${current.stepKey}`} game={game} registry={registry} query={engine.query} step={current} done={done} choice={engine.cerenovusChoice} />);
+      }
+      // BM-1b: the Sailor's choice is tapped on the board; the card shows who is drunk until dusk.
+      if (current.effectiveRoleId === "sailor" && !current.gainedFrom && engine.ability?.kind === "guided") {
+        rows.push(<SailorResult key={`sailor:${current.stepKey}`} game={game} registry={registry} query={engine.query} step={current} done={done} />);
+      }
+      // BM-1c: the Exorcist's choice is tapped on the board; the card shows who was chosen and, when the Demon was told, the Wake row.
+      if (current.effectiveRoleId === "exorcist" && !current.gainedFrom && engine.ability?.kind === "guided") {
+        rows.push(<ExorcistResult key={`exorcist:${current.stepKey}`} game={game} registry={registry} query={engine.query} step={current} done={done} />);
       }
       // PH-a/PH-b: the Pit-Hag's choice is tapped on the board; the card shows what changed and the Wake row (YOU ARE, the new character, alignment).
       if (current.effectiveRoleId === "pithag" && !current.gainedFrom && engine.ability?.kind === "guided") {

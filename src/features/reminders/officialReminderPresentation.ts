@@ -31,6 +31,8 @@ const EFFECT_TOKENS = [
   { source: "shabaloth", type: "shabalothChosen", label: "Dead" },
   { source: "shabaloth", type: "shabalothAlive", label: "Alive" },
   { source: "devilsadvocate", type: "survivesExecution", label: "Survives Execution" },
+  // BM-1b: the Sailor's drunkenness, on the Sailor or on the player they chose.
+  { source: "sailor", type: "drunk", label: "Drunk" },
   // SV-1b: the Sweetheart's lasting drunkenness.
   { source: "sweetheart", type: "drunk", label: "Drunk" },
   // SV-2a: the Snake Charmer's permanent poison on the old Demon.
@@ -45,6 +47,8 @@ const EFFECT_TOKENS = [
   { source: "juggler", type: "jugglerGuess", label: "Correct" },
   // SV-5g: the Mathematician's ABNORMAL mark. Source-free like the TWIN: the app or the Storyteller places it, never a character.
   { source: "mathematician", type: "abnormal", label: "Abnormal" },
+  // BM-1c: the Exorcist's CHOSEN. Source-free like the TWIN: the Exorcist is a parameter, so a drunk Exorcist's pick is drawn too.
+  { source: "exorcist", type: "exorcistChosen", label: "Chosen" },
 ] as const;
 
 export function officialEffectPresentation(player: Pick<STPlayerRecord, "effects">, context?: { query: RulesQuery; target: ParticipantBinding }): {
@@ -56,7 +60,7 @@ export function officialEffectPresentation(player: Pick<STPlayerRecord, "effects
   for (const effect of player.effects) {
     if (!isEffectActive(effect) && !(context && effect.state === "suppressed")) continue;
     const mapping = EFFECT_TOKENS.find(item => item.type === effect.type &&
-      (item.type === "fortuneTellerRedHerring" || item.type === "twin" || item.type === "abnormal" || item.source === effect.sourceCharacter));
+      (item.type === "fortuneTellerRedHerring" || item.type === "twin" || item.type === "abnormal" || item.type === "exorcistChosen" || item.source === effect.sourceCharacter));
     if (!mapping) { remaining.push(effect); continue; }
     if (effect.type === "jugglerGuess" && !(effect.parameters?.correct?.kind === "boolean" && effect.parameters.correct.value)) continue;
     const sourceRole = context?.query.roleOf(mapping.source);

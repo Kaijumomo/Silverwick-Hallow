@@ -95,12 +95,12 @@ describe("Golem nomination notice", () => {
     expect(golemNotice(ctxOf(proofGame(roles, "night", 2)), ref(g, "p0"), ref(g, "p1"))).toBeNull();
   });
 
-  it("LS-1: a Golem nominating a Sailor stays a Storyteller decision (the Sailor's drunk choice is not modelled): no automatic result", () => {
+  it("BM-1: a Golem nominating a sober, healthy Sailor is certain: the Sailor cannot die, so only the nomination is spent", () => {
     const g = patchPlayer(proofGame(roles, "day", 2), "p1", { actualRole: "sailor" });
     const notice = golemNotice(ctxOf(g), ref(g, "p0"), ref(g, "p1"));
-    expect(notice?.auto).toBeUndefined();
+    expect(notice?.auto).toBeTypeOf("function");
     const inRound = golemNotice(ctxOf(g), ref(g, "p0"), ref(g, "p1"), true);
-    expect(inRound?.auto).toBeUndefined();
-    expect(inRound?.actions).toHaveLength(2);
+    expect(inRound?.auto).toBeTypeOf("function");
+    expect(inRound?.actions).toHaveLength(0);
   });
 });

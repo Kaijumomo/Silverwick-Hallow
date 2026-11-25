@@ -97,7 +97,7 @@ export function golemNotice(
   const demon = query.registersAsType(targetBinding, "demon", "golem");
   if (demon.known && demon.value) return certain(`${target.name} is the Demon: nothing happens. This is the Golem's one nomination.`, spendIntents, spendDone);
   if (!demon.known) return { note: inRound ? `Does ${target.name} die? They may register as the Demon (${demon.reason}).` : "", actions: inRound ? [kill(`${target.name} dies`), spend(`${target.name} survives`)] : [] };
-  // A life rule whose holder is not yet reviewed (the Sailor's drunk choice is not modelled) leaves protection to the Storyteller, as before LS-1.
+  // A life rule whose holder is not yet reviewed (a Sailor is reviewed now; a character outside the reviewed list) leaves protection to the Storyteller, as before LS-1.
   const rosterManual = lifeRuleNeedsRosterReview(target.actualRole) ? interactionCoverageEligibility(query) : null;
   const safe = rosterManual?.kind === "manual" ? { known: false as const, reason: rosterManual.reason } : query.protectedFrom(targetBinding, "any");
   if (safe.known && safe.value) return certain(`${target.name} cannot die right now: they are protected. Nothing happens, but this is the Golem's one nomination.`, spendIntents, spendDone);

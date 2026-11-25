@@ -370,4 +370,10 @@ export const REVIEWED_INTERACTION_ROLES: ReadonlySet<string> = new Set([
   // Information-only characters (Sects & Violets / Bad Moon Rising): each only reads game state and changes none, so it has no
   // passive effect on another character's ability. Their own answers stay with the Storyteller (REVIEWED_MANUAL, classification.ts).
   "clockmaker", "dreamer", "mathematician", "flowergirl", "savant", "seamstress", "artist", "juggler", "mutant", "chambermaid",
+  // BM-1a: the Pacifist has no night step; its Storyteller-choice row only decides whether the execution prompt asks (executionChoiceFor).
+  "pacifist",
+  // BM-1b: the Sailor's nightly DRUNK is one sourced drunk Effect read through the shared impairment query; "can't die" is its life-rules row.
+  "sailor",
+  // BM-1c: the Exorcist records a source-free CHOSEN fact; the Demon's ordinary wake is suppressed by ONE shared planner rule (exorcisedDemonReason).
+  "exorcist",
 ]);

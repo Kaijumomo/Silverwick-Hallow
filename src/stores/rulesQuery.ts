@@ -1,6 +1,6 @@
 import { isCanonicalRole } from "@/data/canonical";
 import { causeBypassesEffectProtection, drunksGainedCharacter, isNeighbourPoisoner, lifeRuleReadsSeating, observerRegistrationDecision, passiveProtection, passiveInformationModifiers, passiveRegistrationOptions, survivesFirstDeath, type LifeRuleCause } from "@/abilities/characters/passiveRules";
-import { isInnkeeperSelfEffect, isPoisonerSelfEffect } from "@/abilities/characters/poisonerRules";
+import { isInnkeeperSelfEffect, isPoisonerSelfEffect, isSailorSelfEffect } from "@/abilities/characters/poisonerRules";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { activeModifiers, gateEvaluation, type HookScope, type ModifierDefinition, type ModifierGate } from "@/abilities/modifiers";
 import { resolveAbilitySemantics, type AbilitySemanticsRegistry } from "@/abilities/semantics";
@@ -112,6 +112,10 @@ export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>
   /** SV-5g: the Mathematician's ABNORMAL mark on a player whose ability worked abnormally since dawn (stores/abnormalMarks.ts). A recorded
    * Storyteller fact with no source: the Mathematician's Night step counts the holders, and it expires at dawn. */
   abnormal: "storytellerFact",
+  /** BM-1c: the Exorcist's CHOSEN on the player it chose last night (no source; the Exorcist is a participant parameter). A recorded
+   * Storyteller fact: it blocks choosing the same player two nights running and says whether the Demon was told (stores/abilityResolution
+   * reads it through exorcisedDemonReason). It moves when the Exorcist chooses again. */
+  exorcistChosen: "storytellerFact",
 };
 export const effectSemanticsOf = (type: string): EffectSemantics | undefined =>
   Object.prototype.hasOwnProperty.call(APPROVED_EFFECT_SEMANTICS, type) ? APPROVED_EFFECT_SEMANTICS[type] : undefined;
@@ -315,7 +319,7 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     // The character-domain self-effect exception is only a query overlay;
     // it never rewrites stored applicability or solves other source cycles.
     const sourceRole = sourceCharacter ? environment.registry.get(sourceCharacter) : undefined;
-    const selfPoison = isPoisonerSelfEffect(holder, effect, sourceRole) || isInnkeeperSelfEffect(holder, effect, sourceRole);
+    const selfPoison = isPoisonerSelfEffect(holder, effect, sourceRole) || isInnkeeperSelfEffect(holder, effect, sourceRole) || isSailorSelfEffect(holder, effect, sourceRole);
     const functioning = functions(selfPoison
       ? { ...sourcePlayer, effects: sourcePlayer.effects.filter(candidate => candidate.id !== effect.id) }
       : sourcePlayer, next);
