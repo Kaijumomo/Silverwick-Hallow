@@ -1,4 +1,4 @@
-import { livesOnAfterDeath, mayorBounceApplies, survivesFirstDeath, type LifeRuleCause } from "./passiveRules";
+import { lifeRuleHidesLife, livesOnAfterDeath, mayorBounceApplies, survivesFirstDeath, type LifeRuleCause } from "./passiveRules";
 import { isTrulyAlive } from "@/stores/lifeState";
 import type { AbilityEvaluation, AbilityEvaluationContext, AbilityInputRequirement, AbilityInputs, AbilityInputValue } from "../semantics";
 import type { AbilityOperation, AbilityOutcome, ParticipantBinding } from "@/stores/abilityResolution";
@@ -208,13 +208,17 @@ export function deathAttempt(
         label: `${nameOf(context, target)} does not die from this${attempt?.label ? ` (${attempt.label})` : ""} -- deaths are arbitrary tonight (Yes: they do not die)` },
     };
   }
+  // BM-2 (independent check S2): a real death of a hidden-life holder (an Assassin's kill, an impaired Zombuul) carries `livesOn: false`,
+  // so the Life planner, which reads the rules without the cause, never gives back the hidden life the cause took away.
+  const hidesLife = lifeRuleHidesLife(query.participant(target)?.actualRole ?? "");
+  const dies = (livesOn: boolean): DeathDecision => livesOn ? { kind: "dies", livesOn: true } : hidesLife ? { kind: "dies", livesOn: false } : { kind: "dies" };
   const answer = query.deathOutcome(target, cause);
   if (answer.known) return answer.value.kind === "survives" ? (answer.value.spends ? { kind: "survives", spend: target } : { kind: "survives" })
-    : answer.value.livesOn ? { kind: "dies", livesOn: true } : { kind: "dies" };
+    : dies(!!answer.value.livesOn);
   // BM-2: a Zombuul's first death whose ability may or may not work, with every protection settled: ask exactly that, never guess.
   const firstDeath = (): DeathDecision => {
     const lives = livesOnAfterDeath(query, target, cause);
-    if (lives.known) return lives.value ? { kind: "dies", livesOn: true } : { kind: "dies" };
+    if (lives.known) return dies(lives.value);
     const livesId = livesOnJudgmentId(cause, target, query.protectionDependencyStamp(target, cause), attempt);
     const ruled = answerOf(context.judgments, livesId, "boolean");
     if (ruled) return { kind: "dies", livesOn: ruled.value };

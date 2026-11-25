@@ -11,7 +11,7 @@ import { useStorytellerStore } from "@/stores/storytellerStore";
 import { useShellStore } from "@/stores/shellStore";
 import { litActorIdOf } from "@/features/grimoire/seatTap";
 import { createRulesQuery } from "@/stores/rulesQuery";
-import { currentLiveMoment, isDeathEvent, lifeEventsAt } from "@/stores/lifeEvents";
+import { changedTableLife, currentLiveMoment, isDeathEvent, lifeEventsAt } from "@/stores/lifeEvents";
 import { arrivalsAreTravelers, publicTravelerRole } from "@/stores/travelers";
 import { gainedTokenShownOf } from "@/stores/gainedAbility";
 import { hasHiddenLife } from "@/stores/lifeState";
@@ -156,6 +156,7 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
     const moment = currentLiveMoment(game);
     const tonight = moment ? lifeEventsAt(game, moment, isDeathEvent) : null;
     for (const event of tonight ? (tonight.status === "known" ? tonight.events : tonight.recorded) : []) {
+      if (!changedTableLife(game, event)) continue;   // BM-2: a player who already registered as dead keeps the look the table saw
       const victim = Object.values(game.players).find((q) => q.participantId === event.subject.participantId);
       if (victim) unrevealedDeaths.add(victim.id);
     }

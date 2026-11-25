@@ -1,7 +1,7 @@
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { iconUrlFor } from "@/data/iconUrl";
 import { nightSheetIconUrl, nightSheetIdOfStep } from "@/data/nightSheetIcon";
-import { lifeEventsAt } from "@/stores/lifeEvents";
+import { changedTableLife, lifeEventsAt } from "@/stores/lifeEvents";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import type { NightStep } from "@/rules/night/nightOrder";
 import { stepResolved } from "@/features/nightOrder/nightWork";
@@ -44,7 +44,8 @@ export function duskText(day: number): string {
 
 /** Names of the players recorded as dying tonight, or null when the Night's deaths cannot be known from the record. */
 export function nightDeaths(game: StorytellerLobbyRecord): string[] | null {
-  const deaths = lifeEventsAt(game, { phase: "night", day: game.day }, (event) => event.kind === "death");
+  // BM-2: a player who already registered as dead (the Zombuul's real death) is not announced at dawn: the table saw nothing change.
+  const deaths = lifeEventsAt(game, { phase: "night", day: game.day }, (event) => event.kind === "death" && changedTableLife(game, event));
   if (deaths.status !== "known") return null;
   return [...new Set(deaths.events.map((event) => event.subject.nameAtTime || game.players[event.subject.playerId]?.name || "A player"))];
 }

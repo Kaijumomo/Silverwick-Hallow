@@ -9,6 +9,7 @@ import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { applyLifePlan, hiddenLifeEffectRefusal, planLifeTransaction, type LifeTransaction } from "./lifeResolution";
 import { HIDDEN_LIFE, hasHiddenLife, isTrulyAlive, publicLifeOf } from "./lifeState";
 import { planRecordedLifeOutcome } from "./deathResolution";
+import { scarletWomanSuccession } from "@/abilities/characters/scarletWoman";
 import { projectLobbyToPublic, projectLobbyToSelfEnvelopeMap } from "./projections";
 import { StorytellerGamePersistedSchema } from "./schemas";
 import { KNOWN_EFFECT_TYPES } from "./effectRegistry";
@@ -208,6 +209,16 @@ describe("BM-2a: Undo and reload", () => {
     expect(hidden(after)).toHaveLength(1);
     expect((result as { manualReason?: string }).manualReason).toBeUndefined();
   });
+  it("independent check C2: a Zombuul who already registers as dead is not in the Scarlet Woman's count; a real death the ruling carries is ruled as one", () => {
+    // Five players register alive with him (Zombuul, Scarlet Woman, Chef, Empath, Monk; the Saint dead): the count is five.
+    const five = patchPlayer(day(["zombuul", "scarletwoman", "chef", "empath", "monk", "saint"]), "p5", { alive: false });
+    const lives = executed(five);
+    // After his first death only four register alive: his real death is a Demon death with fewer than five alive, no succession.
+    expect(scarletWomanSuccession(proofQuery(lives), bind(lives, "p0"))).toEqual({ kind: "none" });
+    // An explicit real death of a Zombuul who still registers alive (the Assassin's) is not mistaken for a first death.
+    expect(scarletWomanSuccession(proofQuery(five), bind(five, "p0"))).toEqual({ kind: "none" });
+    expect(scarletWomanSuccession(proofQuery(five), bind(five, "p0"), undefined, false)).toMatchObject({ kind: "manual" });
+  });
   it("a reloaded game keeps the hidden life (it is ordinary persisted Effect state)", () => {
     const g = executed(day());
     const parsed = StorytellerGamePersistedSchema.parse(JSON.parse(JSON.stringify(g)));
@@ -246,7 +257,9 @@ describe("BM-2a architecture: the truth readers are a pinned list", () => {
     "abilities/characters/nodashii.ts", "abilities/characters/passiveRules.ts", "abilities/characters/scarletWoman.ts",
     "abilities/characters/shabaloth.ts", "abilities/characters/shared.ts", "abilities/characters/slayer.ts",
     "abilities/characters/vigormortis.ts", "abilities/characters/vortox.ts", "abilities/characters/zombuul.ts",
+    "features/grimoire-v6/board/life.ts" /* the Kill / Died result line (refused in Privacy Mode) */,
     "features/grimoire-v6/board/marks.ts" /* Storyteller board: the Zombuul in play for its DIED TODAY */,
+    "features/grimoire-v6/night/useNightEngine.tsx" /* the Pit-Hag's arbitrary Kill on a seat that lives on (refused in Privacy Mode) */,
     // BM-2d: Storyteller-only screens, each also hidden or neutral in Privacy Mode: the seat looks alive, Did X die?, the result line.
     "features/grimoire-v6/day/advance.ts", "features/grimoire-v6/day/madnessExecution.ts", "features/grimoire-v6/day/nomination.tsx",
     "features/grimoire-v6/vm/board.tsx", "features/voting/VotingWorkspace.tsx",

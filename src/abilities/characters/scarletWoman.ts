@@ -14,7 +14,8 @@ export type ScarletWomanSuccession = { kind: "none" }
  * Evaluate only the snapshot immediately BEFORE the actual death. This is
  * an ephemeral character ruling, not a Life writer or a persisted trigger.
  * https://wiki.bloodontheclocktower.com/Scarlet_Woman */
-export function scarletWomanSuccession(query: RulesQuery, target: ParticipantBinding, interaction?: "slayer"): ScarletWomanSuccession {
+/** `livesOn` (BM-2): the death's own ruling on a first death, when it carries one (an Assassin's kill is real); absent, the rules decide. */
+export function scarletWomanSuccession(query: RulesQuery, target: ParticipantBinding, interaction?: "slayer", livesOn?: boolean): ScarletWomanSuccession {
   const manual = (reason: string): ScarletWomanSuccession => ({ kind: "manual", reason });
   const dying = query.participant(target);
   if (!dying) return manual("The dying participant changed. Resolve the entire action manually.");
@@ -25,13 +26,14 @@ export function scarletWomanSuccession(query: RulesQuery, target: ParticipantBin
   // transfer the real Demon's role.
   const dyingRole = query.roleOf(dying.actualRole);
   if (interaction === "slayer" && dyingRole?.id === "recluse" && isCanonicalRole(dyingRole)) return { kind: "none" };
-  // The count is the table's, with the dying player (alive until this death, even when only in secret).
-  const living = Object.values(query.game.players).filter(p => !p.isEmpty && p.participantId && (p.alive || p.id === dying.id) && !p.isTraveler);
+  // The count is the table's (players who register as alive), with the dying player when the table still saw them alive (independent
+  // check C2: a Zombuul who already registers as dead is not counted).
+  const living = Object.values(query.game.players).filter(p => !p.isEmpty && p.participantId && (p.alive || (p.id === dying.id && dying.alive)) && !p.isTraveler);
   if (living.length < 5) return { kind: "none" };
   const women = living.filter(p => p.actualRole === "scarletwoman");
   if (!women.length) return { kind: "none" };
   // BM-2 (PO 2026-11-12 17:22Z): the Zombuul's first death only registers: no Demon dies, so the Scarlet Woman stays a Minion.
-  const first = livesOnAfterDeath(query, target);
+  const first = livesOn !== undefined ? { known: true as const, value: livesOn } : livesOnAfterDeath(query, target);
   if (!first.known) return manual(first.reason);
   if (first.value) return { kind: "none" };
   const registered = query.registersAsType(target, "demon", "scarletwoman");

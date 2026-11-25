@@ -7,6 +7,7 @@ import { captureCharacterActionContext, useStorytellerStore } from "@/stores/sto
 import { bureaucratActionEligibility } from "@/stores/voting";
 import { useShellStore } from "@/stores/shellStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
+import { hasHiddenLife } from "@/stores/lifeState";
 import { captureFingerprint, planAbilityResolution, type ParticipantBinding } from "@/stores/abilityResolution";
 import { getNightActionCorrection } from "@/stores/nightActionCorrection";
 import { travelerArrivalStepKey } from "@/stores/nightProgress";
@@ -513,7 +514,8 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     const name = player?.name || `Seat ${(player?.seat ?? 0) + 1}`;
     const store = useStorytellerStore.getState();
     if (arbitraryMode === "kill") {
-      if (!player?.alive) { setError(`${name} is already dead.`); return; }
+      // BM-2: a player who registers as dead but secretly lives (the Zombuul) can still be killed for real.
+      if (!player || (!player.alive && !hasHiddenLife(player))) { setError(`${name} is already dead.`); return; }
       const result = store.recordDeath(target.playerId, { provenance: { sourcePlayer: pitHagSource.playerId, sourceCharacter: PIT_HAG_SOURCE } }, actionContext);
       setError(result.ok ? null : result.message);
       return;

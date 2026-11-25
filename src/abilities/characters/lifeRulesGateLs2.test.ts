@@ -13,7 +13,7 @@ import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { EffectRecord, StorytellerLobbyRecord } from "@/stores/types";
 import { bind, impair, patchPlayer, pick, plan, planned, proofGame, proofQuery, proofRegistry, request } from "@/test/proofFixtures";
 import { LIFE_RULES, lifeRuleOf, lifeRuleStops, passiveProtection, survivesFirstDeath } from "./passiveRules";
-import { deathAttempt, protectionJudgmentId } from "./shared";
+import { deathAttempt, deathOf, protectionJudgmentId } from "./shared";
 
 // ---- Frozen copy of the LS-1 gate (13855e9) -------------------------------------------------------------------------------
 type LegacyRule = { holder: "self" | "neighbours"; duration: "permanent" | "once"; needsFunctioning: boolean; causes: "demon" | "any";
@@ -255,6 +255,10 @@ describe("LS-2a: the assassin cause goes around every prevention", () => {
   });
 
   it("BM-2a: the Assassin kills a Zombuul for real (no hidden life)", () => {
-    expect(assassinate(base("zombuul"), "p1")).toEqual({ kind: "dies" });
+    // BM-2 independent check S2: the gate carries the ruling, so the Life planner (which reads the rules without the cause) keeps no life.
+    const g = base("zombuul");
+    const decision = assassinate(g, "p1");
+    expect(decision).toEqual({ kind: "dies", livesOn: false });
+    expect(deathOf(bind(g, "p1"), decision as Extract<typeof decision, { kind: "dies" }>)).toEqual({ kind: "death", target: bind(g, "p1"), livesOn: false });
   });
 });

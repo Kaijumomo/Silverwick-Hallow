@@ -31,7 +31,7 @@ export function planRecordedLifeOutcome(
   const dying = deathIntent ? game.players[deathIntent.playerId] : undefined;
   // BM-2: a player who registers as dead but secretly lives (the Zombuul) dies for real here: succession is ruled as for any Demon.
   const ruling = dying?.participantId && isTrulyAlive(dying)
-    ? environment ? scarletWomanSuccession(createRulesQuery(game, environment), { playerId: dying.id, participantId: dying.participantId })
+    ? environment ? scarletWomanSuccession(createRulesQuery(game, environment), { playerId: dying.id, participantId: dying.participantId }, undefined, deathIntent?.livesOn)
       : { kind: "manual" as const, reason: "The character rules are unavailable." }
     : { kind: "none" as const };
   // The Life control records an observed death, not its ability/cause. At
