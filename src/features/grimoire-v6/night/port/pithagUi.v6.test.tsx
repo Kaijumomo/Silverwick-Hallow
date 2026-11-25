@@ -17,6 +17,8 @@ import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/ability
 import { useInfoShow } from "@/features/grimoire-v6/info/showStore";
 import { impair, openInStore, patchPlayer, proofGame, proofRegistry, proofScript } from "@/test/proofFixtures";
 import { deriveNightWork, unfinishedNightWork } from "@/features/nightOrder/nightWork";
+import { canonicalRoles } from "@/data/canonical";
+import { ordinaryRoleChoices } from "@/stores/roleResolution";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
@@ -177,4 +179,20 @@ it("a hand correction back to the old character ends the exemption: only the cha
   store.setState({ game: patchPlayer(game(), "p2", { actualRole: "chef", shownRole: "chef" }) });
   const work = deriveNightWork(game(), { script: proofScript, registry: proofRegistry, semantics: CANONICAL_ABILITY_SEMANTICS });
   expect(work.late.size).toBe(0);
+});
+
+// PO 2026-11-25: the Pit-Hag chooses only from the characters on the game's own script (the picker lists the script, the rule refuses the rest).
+it("a character that is not on the script is not offered and is refused if chosen: nothing changes", () => {
+  const small = { id: "small-test", name: "Small", characters: canonicalRoles(["pithag", "imp", "chef", "empath", "monk", "washerwoman"]) };
+  expect(ordinaryRoleChoices(small).map((role) => role.id).sort()).toEqual(["chef", "empath", "imp", "monk", "pithag", "washerwoman"]);
+  const g = proofGame(ROLES, "night", 2, { scriptId: small.id });
+  openInStore(g);
+  useShellStore.getState().setNightCursor({ day: g.day, stepKey: stepKey(g) });
+  function SmallGuide() { const current = store(s => s.game)!; return <ModernNightPanel game={current} script={small} visible onClose={() => {}} />; }
+  render(<StrictMode><SmallGuide /></StrictMode>);
+  tap("p2");
+  pickCharacter("savant"); // the rule refuses it (the by-hand notice or a refusal); it is never applied
+  expect(roleOf("p2")).toBe("chef");
+  expect(store.getState().undoStack).toHaveLength(0);
+  expect(game().nightProgress[`2:${stepKey(game())}`]?.status).not.toBe("done");
 });
