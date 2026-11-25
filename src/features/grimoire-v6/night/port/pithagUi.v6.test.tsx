@@ -196,3 +196,17 @@ it("a character that is not on the script is not offered and is refused if chose
   expect(store.getState().undoStack).toHaveLength(0);
   expect(game().nightProgress[`2:${stepKey(game())}`]?.status).not.toBe("done");
 });
+
+it("the Pit-Hag making itself a character whose place has passed is not owed that wake either (acts from tomorrow)", () => {
+  const g = proofGame(["pithag", "imp", "chef", "monk", "washerwoman"]);
+  openInStore(g);
+  useShellStore.getState().setNightCursor({ day: 2, stepKey: stepKey(g) });
+  render(<StrictMode><Guide /></StrictMode>);
+  tap("p0");
+  pickCharacter("poisoner");
+  expect(roleOf("p0")).toBe("poisoner");
+  const work = deriveNightWork(game(), { script: proofScript, registry: proofRegistry, semantics: CANONICAL_ABILITY_SEMANTICS });
+  const poisoner = work.steps.find((step) => step.kind === "player" && step.effectiveRoleId === "poisoner");
+  expect(poisoner).toBeTruthy();
+  expect(work.late.has(poisoner!.stepKey)).toBe(true);
+});

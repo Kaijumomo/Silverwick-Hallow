@@ -185,3 +185,13 @@ it("no Kill / Protect row when the made Demon has no Pit-Hag behind it on the re
   act(() => { store.setState({ game: { ...game(), history: game().history.map((record) => record.provenance?.sourceCharacter === "pithag" ? { ...record, provenance: undefined } : record) } as StorytellerLobbyRecord }); });
   expect(screen.queryByRole("button", { name: "Kill" })).toBeNull();
 });
+
+it("moving to another step by any route turns Kill off: a board tap never kills while no row is shown", () => {
+  makeVortox();
+  fireEvent.click(pill("Kill"));
+  expect(useTargetPicker.getState().active?.label).toBe("Choose who dies");
+  act(() => { useShellStore.getState().setNightCursor({ day: 2, stepKey: participantStepKey(game().players.p4!.participantId!, "monk") }); });
+  expect(useTargetPicker.getState().active?.label).not.toBe("Choose who dies");
+  tap("p3");
+  expect(alive("p3")).toBe(true);
+});

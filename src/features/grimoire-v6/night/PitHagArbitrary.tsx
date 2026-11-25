@@ -8,12 +8,12 @@ import { ChoicePrompt } from "../choice/ChoiceParts";
  * tap); tapping the same pill again turns it off. Kill and Protect are the Storyteller's own choices: making a Demon kills and protects
  * nobody by itself. Presentation only.
  */
-export function PitHagArbitrary({ mode, onMode }: { mode: ArbitraryMode | null; onMode: (mode: ArbitraryMode | null) => void }) {
+export function PitHagArbitrary({ mode, onMode, dawn = false }: { mode: ArbitraryMode | null; onMode: (mode: ArbitraryMode | null) => void; dawn?: boolean }) {
   const pill = (value: ArbitraryMode, label: string) =>
     <button type="button" className="gv-choice-pill is-small" aria-pressed={mode === value} onClick={() => onMode(mode === value ? null : value)}>{label}</button>;
   return <div className="gv-choice" data-pithag-arbitrary>
     <hr className="gv-choice-divider" />
-    <ChoicePrompt text="Deaths are arbitrary tonight" action={<div role="group" aria-label="Arbitrary deaths" style={{ display: "flex", gap: 8 }}>{pill("kill", "Kill")}{pill("protect", "Protect")}</div>} />
+    <ChoicePrompt text="Deaths are arbitrary tonight" action={<div role="group" aria-label="Arbitrary deaths" style={{ display: "flex", gap: 8 }}>{pill("kill", "Kill")}{!dawn && pill("protect", "Protect")}</div>} />
     {mode && <p className="gv-choice-note">{mode === "kill" ? "Tap a player on the board to kill them (a Pit-Hag attack)." : "Tap a player on the board to protect them until dawn. Tap again to take it off."}</p>}
   </div>;
 }

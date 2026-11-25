@@ -1,3 +1,4 @@
+import { PIT_HAG_SOURCE } from "@/stores/gameRuleFactRegistry";
 import { participantStepKey } from "@/stores/nightProgress";
 import type { StorytellerLobbyRecord, STPlayerRecord } from "@/stores/types";
 
@@ -51,7 +52,7 @@ export function pitHagChangeTonight(game: StorytellerLobbyRecord, pitHagParticip
   for (const record of [...game.history].reverse()) {
     if (record.category !== "role" || ("correction" in record && record.correction) || record.moment?.phase !== "night" || record.moment.day !== game.day) continue;
     const source = record.provenance?.sourceParticipant;
-    if (record.provenance?.sourceCharacter !== "pithag" || source?.kind !== "participant" || source.participantId !== pitHagParticipantId) continue;
+    if (record.provenance?.sourceCharacter !== PIT_HAG_SOURCE || source?.kind !== "participant" || source.participantId !== pitHagParticipantId) continue;
     const participant = record.participant;
     if (!participant || participant.kind !== "participant" || record.change?.kind !== "value") continue;
     const roleId = (record.change.to as { actualRole?: string }).actualRole;
@@ -67,7 +68,7 @@ export function pitHagSourceTonight(game: StorytellerLobbyRecord): { playerId: s
   for (const record of [...game.history].reverse()) {
     if (record.category !== "role" || ("correction" in record && record.correction) || record.moment?.phase !== "night" || record.moment.day !== game.day) continue;
     const source = record.provenance?.sourceParticipant;
-    if (record.provenance?.sourceCharacter !== "pithag" || source?.kind !== "participant") continue;
+    if (record.provenance?.sourceCharacter !== PIT_HAG_SOURCE || source?.kind !== "participant") continue;
     const player = Object.values(game.players).find((p) => p.participantId === source.participantId);
     if (player) return { playerId: player.id, participantId: source.participantId };
   }

@@ -117,7 +117,7 @@ export function deriveNightWork(game: StorytellerLobbyRecord, environment: Night
       : ability.trigger.kind === "notTriggered" ? [] : [step];
   });
   steps.sort((a, b) => a.order - b.order);
-  return { steps, triggered, query, late: new Set([...revivedAfterTheirTurn(game, steps), ...madeAfterTheirTurn(game, steps)]) };
+  return { steps, triggered, query, late: new Set([...revivedAfterTheirTurn(game, steps), ...madeAfterTheirTurn(game, steps, (roleId) => { const role = registry.get(roleId); return game.day === 1 ? role?.firstNight : role?.otherNight; })]) };
 }
 
 /**
@@ -140,7 +140,7 @@ export function revivedAfterTheirTurn(game: StorytellerLobbyRecord, steps: reado
  * turn). A character whose place is still ahead keeps its normal row. Read from tonight's History (the change records the Pit-Hag as its
  * source), so Undo of the change brings the row back with the character's old place.
  */
-export function madeAfterTheirTurn(game: StorytellerLobbyRecord, steps: readonly NightStep[]): Set<string> {
+export function madeAfterTheirTurn(game: StorytellerLobbyRecord, steps: readonly NightStep[], orderOf?: (roleId: string) => number | undefined): Set<string> {
   if (game.phase !== "night") return new Set();
   const hidden = new Set<string>();
   for (const record of game.history) {
@@ -153,10 +153,12 @@ export function madeAfterTheirTurn(game: StorytellerLobbyRecord, steps: readonly
     if (!made || holder?.actualRole !== made) continue; // a hand correction back to the old character ends it
     // Their turn had passed when their place in the Night order is before the Pit-Hag's own step (where the change was made).
     const pitHagStep = steps.find((step) => step.kind === "player" && step.participantId === source.participantId && step.effectiveRoleId === PIT_HAG_SOURCE);
-    if (!pitHagStep) continue;
+    // When the Pit-Hag changed ITSELF its own step is gone, so its place comes from the character's Night order.
+    const pitHagOrder = pitHagStep?.order ?? orderOf?.(PIT_HAG_SOURCE);
+    if (pitHagOrder === undefined) continue;
     for (const step of steps) {
       if (step.kind === "player" && step.participantId === participantId && step.effectiveRoleId === made && !step.gainedFrom
-        && !stepResolved(game, step) && step.order < pitHagStep.order) hidden.add(step.stepKey);
+        && !stepResolved(game, step) && step.order < pitHagOrder) hidden.add(step.stepKey);
     }
   }
   return hidden;

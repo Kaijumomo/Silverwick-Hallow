@@ -13,7 +13,8 @@ import { CERENOVUS_CHARACTER } from "@/abilities/characters/cerenovus";
 import type { WorkspaceTarget } from "@/features/abilities/AbilityWorkspace";
 import { bindingOf, pathAbility, seatedParticipants, triggerAbility, useTargetPicker, type StepAbility } from "@/features/abilities/abilityUi";
 import { runsGainedAbility } from "@/abilities/characters/passiveRules";
-import { mayorBounceOffered, subjectId } from "@/abilities/characters/shared";
+import { mayorBounceOffered, subjectId, PIT_HAG_PROTECTED } from "@/abilities/characters/shared";
+import { PIT_HAG_SOURCE } from "@/stores/gameRuleFactRegistry";
 import { MAYOR_BOUNCE } from "@/abilities/characters/imp";
 import { participantAllowed } from "@/features/abilities/RequirementInput";
 import { pendingMoonchildChoice } from "@/abilities/characters/moonchild";
@@ -506,15 +507,15 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     const store = useStorytellerStore.getState();
     if (arbitraryMode === "kill") {
       if (!player?.alive) { setError(`${name} is already dead.`); return; }
-      const result = store.recordDeath(target.playerId, { provenance: { sourcePlayer: pitHagSource.playerId, sourceCharacter: "pithag" } }, actionContext);
+      const result = store.recordDeath(target.playerId, { provenance: { sourcePlayer: pitHagSource.playerId, sourceCharacter: PIT_HAG_SOURCE } }, actionContext);
       setError(result.ok ? null : result.message);
       return;
     }
-    const held = player?.effects.find((effect) => effect.state === "active" && effect.type === "protected" && effect.sourceCharacter === "pithag");
+    const held = player?.effects.find((effect) => effect.state === "active" && effect.type === PIT_HAG_PROTECTED && effect.sourceCharacter === PIT_HAG_SOURCE);
     const result = store.resolveEffects({ intents: [held
       ? { kind: "remove" as const, target, effectId: held.id }
-      : { kind: "apply" as const, target, effect: { type: "protected", source: { playerId: pitHagSource.playerId, participantId: pitHagSource.participantId },
-        sourceCharacter: "pithag", lifetime: { kind: "untilDawn" as const } } }] }, actionContext);
+      : { kind: "apply" as const, target, effect: { type: PIT_HAG_PROTECTED, source: { playerId: pitHagSource.playerId, participantId: pitHagSource.participantId },
+        sourceCharacter: PIT_HAG_SOURCE, lifetime: { kind: "untilDawn" as const } } }] }, actionContext);
     setError(result.ok ? null : result.message);
   };
   useEffect(() => {
@@ -526,6 +527,8 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game, visible, arbitraryMode, arbitraryNight, pickNonce, current?.stepKey]);
   useEffect(() => { if (arbitraryMode && !arbitraryNight) setArbitraryMode(null); }, [arbitraryMode, arbitraryNight]);
+  // A move to another step by any route (Undo reopens a step directly) turns the pill off, so a board tap never kills without a visible row.
+  useEffect(() => { setArbitraryMode(null); }, [current?.stepKey]);
 
   // ── effects (ported from the guided Night panel) ──────────────────────────
   useEffect(() => {
