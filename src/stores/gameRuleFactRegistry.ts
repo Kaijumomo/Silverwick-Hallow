@@ -37,6 +37,8 @@ export type GameRuleFactDefinition = {
 };
 
 export const PIT_HAG_ARBITRARY_DEATHS = "pitHagArbitraryDeaths";
+/** The character id the Pit-Hag records as the source of its changes and attacks (provenance.sourceCharacter, effect.sourceCharacter). */
+export const PIT_HAG_SOURCE = "pithag";
 export const TOYMAKER_DEMON_SKIP_OCCURRED = "toymakerDemonSkipOccurred";
 export const SAINT_EXECUTION_GOOD_TEAM_LOST = "saintExecutionGoodTeamLost";
 export const SAINT_EXECUTION_EVIL_TEAM_LOST = "saintExecutionEvilTeamLost";

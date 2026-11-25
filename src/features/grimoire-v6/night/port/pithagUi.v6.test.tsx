@@ -166,3 +166,15 @@ it("a character made after its place has passed tonight is not owed a wake (acts
   const before = deriveNightWork(game(), { script: proofScript, registry: proofRegistry, semantics: CANONICAL_ABILITY_SEMANTICS });
   expect(before.late.size).toBe(0);
 });
+
+it("a hand correction back to the old character ends the exemption: only the character they now hold is judged", () => {
+  const g = proofGame(["pithag", "imp", "chef", "monk", "washerwoman"]);
+  openInStore(g);
+  useShellStore.getState().setNightCursor({ day: 2, stepKey: stepKey(g) });
+  render(<StrictMode><Guide /></StrictMode>);
+  tap("p2");
+  pickCharacter("poisoner");
+  store.setState({ game: patchPlayer(game(), "p2", { actualRole: "chef", shownRole: "chef" }) });
+  const work = deriveNightWork(game(), { script: proofScript, registry: proofRegistry, semantics: CANONICAL_ABILITY_SEMANTICS });
+  expect(work.late.size).toBe(0);
+});

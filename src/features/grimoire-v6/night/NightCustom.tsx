@@ -275,7 +275,7 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
   }
 
   // PH-c: on a night a Pit-Hag made a Demon, the Kill / Protect row sits on the Pit-Hag's card, every Demon's card and Dawn.
-  if (engine.arbitraryNight && !workspace && (pos.kind === "dawn" || current?.kind === "player" && !engine.tapRuling
+  if (engine.arbitraryNight && engine.pitHagSource && !workspace && (pos.kind === "dawn" || current?.kind === "player" && !engine.tapRuling
       && (current.effectiveRoleId === "pithag" || registry.get(current.effectiveRoleId)?.type === "demon"))) {
     rows.push(<PitHagArbitrary key="pithag-arbitrary" mode={engine.arbitraryMode} onMode={engine.setArbitraryMode} />);
   }

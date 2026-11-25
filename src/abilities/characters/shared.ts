@@ -4,6 +4,7 @@ import type { AbilityOperation, AbilityOutcome, ParticipantBinding } from "@/sto
 import type { ReminderIntent } from "@/stores/reminderResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
 import { PIT_HAG_ARBITRARY_DEATHS } from "@/stores/gameRuleFacts";
+import { PIT_HAG_SOURCE } from "@/stores/gameRuleFactRegistry";
 
 /**
  * Phase 10F Slice 7: small PURE helpers shared by the proof-character
@@ -147,7 +148,7 @@ export const arbitraryDeathJudgmentId = (cause: DeathCause, binding: Participant
  * Its Storyteller chose it before the attack ("you may choose any players to kill or to protect throughout the night"). */
 export const PIT_HAG_PROTECTED = "protected";
 export const hasPitHagProtection = (query: AbilityEvaluationContext["query"], target: ParticipantBinding): boolean =>
-  !!query.participant(target)?.effects.some((effect) => effect.state === "active" && effect.type === PIT_HAG_PROTECTED && effect.sourceCharacter === "pithag");
+  !!query.participant(target)?.effects.some((effect) => effect.state === "active" && effect.type === PIT_HAG_PROTECTED && effect.sourceCharacter === PIT_HAG_SOURCE);
 
 export type DeathDecision =
   | { kind: "dies" }

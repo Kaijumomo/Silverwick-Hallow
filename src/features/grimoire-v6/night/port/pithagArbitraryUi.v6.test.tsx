@@ -157,3 +157,31 @@ it("Privacy Mode refuses a tap that still arrives", () => {
   act(() => { onPick({ playerId: "p3", participantId: game().players.p3!.participantId! }); });
   expect(alive("p3")).toBe(true);
 });
+
+// Independent review of b6c2ec4: the two-answer ruling is only for a plain kill. The Imp killing itself (the star-pass) or another Demon,
+// and the Fang Gu's jump, have more to them than one death, so they stay with the by-hand notice and nothing is recorded.
+it("the Imp tapping itself (star-pass) is not turned into a plain death: by hand, nothing recorded", () => {
+  show(proofGame(["pithag", "vortox", "poisoner", "empath", "monk"]));
+  tap("p1"); expect(pickCharacter("imp")).toBeUndefined();
+  act(() => { useShellStore.getState().setNightCursor({ day: 2, stepKey: participantStepKey(game().players.p1!.participantId!, "imp") }); });
+  tap("p1");
+  expect(screen.queryByText(/die\?/)).toBeNull();
+  expect(alive("p1")).toBe(true);
+  expect(game().players.p2!.actualRole).toBe("poisoner");
+});
+
+it("a made Fang Gu tapping an Outsider is not turned into a plain death: by hand, nothing recorded", () => {
+  show(proofGame(["pithag", "imp", "saint", "empath", "monk"]));
+  tap("p1"); expect(pickCharacter("fanggu")).toBeUndefined();
+  act(() => { useShellStore.getState().setNightCursor({ day: 2, stepKey: participantStepKey(game().players.p1!.participantId!, "fanggu") }); });
+  tap("p2");
+  expect(screen.queryByText(/die\?/)).toBeNull();
+  expect(alive("p2")).toBe(true);
+});
+
+it("no Kill / Protect row when the made Demon has no Pit-Hag behind it on the record (an older save): nothing dead-ends the board", () => {
+  makeVortox();
+  expect(screen.getByRole("button", { name: "Kill" })).toBeInTheDocument();
+  act(() => { store.setState({ game: { ...game(), history: game().history.map((record) => record.provenance?.sourceCharacter === "pithag" ? { ...record, provenance: undefined } : record) } as StorytellerLobbyRecord }); });
+  expect(screen.queryByRole("button", { name: "Kill" })).toBeNull();
+});

@@ -340,7 +340,12 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     // PH-d: on a night a Pit-Hag made a Demon, the death gate leaves every attack to the Storyteller (the planner reports it as "unsupported":
     // a judgment never turns into automation). The attack is not run by hand in the workspace: the tap is held and asked on the card, and
     // the answer is recorded as one explicit manual resolution (the Demon's death, or the step closed with nothing happening).
-    if (!plan.ok && plan.code === "unsupported" && arbitraryNight && !successorChoice && plan.message.startsWith("Deaths tonight are arbitrary")) {
+    // Only a plain kill is asked this way: the Imp's or the Vortox's attack on another player who is not a Demon. Anything with more to it
+    // (the Imp killing itself, a Demon dying, the Fang Gu's jump, the Vigormortis' effects) goes to the by-hand notice below, never to a
+    // hand-built death that would skip the rest of the ability.
+    const plainKill = (current.effectiveRoleId === "imp" || current.effectiveRoleId === "vortox") && !!actor && target.participantId !== actor.participantId
+      && registry.get(game.players[target.playerId]?.actualRole ?? "")?.type !== "demon";
+    if (!plan.ok && plan.code === "unsupported" && arbitraryNight && plainKill && !successorChoice && plan.message.startsWith("Deaths tonight are arbitrary")) {
       useTargetPicker.getState().cancel(); setError(null);
       setTapRuling({ game, stepKey: current.stepKey, inputs, id: "arbitrary", kind: "arbitrary", target });
       return;
@@ -673,7 +678,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
 
   return {
     active, visible, work, steps, unfinished, pos, current, currentIndex, positionIndex, resolved, actor, role, ability, query,
-    eligible, direct, canTarget, question, answerQuestion, skipReason, settled, moonchildChoice, regurgitation, needed, picks, guessFor, cerenovusChoice, pitHagChoice, arbitraryNight, arbitraryMode, setArbitraryMode, inlineInformation, preparedInformation, butlerTurn, barberTurn, philosopherTurn, dreamerTurn, twinTurn, bureaucrat, manual, manualRavenkeeper, correction,
+    eligible, direct, canTarget, question, answerQuestion, skipReason, settled, moonchildChoice, regurgitation, needed, picks, guessFor, cerenovusChoice, pitHagChoice, arbitraryNight, pitHagSource, arbitraryMode, setArbitraryMode, inlineInformation, preparedInformation, butlerTurn, barberTurn, philosopherTurn, dreamerTurn, twinTurn, bureaucrat, manual, manualRavenkeeper, correction,
     workspace, setWorkspace, setPaused, error, setError, success, successorChoice, tapRuling: pendingRuling, answerTapRuling, picker, refused, owner, actionContext,
     navigate, gotoCheckpoint, prev, next, beginDay, openWorkspace, openTrigger, requireManual, finish,
   };
