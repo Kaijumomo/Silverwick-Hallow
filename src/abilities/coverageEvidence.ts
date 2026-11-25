@@ -295,6 +295,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   monk: ["src/stores/abilityResolution.test.ts", "src/features/grimoire-v6/night/nightGuide.port.test.tsx"],
   moonchild: ["src/abilities/characters/godfatherMoonchild.test.ts", "src/features/grimoire-v6/night/nightGuide.port.test.tsx"],
   sailor: ["src/abilities/characters/sailor.test.ts", "src/abilities/characters/lifeRulesTable.test.ts"],
+  exorcist: ["src/abilities/characters/exorcist.test.ts"],
   pacifist: ["src/abilities/characters/bm1Pacifist.test.ts", "src/abilities/characters/lifeRulesTable.test.ts"],
   mutant: ["src/abilities/characters/informationCharacterReview.test.ts", "src/features/grimoire-v6/day/madnessExecution.test.tsx", "src/stores/sectsAndVioletsWholeGames.test.ts"],
   nodashii: ["src/abilities/characters/nodashii.test.ts", "src/rules/night/canonicalNightOrder.test.ts", "src/stores/sectsAndVioletsWholeGames.test.ts", "src/abilities/characters/sectsAndVioletsSv6GapPairs.test.ts"],

@@ -32,6 +32,7 @@ import { MAX_RESOLUTION_ID_LENGTH, StorytellerGamePersistedSchema } from "./sche
 import { wakeIdentity } from "./wakeIdentity";
 import { gainedRoleOf } from "./gainedAbility";
 import { runsGainedAbility } from "@/abilities/characters/passiveRules";
+import { exorcisedDemonReason } from "@/abilities/characters/exorcist";
 import type { MutationContext } from "./history";
 import type {
   ExecutionOutcome,
@@ -970,6 +971,12 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
 
   const query = createRulesQuery(game, { registry: environment.registry, script: environment.script, ...(environment.semantics ? { semantics: environment.semantics } : {}),
     modifiers: environment.modifiers ?? activeModifiers(game, environment.registry) });
+  // BM-1c: the ONE shared "does not wake tonight" rule. A Demon a functioning Exorcist chose tonight does not use their ordinary night wake;
+  // no Demon's own file knows about the Exorcist. Triggered steps, dusk steps and every lasting power are other paths and never reach here.
+  if (request.invocationPath === "nightOrder" && performsActual) {
+    const exorcised = exorcisedDemonReason(query, actorBinding);
+    if (exorcised) return refuse("notApplicable", exorcised);
+  }
   const automation = automationEligibility({ query, descriptor, actor: actorBinding, roleId: request.roleId, simulated, inputs });
   if (automation.kind === "manual") return refuse("unsupported", automation.reason);
   let judgmentUsed = false;

@@ -56,8 +56,9 @@ describe("coverage level and evidence (Stage 5A-1)", () => {
     // SV-5f moved the Juggler from reviewed to guided (the night count read from the Day's recorded guesses; the CORRECT tokens drawn from them).
     // SV-5g moved the Mathematician from reviewed to guided (a wake every night: the count of ABNORMAL marks, cleared at its commit).
     // BM-1a moved the Pacifist from partial to reviewed (no night step; its prompt narrowed to when it could matter).
+    // BM-1c moved the Exorcist from generic to guided (a wake: the pick, the Storyteller's ruling, one source-free CHOSEN fact).
     // BM-1b moved the Sailor from partial to guided (a wake: the choice, the Storyteller's ruling, one sourced DRUNK Effect).
-    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 42, reviewed: 22, partial: 57, generic: 60 });
+    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 43, reviewed: 22, partial: 57, generic: 59 });
   });
 
   it("level follows the facts the gates read", () => {

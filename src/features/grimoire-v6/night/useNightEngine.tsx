@@ -1,4 +1,5 @@
 import { SAILOR_RULING_PREFIX } from "@/abilities/characters/sailor";
+import { EXORCIST_RULING_PREFIX } from "@/abilities/characters/exorcist";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { CANONICAL_ABILITY_SEMANTICS, type AbilityDescriptor, type AbilityInputValue } from "@/abilities/semantics";
 import { automationEligibility } from "@/abilities/automationEligibility";
@@ -76,6 +77,8 @@ const TAP_RULINGS = [
   { prefix: `${MAYOR_BOUNCE}:`, kind: "mayor" as const },
   // BM-1b: the Sailor chose another player: who is drunk until dusk, the Sailor or them? (true = the chosen player)
   { prefix: SAILOR_RULING_PREFIX, kind: "sailor" as const },
+  // BM-1c: the Exorcist chose a Recluse or Spy: do they register as the Demon? (the Snake Charmer's question and card)
+  { prefix: EXORCIST_RULING_PREFIX, kind: "demon" as const },
 ];
 /** PH-d: on a night the Pit-Hag made deaths arbitrary, a Demon's attack is asked as one compact question about the player tapped (kind "arbitrary"). */
 export type TapRuling = { game: StorytellerLobbyRecord; stepKey: string; inputs: Record<string, AbilityInputValue>; id: string; kind: "demon" | "outsider" | "mayor" | "arbitrary" | "sailor"; target: ParticipantBinding };
@@ -386,7 +389,8 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
       }
       openWorkspace(inputs); return;
     }
-    if (!plan.ok) { setError(plan.message); return; }
+    // BM-1c: a refused choice ("chosen last night, choose a different player") leaves the board tappable for the next pick.
+    if (!plan.ok) { setError(plan.message); if (plan.code === "illegal") setPickNonce((n) => n + 1); return; }
     const result = useStorytellerStore.getState().resolveAbility(request, semantics, actionContext);
     if (!result.ok) { setError(result.message); return; }
     finish(useStorytellerStore.getState().game!);

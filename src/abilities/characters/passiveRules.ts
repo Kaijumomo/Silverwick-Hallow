@@ -374,4 +374,6 @@ export const REVIEWED_INTERACTION_ROLES: ReadonlySet<string> = new Set([
   "pacifist",
   // BM-1b: the Sailor's nightly DRUNK is one sourced drunk Effect read through the shared impairment query; "can't die" is its life-rules row.
   "sailor",
+  // BM-1c: the Exorcist records a source-free CHOSEN fact; the Demon's ordinary wake is suppressed by ONE shared planner rule (exorcisedDemonReason).
+  "exorcist",
 ]);

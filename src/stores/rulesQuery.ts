@@ -112,6 +112,10 @@ export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>
   /** SV-5g: the Mathematician's ABNORMAL mark on a player whose ability worked abnormally since dawn (stores/abnormalMarks.ts). A recorded
    * Storyteller fact with no source: the Mathematician's Night step counts the holders, and it expires at dawn. */
   abnormal: "storytellerFact",
+  /** BM-1c: the Exorcist's CHOSEN on the player it chose last night (no source; the Exorcist is a participant parameter). A recorded
+   * Storyteller fact: it blocks choosing the same player two nights running and says whether the Demon was told (stores/abilityResolution
+   * reads it through exorcisedDemonReason). It moves when the Exorcist chooses again. */
+  exorcistChosen: "storytellerFact",
 };
 export const effectSemanticsOf = (type: string): EffectSemantics | undefined =>
   Object.prototype.hasOwnProperty.call(APPROVED_EFFECT_SEMANTICS, type) ? APPROVED_EFFECT_SEMANTICS[type] : undefined;
