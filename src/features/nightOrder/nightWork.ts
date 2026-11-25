@@ -1,6 +1,7 @@
 import type { RoleRegistry } from "@/data/roleRegistry";
 import type { AbilitySemanticsRegistry } from "@/abilities/semantics";
 import { createRulesQuery, type RulesQuery } from "@/stores/rulesQuery";
+import { PIT_HAG_SOURCE } from "@/stores/gameRuleFactRegistry";
 import { nightTriggerStepKey } from "@/stores/nightProgress";
 import { isDeathEvent, lifeEventsAt } from "@/stores/lifeEvents";
 import { wakeIdentity } from "@/stores/wakeIdentity";
@@ -116,7 +117,7 @@ export function deriveNightWork(game: StorytellerLobbyRecord, environment: Night
       : ability.trigger.kind === "notTriggered" ? [] : [step];
   });
   steps.sort((a, b) => a.order - b.order);
-  return { steps, triggered, query, late: revivedAfterTheirTurn(game, steps) };
+  return { steps, triggered, query, late: new Set([...revivedAfterTheirTurn(game, steps), ...madeAfterTheirTurn(game, steps, (roleId) => { const role = registry.get(roleId); return game.day === 1 ? role?.firstNight : role?.otherNight; })]) };
 }
 
 /**
@@ -131,6 +132,36 @@ export function revivedAfterTheirTurn(game: StorytellerLobbyRecord, steps: reado
   const passed = Math.max(-1, ...steps.filter((step) => stepResolved(game, step)).map((step) => step.order));
   return new Set(steps.filter((step) => step.kind === "player" && revived.has(step.participantId ?? "") && !stepResolved(game, step) && step.order < passed)
     .map((step) => step.stepKey));
+}
+
+/**
+ * PO decision Q4 A (2026-11-25; the Pit-Hag page is silent): a character the Pit-Hag made tonight whose place in the Night order was already
+ * behind the Storyteller acts from tomorrow night, so its row is not unfinished work tonight (as for a character brought back after its
+ * turn). A character whose place is still ahead keeps its normal row. Read from tonight's History (the change records the Pit-Hag as its
+ * source), so Undo of the change brings the row back with the character's old place.
+ */
+export function madeAfterTheirTurn(game: StorytellerLobbyRecord, steps: readonly NightStep[], orderOf?: (roleId: string) => number | undefined): Set<string> {
+  if (game.phase !== "night") return new Set();
+  const hidden = new Set<string>();
+  for (const record of game.history) {
+    if (record.category !== "role" || ("correction" in record && record.correction) || record.moment?.phase !== "night" || record.moment.day !== game.day) continue;
+    const source = record.provenance?.sourceParticipant;
+    if (record.provenance?.sourceCharacter !== PIT_HAG_SOURCE || source?.kind !== "participant" || record.participant.kind !== "participant" || record.change?.kind !== "value") continue;
+    const made = (record.change.to as { actualRole?: string }).actualRole;
+    const participantId = record.participant.participantId;
+    const holder = Object.values(game.players).find((p) => p.participantId === participantId);
+    if (!made || holder?.actualRole !== made) continue; // a hand correction back to the old character ends it
+    // Their turn had passed when their place in the Night order is before the Pit-Hag's own step (where the change was made).
+    const pitHagStep = steps.find((step) => step.kind === "player" && step.participantId === source.participantId && step.effectiveRoleId === PIT_HAG_SOURCE);
+    // When the Pit-Hag changed ITSELF its own step is gone, so its place comes from the character's Night order.
+    const pitHagOrder = pitHagStep?.order ?? orderOf?.(PIT_HAG_SOURCE);
+    if (pitHagOrder === undefined) continue;
+    for (const step of steps) {
+      if (step.kind === "player" && step.participantId === participantId && step.effectiveRoleId === made && !step.gainedFrom
+        && !stepResolved(game, step) && step.order < pitHagOrder) hidden.add(step.stepKey);
+    }
+  }
+  return hidden;
 }
 
 export const stepResolved = (game: Pick<StorytellerLobbyRecord, "nightProgress" | "day">, step: NightStep, late?: ReadonlySet<string>): boolean => {

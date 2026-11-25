@@ -108,3 +108,39 @@ describe("Pit-Hag -- one commit and Undo", () => {
     expect(store.getState().game!.players.p1!.actualRole).toBe("chef");
   });
 });
+
+describe("Pit-Hag -- PH-b/PH-c records and the arbitrary night's protection", () => {
+  beforeEach(() => store.setState({ game: null, undoStack: [], localSeq: 0 }));
+  it("the Role change records the Pit-Hag as its source (acting player and character) on its History record", () => {
+    const g = base();
+    const next = planned(hag(g, "p1", "slayer"));
+    const record = next.history.find((entry) => entry.category === "role")!;
+    expect(record.provenance).toMatchObject({ sourceCharacter: "pithag", sourceParticipant: { kind: "participant", participantId: g.players.p0!.participantId } });
+  });
+
+  it("a player the Pit-Hag protected survives a Demon's attack on an arbitrary night with no question; an unprotected one is still the Storyteller's call", () => {
+    // The Imp becomes the Vortox, the only Demon, and the night is arbitrary (two living Demons would keep every kill by hand).
+    let g = planned(hag(base(), "p2", "vortox"));
+    const attack = (target: string) => plan(g, request(g, "p2", "vortox", { target: pick(g, target) }, { withStep: true, completeStep: true }));
+    expect(attack("p4")).toMatchObject({ ok: false, code: "unsupported" });
+    openInStore(g);
+    const binding = (id: string) => ({ playerId: id, participantId: g.players[id]!.participantId! });
+    expect(store.getState().resolveEffects({ intents: [{ kind: "apply", target: binding("p4"),
+      effect: { type: "protected", source: binding("p0"), sourceCharacter: "pithag", lifetime: { kind: "untilDawn" } } }] })).toMatchObject({ ok: true });
+    g = store.getState().game!;
+    const protectedAttack = attack("p4");
+    expect(protectedAttack).toMatchObject({ ok: true });
+    // The step completes and nothing dies.
+    expect(protectedAttack.ok && protectedAttack.changed && protectedAttack.plan.game.players.p4!.alive).toBe(true);
+    expect(attack("p5")).toMatchObject({ ok: false, code: "unsupported" });
+  });
+
+  it("the same Protected marker from another source does not end the question on an arbitrary night", () => {
+    let g = planned(hag(base(), "p2", "vortox"));
+    openInStore(g);
+    expect(store.getState().resolveEffects({ intents: [{ kind: "apply", target: { playerId: "p4", participantId: g.players.p4!.participantId! },
+      effect: { type: "protected", lifetime: { kind: "manual" } } }] })).toMatchObject({ ok: true });
+    g = store.getState().game!;
+    expect(plan(g, request(g, "p2", "vortox", { target: pick(g, "p4") }, { withStep: true, completeStep: true }))).toMatchObject({ ok: false, code: "unsupported" });
+  });
+});

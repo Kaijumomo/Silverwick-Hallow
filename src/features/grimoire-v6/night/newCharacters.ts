@@ -1,3 +1,4 @@
+import { PIT_HAG_SOURCE } from "@/stores/gameRuleFactRegistry";
 import { participantStepKey } from "@/stores/nightProgress";
 import type { StorytellerLobbyRecord, STPlayerRecord } from "@/stores/types";
 
@@ -38,4 +39,38 @@ export function charactersToReveal(game: StorytellerLobbyRecord, roleId: "snakec
   }
   // The new Demon first, as the wiki wakes them (Snake Charmer); the new Fang Gu is alone.
   return out.sort((a, b) => Number(a.actualRole === roleId) - Number(b.actualRole === roleId));
+}
+
+/**
+ * PH-b (https://wiki.bloodontheclocktower.com/Pit-Hag): the player the Pit-Hag turned into a new character tonight, to be woken and
+ * shown YOU ARE, their new character and their alignment. Read from tonight's History (the role change names the Pit-Hag as its
+ * source), so nothing is stored, a reload keeps it and Undo removes it. A dead player may be changed, so life is not asked. Only a
+ * player who still holds the character they were given is returned; a later change by hand ends it.
+ */
+export function pitHagChangeTonight(game: StorytellerLobbyRecord, pitHagParticipantId: string): { player: STPlayerRecord; roleId: string } | null {
+  if (game.phase !== "night") return null;
+  for (const record of [...game.history].reverse()) {
+    if (record.category !== "role" || ("correction" in record && record.correction) || record.moment?.phase !== "night" || record.moment.day !== game.day) continue;
+    const source = record.provenance?.sourceParticipant;
+    if (record.provenance?.sourceCharacter !== PIT_HAG_SOURCE || source?.kind !== "participant" || source.participantId !== pitHagParticipantId) continue;
+    const participant = record.participant;
+    if (!participant || participant.kind !== "participant" || record.change?.kind !== "value") continue;
+    const roleId = (record.change.to as { actualRole?: string }).actualRole;
+    const player = Object.values(game.players).find((p) => p.participantId === participant.participantId);
+    if (roleId && player && player.actualRole === roleId) return { player, roleId };
+  }
+  return null;
+}
+
+/** PH-c: the Pit-Hag whose change of character tonight made the Demon (the source recorded on tonight's guided Role change), or null. */
+export function pitHagSourceTonight(game: StorytellerLobbyRecord): { playerId: string; participantId: string } | null {
+  if (game.phase !== "night") return null;
+  for (const record of [...game.history].reverse()) {
+    if (record.category !== "role" || ("correction" in record && record.correction) || record.moment?.phase !== "night" || record.moment.day !== game.day) continue;
+    const source = record.provenance?.sourceParticipant;
+    if (record.provenance?.sourceCharacter !== PIT_HAG_SOURCE || source?.kind !== "participant") continue;
+    const player = Object.values(game.players).find((p) => p.participantId === source.participantId);
+    if (player) return { playerId: player.id, participantId: source.participantId };
+  }
+  return null;
 }

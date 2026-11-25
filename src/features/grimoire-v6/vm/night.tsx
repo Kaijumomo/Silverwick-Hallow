@@ -123,7 +123,7 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
     }
     // PO 2026-11-21 (T30 cleanup): the Professor may shake their head instead, as the Seamstress does: it closes tonight's step only and
     // uses nothing. It sits at the right end of the "Tap a player" line so the card does not grow taller.
-    const notTonight = roleKey === "professor" && player && !current.gainedFrom && !resolved && !engine.skipReason && canTarget && !successorChoice
+    const notTonight = (roleKey === "professor" || roleKey === "pithag") && player && !current.gainedFrom && !resolved && !engine.skipReason && canTarget && !successorChoice
       ? {
         label: "Not Tonight",
         run: () => {

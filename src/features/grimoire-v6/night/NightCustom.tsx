@@ -2,6 +2,8 @@ import { BarberNightAction } from "@/features/nightOrder/BarberNightAction";
 import { PhilosopherNightAction } from "./PhilosopherNightAction";
 import { DreamerNightAction } from "./DreamerNightAction";
 import { CerenovusResult } from "./CerenovusResult";
+import { PitHagResult } from "./PitHagResult";
+import { PitHagArbitrary } from "./PitHagArbitrary";
 import { EvilTwinNightAction } from "./EvilTwinNightAction";
 import { Fragment, useRef, useState, type ReactNode, type RefObject } from "react";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
@@ -145,6 +147,21 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
       const slotOf = (playerId: string) => { const p = game.players[playerId]; const role = p?.actualRole ? registry.get(p.actualRole) : undefined;
         return <ChoiceSlot filled label={nameOf(playerId)} img={role ? iconUrlFor(role) : undefined} sub={role?.name ?? ""} />; };
       const demon = held.kind === "demon";
+      // PH-d: a Pit-Hag made a Demon tonight, so this attack is the Storyteller's call, asked in the Mayor card's two-answer style.
+      // The gate's question is "does not die?", so "They Die" answers No and "They Survive" answers Yes.
+      if (held.kind === "arbitrary") {
+        rows.push(<div key="tap-ruling" className="gv-choice">
+          <hr className="gv-choice-divider" />
+          <ChoicePrompt text={`Does ${nameOf(held.target.playerId)} die?`}
+            action={<button className="gv-choice-pill is-small" type="button" onClick={() => engine.answerTapRuling(null)}>Choose again</button>} />
+          <p className="gv-choice-note">Deaths are arbitrary tonight: you decide.</p>
+          <div className="gv-choice-slots">{slotOf(held.target.playerId)}</div>
+          <div className="gv-choice-actions" role="group" aria-label="Your ruling">
+            <button className="gv-choice-answer" type="button" onClick={() => engine.answerTapRuling(false)}>They Die</button>
+            <button className="gv-choice-answer" type="button" onClick={() => engine.answerTapRuling(true)}>They Survive</button>
+          </div>
+        </div>);
+      } else
       // TB: the Demon's attack landed on a working, unprotected Mayor ("another player might die instead"): two answers, no Yes / No.
       if (held.kind === "mayor") {
         rows.push(<div key="tap-ruling" className="gv-choice">
@@ -207,6 +224,10 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
       if (current.effectiveRoleId === "cerenovus" && !current.gainedFrom && engine.ability?.kind === "guided" && (engine.eligible || done)) {
         rows.push(<CerenovusResult key={`cerenovus:${current.stepKey}`} game={game} registry={registry} query={engine.query} step={current} done={done} choice={engine.cerenovusChoice} />);
       }
+      // PH-a/PH-b: the Pit-Hag's choice is tapped on the board; the card shows what changed and the Wake row (YOU ARE, the new character, alignment).
+      if (current.effectiveRoleId === "pithag" && !current.gainedFrom && engine.ability?.kind === "guided") {
+        rows.push(<PitHagResult key={`pithag:${current.stepKey}`} game={game} registry={registry} query={engine.query} step={current} done={done} choice={engine.pitHagChoice} />);
+      }
       // T30: the Godfather's first night shows the Outsiders in play on ONE screen, like the Demon's bluffs.
       if (current.effectiveRoleId === "godfather" && game.day === 1 && !current.isDeceived && !engine.settled.has(current.stepKey)) {
         const outsiders = [...new Set(Object.values(game.players).filter((p) => !p.isEmpty && !p.isTraveler && p.actualRole && registry.get(p.actualRole)?.type === "outsider").map((p) => p.actualRole!))];
@@ -251,6 +272,12 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
     if (current.stepKey.startsWith(CUSTOM_STEP_PREFIX)) {
       rows.push(<StepNotes key="notes" day={game.day} stepKey={current.stepKey} notes={game.nightProgress?.[`${game.day}:${current.stepKey}`]?.notes ?? ""} />);
     }
+  }
+
+  // PH-c: on a night a Pit-Hag made a Demon, the Kill / Protect row sits on the Pit-Hag's card, every Demon's card and Dawn.
+  if (engine.arbitraryNight && engine.pitHagSource && !workspace && (pos.kind === "dawn" || current?.kind === "player" && !engine.tapRuling
+      && (current.effectiveRoleId === "pithag" || registry.get(current.effectiveRoleId)?.type === "demon"))) {
+    rows.push(<PitHagArbitrary key="pithag-arbitrary" mode={engine.arbitraryMode} onMode={engine.setArbitraryMode} dawn={pos.kind === "dawn"} />);
   }
 
   if (workspace) {

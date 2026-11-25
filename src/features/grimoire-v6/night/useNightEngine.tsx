@@ -13,7 +13,8 @@ import { CERENOVUS_CHARACTER } from "@/abilities/characters/cerenovus";
 import type { WorkspaceTarget } from "@/features/abilities/AbilityWorkspace";
 import { bindingOf, pathAbility, seatedParticipants, triggerAbility, useTargetPicker, type StepAbility } from "@/features/abilities/abilityUi";
 import { runsGainedAbility } from "@/abilities/characters/passiveRules";
-import { mayorBounceOffered, subjectId } from "@/abilities/characters/shared";
+import { mayorBounceOffered, subjectId, PIT_HAG_PROTECTED } from "@/abilities/characters/shared";
+import { PIT_HAG_SOURCE } from "@/stores/gameRuleFactRegistry";
 import { MAYOR_BOUNCE } from "@/abilities/characters/imp";
 import { participantAllowed } from "@/features/abilities/RequirementInput";
 import { pendingMoonchildChoice } from "@/abilities/characters/moonchild";
@@ -29,18 +30,25 @@ import { activeCheckpoint, useNightPos, type NightCheckpoint } from "./nightPos"
 import { dawnFlash, nightDeaths, resolvePosition, type NightPosition } from "./nightSteps";
 import { useScoped } from "./useScoped";
 import { duskRegurgitation, regurgitate } from "./regurgitate";
+import { PIT_HAG_ARBITRARY_DEATHS } from "@/stores/gameRuleFacts";
+import { pitHagSourceTonight } from "./newCharacters";
 
 const semantics = CANONICAL_ABILITY_SEMANTICS;
 /** Characters whose whole action is tapped on the board (T30 design). Others keep the ability workspace. */
-const BOARD_ROLES = new Set(["innkeeper", "shabaloth", "gambler", "godfather", "professor", "moonchild", "vigormortis", "cerenovus"]);
+const BOARD_ROLES = new Set(["innkeeper", "shabaloth", "gambler", "godfather", "professor", "moonchild", "vigormortis", "cerenovus", "pithag"]);
 /** A player tapped on the board, then a character picked from the board's character picker (the Gambler's guess; SV-4a: the Cerenovus's
  * madness, a Townsfolk or an Outsider, tokens only, no player names). */
 const CHARACTER_PICKS: Record<string, { input: string; title: string; kicker: (target: string) => string; types?: RoleType[] }> = {
   gambler: { input: "guess", title: "What does the Gambler guess?", kicker: (target) => `The Gambler · guess ${target}’s character` },
   cerenovus: { input: CERENOVUS_CHARACTER, title: "Choose a character", kicker: () => "The Cerenovus · a Townsfolk or an Outsider", types: ["townsfolk", "outsider"] },
+  // PH-a: the Pit-Hag's player is tapped on the board, then any character on the script (Travellers and Fabled are not offered:
+  // turning a Traveller is an optional rule the app leaves by hand). Tokens only, no player names.
+  pithag: { input: "character", title: "Choose a character", kicker: () => "The Pit-Hag · what the player becomes", types: ["townsfolk", "outsider", "minion", "demon"] },
 };
 /** What the Cerenovus chose tonight, kept for the Night card's reveal row (a drunk or poisoned Cerenovus records no MAD, so the pick is also held here). */
 export type CerenovusChoice = { stepKey: string; target: ParticipantBinding; roleId: string };
+/** PH-a: what the Pit-Hag chose tonight, kept for the Night card's line when the character was already in play (nothing is recorded then). */
+export type PitHagChoice = { stepKey: string; target: ParticipantBinding; roleId: string };
 /**
  * A simple single-player choice is always tapped on the board. The BOARD_ROLES also tap a fixed count of players
  * (Innkeeper, Shabaloth) or a player then a character guess (Gambler). A needsInput the board cannot answer
@@ -66,7 +74,10 @@ const TAP_RULINGS = [
   // TB: a Demon attack on a certainly working, unprotected Mayor ("another player might die instead"): asked as soon as the Mayor is tapped.
   { prefix: `${MAYOR_BOUNCE}:`, kind: "mayor" as const },
 ];
-export type TapRuling = { game: StorytellerLobbyRecord; stepKey: string; inputs: Record<string, AbilityInputValue>; id: string; kind: "demon" | "outsider" | "mayor"; target: ParticipantBinding };
+/** PH-d: on a night the Pit-Hag made deaths arbitrary, a Demon's attack is asked as one compact question about the player tapped (kind "arbitrary"). */
+export type TapRuling = { game: StorytellerLobbyRecord; stepKey: string; inputs: Record<string, AbilityInputValue>; id: string; kind: "demon" | "outsider" | "mayor" | "arbitrary"; target: ParticipantBinding };
+/** PH-c: what a board tap does while the Pit-Hag's arbitrary-death row is on: kill the player, or protect them until dawn. */
+export type ArbitraryMode = "kill" | "protect";
 /** `replacement`: the Mayor's bounce is waiting for the player who dies instead (any living player may be tapped; a protected one is refused with the reason). */
 export type SuccessorChoice = { game: StorytellerLobbyRecord; stepKey: string; inputs: Record<string, AbilityInputValue>; id: string; eligible: Set<string>; replacement?: boolean; target?: string };
 type Success = { key: string; game: StorytellerLobbyRecord; step: NightStep };
@@ -109,6 +120,8 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   const [picks, setPicks] = useScoped<ParticipantBinding[]>(scope, EMPTY_PICKS);
   const [guessFor, setGuessFor] = useScoped<ParticipantBinding | null>(scope, null);
   const [cerenovusChoice, setCerenovusChoice] = useScoped<CerenovusChoice | null>(scope, null);
+  const [pitHagChoice, setPitHagChoice] = useScoped<PitHagChoice | null>(scope, null);
+  const [arbitraryMode, setArbitraryMode] = useScoped<ArbitraryMode | null>(scope, null);
   // A ruling the Storyteller gives BEFORE any player is tapped (the Godfather's "did an Outsider die today?"), by step.
   const [rulings, setRulings] = useScoped<Record<string, Record<string, AbilityInputValue>>>(scope, EMPTY_RULINGS);
   // A ruling belongs to the Day it was given about: it is keyed by that Day's recorded events, which are new every time the Day is replayed
@@ -240,7 +253,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     setSuccessorChoice(null); setTapRuling(null); setPicks(EMPTY_PICKS); closeGuess(); setGuessFor(null);
     useTargetPicker.getState().cancel();
     setWorkspace(null); setSuccess(null); setError(null); setPaused(false);
-    setManualAction(null);
+    setManualAction(null); setArbitraryMode(null);
   };
   const navigate = (step: NightStep) => {
     settle();
@@ -325,6 +338,19 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
       return;
     }
     const plan = planAbilityResolution(game, request, { script, registry, semantics });
+    // PH-d: on a night a Pit-Hag made a Demon, the death gate leaves every attack to the Storyteller (the planner reports it as "unsupported":
+    // a judgment never turns into automation). The attack is not run by hand in the workspace: the tap is held and asked on the card, and
+    // the answer is recorded as one explicit manual resolution (the Demon's death, or the step closed with nothing happening).
+    // Only a plain kill is asked this way: the Imp's or the Vortox's attack on another player who is not a Demon. Anything with more to it
+    // (the Imp killing itself, a Demon dying, the Fang Gu's jump, the Vigormortis' effects) goes to the by-hand notice below, never to a
+    // hand-built death that would skip the rest of the ability.
+    const plainKill = (current.effectiveRoleId === "imp" || current.effectiveRoleId === "vortox") && !!actor && target.participantId !== actor.participantId
+      && registry.get(game.players[target.playerId]?.actualRole ?? "")?.type !== "demon";
+    if (!plan.ok && plan.code === "unsupported" && arbitraryNight && plainKill && !successorChoice && plan.message.startsWith("Deaths tonight are arbitrary")) {
+      useTargetPicker.getState().cancel(); setError(null);
+      setTapRuling({ game, stepKey: current.stepKey, inputs, id: "arbitrary", kind: "arbitrary", target });
+      return;
+    }
     if (!plan.ok && plan.code === "unsupported") { stopAutomation(plan.message); return; }
     if (!plan.ok && successorChoice?.replacement && plan.code !== "needsInput") {
       // "Say they survive, pick again": a protected replacement does not die; the reason is shown and the board is tappable again.
@@ -372,6 +398,19 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     if (value === null) return;
     const fingerprint = captureFingerprint(game, current.playerId, { day: game.day, stepKey: current.stepKey });
     if (!fingerprint) { setError("This player is no longer seated."); return; }
+    // PH-d: the Storyteller's call on a Demon's attack tonight ("They Survive" is true, "They Die" is false). Survive closes the step with
+    // nothing happening; Die is the Demon's death, recorded with the step in ONE manual resolution (one Undo) that says why it is manual.
+    if (held.kind === "arbitrary") {
+      const store = useStorytellerStore.getState();
+      const result = value
+        ? store.setNightStepStatus(game.day, current.stepKey, "done", actionContext)
+        : store.resolveAbility({ mode: "manual", fingerprint, roleId: current.effectiveRoleId, completeStep: true,
+          reason: "Deaths tonight are arbitrary (a Pit-Hag made a Demon): the Storyteller decided this attack kills.",
+          outcome: { operations: [{ domain: "life", intents: [{ kind: "death", target: held.target }] }] } }, semantics, actionContext);
+      if (!result.ok) { setError(result.message); return; }
+      finish(useStorytellerStore.getState().game!);
+      return;
+    }
     const inputs = { ...held.inputs, [held.id]: { kind: "boolean" as const, value } };
     const request = { mode: "guided" as const, invocationPath: "nightOrder" as const, fingerprint, roleId: current.effectiveRoleId, inputs, completeStep: true };
     const plan = planAbilityResolution(game, request, { script, registry, semantics });
@@ -433,12 +472,15 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
         const inputs: Record<string, AbilityInputValue> = { [inputId]: { kind: "participant", participants: [target] }, [pick.input]: { kind: "character", roleIds: [roleId] } };
         const request = { mode: "guided" as const, invocationPath: "nightOrder" as const, fingerprint, roleId: base.effectiveRoleId, inputs, completeStep: true };
         const plan = planAbilityResolution(game, request, { script, registry, semantics });
+        // PH-a: a Traveller, a concealed identity or an unofficial character is the Storyteller's, shown as the by-hand notice (never the workspace).
+        if (!plan.ok && plan.code === "unsupported" && base.effectiveRoleId === "pithag") { closeGuess(); setGuessFor(null); stopAutomation(plan.message); return undefined; }
         if (!plan.ok && plan.code === "needsInput") { closeGuess(); setGuessFor(null); openWorkspace(inputs); return undefined; }
         if (!plan.ok) return plan.message;
         const result = useStorytellerStore.getState().resolveAbility(request, semantics, actionContext);
         if (!result.ok) return result.message;
         closeGuess(); setGuessFor(null);
         if (base.effectiveRoleId === "cerenovus") setCerenovusChoice({ stepKey: base.stepKey, target, roleId });
+        if (base.effectiveRoleId === "pithag") setPitHagChoice({ stepKey: base.stepKey, target, roleId });
         finish(useStorytellerStore.getState().game!);
         return undefined;
       } } });
@@ -448,6 +490,45 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
       stop(); setGuessFor(null);
     });
   };
+
+  // PH-c: the arbitrary night. While a Pit-Hag has made a Demon tonight, the Storyteller may kill or protect any player: the row's two pills
+  // choose what the next board tap does (the engine owns every board tap, so nothing competes for it). Kill records a death sourced to the
+  // Pit-Hag through the life command; Protect places the generic Protected Effect (Pit-Hag source, until dawn) that the shared death gate
+  // honours; a second tap on a protected player takes it off.
+  const arbitraryFact = query?.gameRuleFact(PIT_HAG_ARBITRARY_DEATHS);
+  const arbitraryNight = game.phase === "night" && !!arbitraryFact?.known && !!arbitraryFact.value;
+  const pitHagSource = arbitraryNight ? pitHagSourceTonight(game) : null;
+  const arbitraryTap = (target: ParticipantBinding) => {
+    setPickNonce((n) => n + 1);
+    const liveGame = useStorytellerStore.getState().game;
+    if (!liveGame || liveGame !== game || !live.current.visible || usePrivacyStore.getState().enabled || !pitHagSource || !arbitraryMode) return;
+    const player = game.players[target.playerId];
+    const name = player?.name || `Seat ${(player?.seat ?? 0) + 1}`;
+    const store = useStorytellerStore.getState();
+    if (arbitraryMode === "kill") {
+      if (!player?.alive) { setError(`${name} is already dead.`); return; }
+      const result = store.recordDeath(target.playerId, { provenance: { sourcePlayer: pitHagSource.playerId, sourceCharacter: PIT_HAG_SOURCE } }, actionContext);
+      setError(result.ok ? null : result.message);
+      return;
+    }
+    const held = player?.effects.find((effect) => effect.state === "active" && effect.type === PIT_HAG_PROTECTED && effect.sourceCharacter === PIT_HAG_SOURCE);
+    const result = store.resolveEffects({ intents: [held
+      ? { kind: "remove" as const, target, effectId: held.id }
+      : { kind: "apply" as const, target, effect: { type: PIT_HAG_PROTECTED, source: { playerId: pitHagSource.playerId, participantId: pitHagSource.participantId },
+        sourceCharacter: PIT_HAG_SOURCE, lifetime: { kind: "untilDawn" as const } } }] }, actionContext);
+    setError(result.ok ? null : result.message);
+  };
+  useEffect(() => {
+    if (!visible || !arbitraryMode || !arbitraryNight || !pitHagSource) return;
+    const arbitraryOwner = `${owner}:arbitrary`;
+    useTargetPicker.getState().start(arbitraryMode === "kill" ? "Choose who dies" : "Choose who is protected", arbitraryTap,
+      { owner: arbitraryOwner, eligible: new Set(seatedParticipants(game).map((p) => p.participantId!)) });
+    return () => { if (useTargetPicker.getState().active?.owner === arbitraryOwner) useTargetPicker.getState().cancel(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game, visible, arbitraryMode, arbitraryNight, pickNonce, current?.stepKey]);
+  useEffect(() => { if (arbitraryMode && !arbitraryNight) setArbitraryMode(null); }, [arbitraryMode, arbitraryNight]);
+  // A move to another step by any route (Undo reopens a step directly) turns the pill off, so a board tap never kills without a visible row.
+  useEffect(() => { setArbitraryMode(null); }, [current?.stepKey]);
 
   // ── effects (ported from the guided Night panel) ──────────────────────────
   useEffect(() => {
@@ -459,14 +540,14 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
       ? { playerId: actor.id, participantId: actor.participantId, stepKey: current.stepKey } : null);
   }, [active, actor?.id, actor?.participantId, current?.stepKey]);
   useEffect(() => {
-    if (!visible || paused || workspace || !canTarget || !actor || ability?.kind !== "guided" || guessFor || skipReason) return;
+    if (!visible || paused || workspace || !canTarget || !actor || ability?.kind !== "guided" || guessFor || skipReason || arbitraryMode) return;
     const input = ability.descriptor.inputs[0]!;
     const eligibleTargets = successorChoice?.eligible ?? new Set(seatedParticipants(game).filter((p) => participantAllowed(p, input, bindingOf(actor))
       && !picks.some((chosen) => chosen.participantId === p.participantId)).map((p) => p.participantId!));
     useTargetPicker.getState().start(successorChoice ? successorChoice.replacement ? "Choose who dies instead" : current?.effectiveRoleId === "vigormortis" ? "Choose the poisoned neighbour" : "Choose the new Imp" : resolved ? "Correct target" : needed > 1 ? `Choose player ${picks.length + 1} of ${needed}` : ability.descriptor.presentation.action, choose, { owner, eligible: eligibleTargets });
     return () => { if (useTargetPicker.getState().active?.owner === owner) useTargetPicker.getState().cancel(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game, current?.stepKey, visible, paused, workspace, canTarget, successorChoice, picks, guessFor, skipReason, pickNonce]);
+  }, [game, current?.stepKey, visible, paused, workspace, canTarget, successorChoice, picks, guessFor, skipReason, pickNonce, arbitraryMode]);
   // The Moonchild chose publicly during the Day: the death is resolved by itself when the wake is reached. An Undo of it while the
   // step stays open leaves it for the Storyteller; the guard lasts only while this step is current, so reaching the step again
   // (an Undo back to the start of the Night and a replay) resolves the choice again.
@@ -600,7 +681,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
 
   return {
     active, visible, work, steps, unfinished, pos, current, currentIndex, positionIndex, resolved, actor, role, ability, query,
-    eligible, direct, canTarget, question, answerQuestion, skipReason, settled, moonchildChoice, regurgitation, needed, picks, guessFor, cerenovusChoice, inlineInformation, preparedInformation, butlerTurn, barberTurn, philosopherTurn, dreamerTurn, twinTurn, bureaucrat, manual, manualRavenkeeper, correction,
+    eligible, direct, canTarget, question, answerQuestion, skipReason, settled, moonchildChoice, regurgitation, needed, picks, guessFor, cerenovusChoice, pitHagChoice, arbitraryNight, pitHagSource, arbitraryMode, setArbitraryMode, inlineInformation, preparedInformation, butlerTurn, barberTurn, philosopherTurn, dreamerTurn, twinTurn, bureaucrat, manual, manualRavenkeeper, correction,
     workspace, setWorkspace, setPaused, error, setError, success, successorChoice, tapRuling: pendingRuling, answerTapRuling, picker, refused, owner, actionContext,
     navigate, gotoCheckpoint, prev, next, beginDay, openWorkspace, openTrigger, requireManual, finish,
   };
