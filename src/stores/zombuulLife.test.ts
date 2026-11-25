@@ -10,6 +10,7 @@ import { applyLifePlan, hiddenLifeEffectRefusal, planLifeTransaction, type LifeT
 import { HIDDEN_LIFE, hasHiddenLife, isTrulyAlive, publicLifeOf } from "./lifeState";
 import { planRecordedLifeOutcome } from "./deathResolution";
 import { scarletWomanSuccession } from "@/abilities/characters/scarletWoman";
+import { barberDemonsOf } from "@/abilities/characters/barber";
 import { projectLobbyToPublic, projectLobbyToSelfEnvelopeMap } from "./projections";
 import { StorytellerGamePersistedSchema } from "./schemas";
 import { KNOWN_EFFECT_TYPES } from "./effectRegistry";
@@ -219,6 +220,12 @@ describe("BM-2a: Undo and reload", () => {
     expect(scarletWomanSuccession(proofQuery(five), bind(five, "p0"))).toEqual({ kind: "none" });
     expect(scarletWomanSuccession(proofQuery(five), bind(five, "p0"), undefined, false)).toMatchObject({ kind: "manual" });
   });
+  it("Codex review: a Zombuul who registers as dead but lives on is still a living Demon for the Barber's swap", () => {
+    const g = executed(day(["zombuul", "barber", "chef", "empath", "monk", "saint"]));
+    expect(barberDemonsOf(proofQuery(g))).toEqual([bind(g, "p0")]);
+    const real = run(g, { intents: [{ kind: "death", playerId: "p0" }] });
+    expect(barberDemonsOf(proofQuery(real))).toEqual([]);
+  });
   it("a reloaded game keeps the hidden life (it is ordinary persisted Effect state)", () => {
     const g = executed(day());
     const parsed = StorytellerGamePersistedSchema.parse(JSON.parse(JSON.stringify(g)));
@@ -252,7 +259,7 @@ describe("BM-2a architecture: the truth readers are a pinned list", () => {
   // A new reader of the hidden life must be added here on purpose: about 130 places read the table's life and must keep doing so
   // (counts, votes, nominations, the seat, every player and public surface). Player and public projections may never read it.
   const TRUTH_READERS = [
-    "abilities/automationEligibility.ts", "abilities/completeActionSafety.ts",
+    "abilities/automationEligibility.ts", "abilities/completeActionSafety.ts", "abilities/characters/barber.ts",
     "abilities/characters/exorcist.ts", "abilities/characters/fanggu.ts", "abilities/characters/godfather.ts", "abilities/characters/imp.ts",
     "abilities/characters/nodashii.ts", "abilities/characters/passiveRules.ts", "abilities/characters/scarletWoman.ts",
     "abilities/characters/shabaloth.ts", "abilities/characters/shared.ts", "abilities/characters/slayer.ts",

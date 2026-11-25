@@ -2,6 +2,7 @@
 // BM-1c -- Exorcist. https://wiki.bloodontheclocktower.com/Exorcist  Production semantics.
 import { describe, expect, it } from "vitest";
 import { createRulesQuery } from "@/stores/rulesQuery";
+import { HIDDEN_LIFE } from "@/stores/lifeState";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 import { interactionCoverageEligibility } from "@/abilities/automationEligibility";
 import { EXORCISED_REASON, EXORCIST_CHOSEN, exorcisedDemonReason, exorcistRegistersAsDemonId } from "./exorcist";
@@ -23,6 +24,12 @@ const choose = (g: StorytellerLobbyRecord, target: string, registers?: boolean, 
 const impStep = (g: StorytellerLobbyRecord) => plan(g, request(g, "p2", "imp", { target: pick(g, "p1") }));
 
 describe("Exorcist: the nightly choice", () => {
+  it("BM-2: an Exorcist who registers as dead but secretly lives (a hidden life kept through a character change) still keeps the Demon asleep", () => {
+    const livesOn = { id: "fx-life", type: HIDDEN_LIFE, lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "day", day: 1 } } as never;
+    const next = planned(choose(patchPlayer(proofGame(ROLES), "p0", { alive: false, effects: [livesOn] }), "p2"));
+    expect(told(next, "p2")).toBe(true);
+    expect(exorcisedDemonReason(query(next), bind(next, "p2"))).toBe(EXORCISED_REASON);
+  });
   it("wakes on other nights only", () => {
     expect(choose(proofGame(ROLES, "night", 1), "p1")).toMatchObject({ ok: false, code: "notApplicable" });
     expect(choose(proofGame(ROLES, "night", 2), "p1")).toMatchObject({ ok: true, changed: true });
