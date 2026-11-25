@@ -527,3 +527,6 @@
 .gv-night-custom .gv-you-are-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .gv-night-custom .night-information > .gv-choice-pill { min-height: 44px; align-self: flex-start; }
+
+/* PH-c: the arbitrary-death row's chosen pill (Kill or Protect) reads as on. Same accent as the pills' hover border. */
+.gv-night-custom .gv-choice-pill[aria-pressed="true"] { border-color: #e8584a; background: rgba(232, 88, 74, .16); }

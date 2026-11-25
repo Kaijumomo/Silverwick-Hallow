@@ -15,7 +15,8 @@ import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { participantStepKey } from "@/stores/nightProgress";
 import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/abilityUi";
 import { useInfoShow } from "@/features/grimoire-v6/info/showStore";
-import { impair, openInStore, patchPlayer, proofGame, proofScript } from "@/test/proofFixtures";
+import { impair, openInStore, patchPlayer, proofGame, proofRegistry, proofScript } from "@/test/proofFixtures";
+import { deriveNightWork, unfinishedNightWork } from "@/features/nightOrder/nightWork";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
@@ -146,4 +147,22 @@ it("the Pit-Hag does not wake on the first night", () => {
   const steps = document.body;
   expect(steps).toBeTruthy();
   expect(CANONICAL_ABILITY_SEMANTICS.get("pithag")!.timing).toEqual(["otherNight"]);
+});
+
+it("a character made after its place has passed tonight is not owed a wake (acts from tomorrow); one still ahead keeps its row", () => {
+  // p0 pithag, p1 imp, p2 chef, p3 empath, p4 monk. The Poisoner's place is before the Pit-Hag's; the Empath's is after.
+  const g = proofGame(["pithag", "imp", "chef", "monk", "washerwoman"]);
+  openInStore(g);
+  useShellStore.getState().setNightCursor({ day: 2, stepKey: stepKey(g) });
+  render(<StrictMode><Guide /></StrictMode>);
+  tap("p2");
+  pickCharacter("poisoner");
+  const work = deriveNightWork(game(), { script: proofScript, registry: proofRegistry, semantics: CANONICAL_ABILITY_SEMANTICS });
+  const poisoner = work.steps.find((step) => step.kind === "player" && step.effectiveRoleId === "poisoner");
+  expect(poisoner).toBeTruthy();
+  expect(work.late.has(poisoner!.stepKey)).toBe(true);
+  expect(unfinishedNightWork(game(), work).rows.some((step) => step.stepKey === poisoner!.stepKey)).toBe(false);
+  act(() => { store.getState().undo(); });
+  const before = deriveNightWork(game(), { script: proofScript, registry: proofRegistry, semantics: CANONICAL_ABILITY_SEMANTICS });
+  expect(before.late.size).toBe(0);
 });

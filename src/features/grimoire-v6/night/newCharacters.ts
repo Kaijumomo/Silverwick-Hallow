@@ -60,3 +60,16 @@ export function pitHagChangeTonight(game: StorytellerLobbyRecord, pitHagParticip
   }
   return null;
 }
+
+/** PH-c: the Pit-Hag whose change of character tonight made the Demon (the source recorded on tonight's guided Role change), or null. */
+export function pitHagSourceTonight(game: StorytellerLobbyRecord): { playerId: string; participantId: string } | null {
+  if (game.phase !== "night") return null;
+  for (const record of [...game.history].reverse()) {
+    if (record.category !== "role" || ("correction" in record && record.correction) || record.moment?.phase !== "night" || record.moment.day !== game.day) continue;
+    const source = record.provenance?.sourceParticipant;
+    if (record.provenance?.sourceCharacter !== "pithag" || source?.kind !== "participant") continue;
+    const player = Object.values(game.players).find((p) => p.participantId === source.participantId);
+    if (player) return { playerId: player.id, participantId: source.participantId };
+  }
+  return null;
+}

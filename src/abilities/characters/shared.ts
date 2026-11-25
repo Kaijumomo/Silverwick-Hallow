@@ -143,6 +143,12 @@ export const arbitraryDeathJudgmentId = (cause: DeathCause, binding: Participant
     ? `arbitraryDeath:${cause}:${JSON.stringify([binding.participantId, dependency])}`
     : `arbitraryDeath:${cause}@${JSON.stringify([scope.id, binding.participantId, dependency])}`;
 
+/** PH-c: the Pit-Hag's own protection on an arbitrary night -- the generic Protected Effect it places (source: the Pit-Hag, until dawn).
+ * Its Storyteller chose it before the attack ("you may choose any players to kill or to protect throughout the night"). */
+export const PIT_HAG_PROTECTED = "protected";
+export const hasPitHagProtection = (query: AbilityEvaluationContext["query"], target: ParticipantBinding): boolean =>
+  !!query.participant(target)?.effects.some((effect) => effect.state === "active" && effect.type === PIT_HAG_PROTECTED && effect.sourceCharacter === "pithag");
+
 export type DeathDecision =
   | { kind: "dies" }
   /** `spend`: the survival uses up this player's own ability (the Fool). Absent for every prevented death. */
@@ -175,6 +181,8 @@ export function deathAttempt(
 ): DeathDecision {
   const arbitrary = query.gameRuleFact(PIT_HAG_ARBITRARY_DEATHS);
   if (arbitrary.known && arbitrary.value) {
+    // PH-c: a player the Pit-Hag's Storyteller already protected tonight survives without a question.
+    if (hasPitHagProtection(query, target)) return { kind: "survives" };
     const id = arbitraryDeathJudgmentId(cause, target, query.protectionDependencyStamp(target, cause), attempt);
     const judged = answerOf(context.judgments, id, "boolean");
     if (judged) return judged.value ? { kind: "survives" } : { kind: "dies" };
