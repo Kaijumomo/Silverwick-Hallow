@@ -46,8 +46,7 @@ export function ExorcistResult({ game, registry, query, step, done }: {
   const role = who.actualRole ? registry.get(who.actualRole) : undefined;
   return <div className="gv-choice">
     <hr className="gv-choice-divider" />
-    <div className="gv-choice-slots"><ChoiceSlot filled label={nameOf(who)} img={role ? iconUrlFor(role) : undefined}
-      sub={told ? "Chosen: the Demon learns who the Exorcist is and does not wake" : impaired ? "Chosen: the Demon is not affected" : "Chosen"} /></div>
+    <div className="gv-choice-slots"><ChoiceSlot filled label={nameOf(who)} img={role ? iconUrlFor(role) : undefined} /></div>
     {told && <>
       <WakeTokensRow name={nameOf(who)} first={{ heading: "Selected You", role: exorcist, onOpen: () => report(presentCharacter("Selected You", exorcist.id)) }} />
       <p className="gv-choice-note">{`Then point to the Exorcist: ${nameOf(actor)}.`}</p>
