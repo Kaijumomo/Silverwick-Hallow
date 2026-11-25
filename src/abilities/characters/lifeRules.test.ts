@@ -67,7 +67,7 @@ describe("Fool: survives its first death at a cost", () => {
   });
 });
 
-describe("Sailor: cannot die while sober (the gate rule; a Sailor in play still keeps automation Manual)", () => {
+describe("Sailor: cannot die while sober (the gate rule; BM-1b: a Sailor in play no longer keeps automation Manual)", () => {
   const outcome = (game: StorytellerLobbyRecord) => proofQuery(game).deathOutcome(bind(game, "p1"), "demon");
 
   it("a sober Sailor survives every cause and spends nothing", () => {
@@ -80,16 +80,16 @@ describe("Sailor: cannot die while sober (the gate rule; a Sailor in play still 
     expect(outcome(impair(proofGame(roles("sailor")), "p1", type))).toEqual({ known: true, value: { kind: "dies" } });
   });
 
-  it("the Sailor's nightly drunk choice is not modelled, so the whole attack stays Manual", () => {
-    expect(attack(proofGame(roles("sailor")))).toMatchObject({ ok: false, code: "unsupported" });
-    expect(executionAdvice(dayGame("sailor"), "p1", environment)).toBeNull();
+  it("BM-1b: the nightly drunk choice is modelled, so the attack is no longer Manual: a sober Sailor simply survives it", () => {
+    expect(attack(proofGame(roles("sailor")))).toEqual({ ok: true, changed: false });
+    expect(executionAdvice(dayGame("sailor"), "p1", environment)).toMatchObject({ kind: "survives", spends: false });
   });
 });
 
 describe("execution advice and the Fool's spend", () => {
   const advice = (game: StorytellerLobbyRecord) => executionAdvice(game, "p1", environment);
 
-  it("advises survival and spend for an unspent Fool, nothing for others (a Sailor gets none: its drunk choice is not modelled)", () => {
+  it("advises survival and spend for an unspent Fool, nothing for others (the Sailor advises survival without a spend since BM-1b)", () => {
     expect(advice(dayGame("fool"))).toMatchObject({ kind: "survives", spends: true });
     expect(advice(dayGame("chef"))).toBeNull();
     expect(advice(patchPlayer(dayGame("fool"), "p1", { abilityUsed: true }))).toBeNull();

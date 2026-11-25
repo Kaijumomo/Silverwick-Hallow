@@ -51,7 +51,7 @@ describe("Character Intelligence bounded automation", () => {
       expect(manifest.find(entry => entry.id === id)?.capabilities).toContainEqual(expect.objectContaining({ owner: "setup", boundary: expect.stringContaining("count policy") }));
     }
     for (const id of ["bureaucrat", "virgin"]) expect(manifest.find(entry => entry.id === id)?.capabilities).toContainEqual(expect.objectContaining({ owner: "voting" }));
-    expect(CANONICAL_ABILITY_SEMANTICS.size).toBe(41); // B5a adds Chef; Treacherous 30th adds Innkeeper, No Dashii, Vigormortis, Gambler, Shabaloth, Witch, Godfather, Moonchild, Town Crier, Oracle and Professor; LS-2c adds the Devil's Advocate; SV-1a adds the Sage; SV-1b the Sweetheart; SV-1c the Klutz; SV-1d the Barber; SV-2a the Snake Charmer; SV-2b the Fang Gu; SV-3a the Philosopher; SV-4a the Cerenovus; SV-4c the Evil Twin; SV-5a the Clockmaker; SV-5b the Seamstress; SV-5c the Dreamer; SV-5d the Flowergirl; SV-5k the Vortox; SV-5f the Juggler; SV-5g the Mathematician.
+    expect(CANONICAL_ABILITY_SEMANTICS.size).toBe(42); // BM-1b adds the Sailor; B5a adds Chef; Treacherous 30th adds Innkeeper, No Dashii, Vigormortis, Gambler, Shabaloth, Witch, Godfather, Moonchild, Town Crier, Oracle and Professor; LS-2c adds the Devil's Advocate; SV-1a adds the Sage; SV-1b the Sweetheart; SV-1c the Klutz; SV-1d the Barber; SV-2a the Snake Charmer; SV-2b the Fang Gu; SV-3a the Philosopher; SV-4a the Cerenovus; SV-4c the Evil Twin; SV-5a the Clockmaker; SV-5b the Seamstress; SV-5c the Dreamer; SV-5d the Flowergirl; SV-5k the Vortox; SV-5f the Juggler; SV-5g the Mathematician.
     expect(CANONICAL_ABILITY_SEMANTICS.has("soldier")).toBe(false);
     expect(CANONICAL_ABILITY_SEMANTICS.has("vortox")).toBe(true); // SV-5k: the kill (its false information and no-execution ending are rules)
   });
@@ -80,7 +80,7 @@ describe("Character Intelligence bounded automation", () => {
     expect(eligible(game, "imp", { target: pick(game, "p2") }).kind).toBe("automated");
   });
 
-  it.each(["sailor", "lleech", "nodashii", "amnesiac"])("unreviewed %s interaction requires the whole action Manual", role => {
+  it.each(["lleech", "nodashii", "amnesiac"])("unreviewed %s interaction requires the whole action Manual", role => {
     const game = proofGame(["imp", role, "chef"]);
     expect(eligible(game, "imp", { target: pick(game, "p2") }).kind).toBe("manual");
   });

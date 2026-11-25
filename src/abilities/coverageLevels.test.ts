@@ -56,7 +56,8 @@ describe("coverage level and evidence (Stage 5A-1)", () => {
     // SV-5f moved the Juggler from reviewed to guided (the night count read from the Day's recorded guesses; the CORRECT tokens drawn from them).
     // SV-5g moved the Mathematician from reviewed to guided (a wake every night: the count of ABNORMAL marks, cleared at its commit).
     // BM-1a moved the Pacifist from partial to reviewed (no night step; its prompt narrowed to when it could matter).
-    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 41, reviewed: 22, partial: 58, generic: 60 });
+    // BM-1b moved the Sailor from partial to guided (a wake: the choice, the Storyteller's ruling, one sourced DRUNK Effect).
+    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 42, reviewed: 22, partial: 57, generic: 60 });
   });
 
   it("level follows the facts the gates read", () => {
@@ -126,7 +127,7 @@ describe("coverage level and evidence (Stage 5A-1)", () => {
       expect(e.caveats?.includes(NOT_ON_ENDING_LIST_CAVEAT) ?? false, e.id).toBe(!ENDING_EVIDENCE_ROLES.includes(e.id));
     }
     for (const id of Object.keys(PARTIAL_CAVEATS)) expect(byId.get(id)!.caveats, id).toContain(PARTIAL_CAVEATS[id]);
-    for (const id of ["sailor", "lleech", "zombuul"]) expect(byId.get(id)!.caveats!.join(" "), id).toMatch(/REFUSES to automate/);
+    for (const id of ["lleech", "zombuul"]) expect(byId.get(id)!.caveats!.join(" "), id).toMatch(/REFUSES to automate/);
   });
 
   it("evidence has one code entry per file", () => {

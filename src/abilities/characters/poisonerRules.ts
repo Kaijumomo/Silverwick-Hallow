@@ -34,3 +34,14 @@ export function isInnkeeperSelfEffect(holder: STPlayerRecord, effect: EffectReco
     && source?.kind === "participant" && source.playerId === holder.id && source.participantId === holder.participantId
     && !!sourceRole && sourceRole.id === "innkeeper" && isCanonicalRole(sourceRole);
 }
+
+/** BM-1b: a Sailor may choose themself and the Storyteller makes them the drunk one ("if they choose themself, they lose their
+ * 'cannot die' ability until they become sober"). Like the Innkeeper's, the drunkenness applies although its own source is the drunk one:
+ * only a query overlay for the exact participant's own canonical Sailor drunk Effect; it never rewrites stored state.
+ * https://wiki.bloodontheclocktower.com/Sailor */
+export function isSailorSelfEffect(holder: STPlayerRecord, effect: EffectRecord, sourceRole: RoleDef | undefined): boolean {
+  const source = effect.sourceParticipant;
+  return effect.sourceCharacter === "sailor" && effect.type === "drunk"
+    && source?.kind === "participant" && source.playerId === holder.id && source.participantId === holder.participantId
+    && !!sourceRole && sourceRole.id === "sailor" && isCanonicalRole(sourceRole);
+}

@@ -89,6 +89,8 @@ export function planSourceAbilityLoss(
         // Vigormortis-kept Cerenovus is excluded above, like the Witch).
         effect.sourceCharacter === "cerenovus" && effect.type === "mad" ||
         effect.sourceCharacter === "devilsadvocate" && effect.type === "survivesExecution" ||
+        // BM-1b: the Sailor's DRUNK ends with the Sailor's ability ("abilities are lost immediately on death, poisoning, or drunkenness").
+        effect.sourceCharacter === "sailor" && effect.type === "drunk" ||
         characterChange && effect.sourceCharacter === "sweetheart" && effect.type === "drunk" ||
         // SV-3a: a Philosopher who changes character no longer has what it gained ("They do not become that character"; a new
         // Philosopher starts fresh). Death does not end it: a gained ability that works while dead still works.

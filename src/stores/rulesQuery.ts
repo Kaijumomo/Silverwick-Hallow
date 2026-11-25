@@ -1,6 +1,6 @@
 import { isCanonicalRole } from "@/data/canonical";
 import { causeBypassesEffectProtection, drunksGainedCharacter, isNeighbourPoisoner, lifeRuleReadsSeating, observerRegistrationDecision, passiveProtection, passiveInformationModifiers, passiveRegistrationOptions, survivesFirstDeath, type LifeRuleCause } from "@/abilities/characters/passiveRules";
-import { isInnkeeperSelfEffect, isPoisonerSelfEffect } from "@/abilities/characters/poisonerRules";
+import { isInnkeeperSelfEffect, isPoisonerSelfEffect, isSailorSelfEffect } from "@/abilities/characters/poisonerRules";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { activeModifiers, gateEvaluation, type HookScope, type ModifierDefinition, type ModifierGate } from "@/abilities/modifiers";
 import { resolveAbilitySemantics, type AbilitySemanticsRegistry } from "@/abilities/semantics";
@@ -315,7 +315,7 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     // The character-domain self-effect exception is only a query overlay;
     // it never rewrites stored applicability or solves other source cycles.
     const sourceRole = sourceCharacter ? environment.registry.get(sourceCharacter) : undefined;
-    const selfPoison = isPoisonerSelfEffect(holder, effect, sourceRole) || isInnkeeperSelfEffect(holder, effect, sourceRole);
+    const selfPoison = isPoisonerSelfEffect(holder, effect, sourceRole) || isInnkeeperSelfEffect(holder, effect, sourceRole) || isSailorSelfEffect(holder, effect, sourceRole);
     const functioning = functions(selfPoison
       ? { ...sourcePlayer, effects: sourcePlayer.effects.filter(candidate => candidate.id !== effect.id) }
       : sourcePlayer, next);

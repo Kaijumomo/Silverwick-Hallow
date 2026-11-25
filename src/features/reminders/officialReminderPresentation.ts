@@ -31,6 +31,8 @@ const EFFECT_TOKENS = [
   { source: "shabaloth", type: "shabalothChosen", label: "Dead" },
   { source: "shabaloth", type: "shabalothAlive", label: "Alive" },
   { source: "devilsadvocate", type: "survivesExecution", label: "Survives Execution" },
+  // BM-1b: the Sailor's drunkenness, on the Sailor or on the player they chose.
+  { source: "sailor", type: "drunk", label: "Drunk" },
   // SV-1b: the Sweetheart's lasting drunkenness.
   { source: "sweetheart", type: "drunk", label: "Drunk" },
   // SV-2a: the Snake Charmer's permanent poison on the old Demon.

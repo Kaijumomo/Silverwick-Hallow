@@ -108,8 +108,8 @@ describe("LS-1b: the rows themselves", () => {
     expect(lifeRuleOf("chef")).toBeUndefined();
     expect(lifeRuleOf("constructor")).toBeUndefined();
   });
-  it("only an automatic row whose holder is unreviewed asks for roster review (the Sailor)", () => {
-    expect(["sailor", "fool", "soldier", "mayor", "tealady", "chef"].filter(lifeRuleNeedsRosterReview)).toEqual(["sailor"]);
+  it("only an automatic row whose holder is unreviewed asks for roster review (none now: the Sailor joined the reviewed list in BM-1b)", () => {
+    expect(["sailor", "fool", "soldier", "mayor", "tealady", "chef"].filter(lifeRuleNeedsRosterReview)).toEqual([]);
   });
 });
 

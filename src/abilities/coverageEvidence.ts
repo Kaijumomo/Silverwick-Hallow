@@ -212,9 +212,6 @@ export const PARTIAL_SUPPORT: Readonly<Record<RoleId, readonly Piece[]>> = {
   puzzlemaster: [
     { path: "src/rules/setup/setupAnalyzer.ts", what: "In the setup analyzer's manual-review list: setup shows a 'Review character setup' check and the Storyteller resolves the special choices by hand." },
   ],
-  sailor: [
-    { path: "src/abilities/characters/passiveRules.ts", what: "Death gate: a sober, healthy Sailor cannot die (when asked directly); the nightly drunk choice is not modelled, so any game with a Sailor stays Manual." },
-  ],
   scarletwoman: [
     { path: "src/stores/endGameEligibility.ts", what: "Game-end advisory: Demon dead but Scarlet Woman alive." },
   ],
@@ -297,6 +294,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   mayor: ["src/stores/b8Independent.test.ts", "src/stores/victoryEvidence.test.ts"],
   monk: ["src/stores/abilityResolution.test.ts", "src/features/grimoire-v6/night/nightGuide.port.test.tsx"],
   moonchild: ["src/abilities/characters/godfatherMoonchild.test.ts", "src/features/grimoire-v6/night/nightGuide.port.test.tsx"],
+  sailor: ["src/abilities/characters/sailor.test.ts", "src/abilities/characters/lifeRulesTable.test.ts"],
   pacifist: ["src/abilities/characters/bm1Pacifist.test.ts", "src/abilities/characters/lifeRulesTable.test.ts"],
   mutant: ["src/abilities/characters/informationCharacterReview.test.ts", "src/features/grimoire-v6/day/madnessExecution.test.tsx", "src/stores/sectsAndVioletsWholeGames.test.ts"],
   nodashii: ["src/abilities/characters/nodashii.test.ts", "src/rules/night/canonicalNightOrder.test.ts", "src/stores/sectsAndVioletsWholeGames.test.ts", "src/abilities/characters/sectsAndVioletsSv6GapPairs.test.ts"],
@@ -348,7 +346,6 @@ export const COVERAGE_CAVEATS: Readonly<Record<RoleId, readonly string[]>> = {
 
 /** Why a "partial" character is partial, where the reason is NOT "a general support piece". Plain statements, no UI. */
 export const PARTIAL_CAVEATS: Readonly<Record<RoleId, string>> = {
-  sailor: "Partial because the app REFUSES to automate: the Sailor's nightly choice of who is drunk is not modelled (a DRUNK reminder is notation only), so a Sailor in play keeps the whole action Manual. The Sailor's 'cannot die while sober' rule IS modelled in the death gate.",
   lleech: "Partial because the app REFUSES to automate: an attack on a functioning Lleech sends the whole action to Manual (death-target gap). No Lleech ability is modelled.",
   zombuul: "Partial because the app REFUSES to automate: an attack on a functioning Zombuul sends the whole action to Manual (death-target gap); it only gets a night-list slot after a death night.",
   thief: "Partial for two narrow reasons only: it is on the game-ending allow-list and the night guide shows a one-line prompt. Its own ability (negative vote) is not supported.",

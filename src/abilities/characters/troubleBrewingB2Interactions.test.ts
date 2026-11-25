@@ -115,13 +115,13 @@ describe("B2c: supported protection does not broaden unverified interactions", (
     expect(game.players.p3!.abilityUsed).toBe(false);
   });
 
-  it("LS-1: a Sailor in play keeps the whole action Manual (its nightly drunk choice is not modelled)", () => {
+  it("LS-1 / BM-1b: a sober Sailor in play no longer keeps the action Manual: the attack changes nothing", () => {
     // No Monk here: the survival can only come from the Sailor's own row. A drunk Sailor has no such protection and dies.
     const game = patchPlayer(proofGame(roles), "p3", { actualRole: "sailor" });
     expect(proofQuery(game).deathOutcome(bind(game, "p3"), "demon")).toEqual({ known: true, value: { kind: "survives", spends: false } });
     expect(proofQuery(game).protectedFrom(bind(game, "p3"), "any")).toEqual({ known: true, value: true });
     expect(proofQuery(impair(game, "p3")).deathOutcome(bind(game, "p3"), "demon")).toEqual({ known: true, value: { kind: "dies" } });
-    expect(attack(game, "p3")).toMatchObject({ ok: false, code: "unsupported" });
+    expect(attack(game, "p3")).toEqual({ ok: true, changed: false });
   });
 
   it("Safe does not settle non-Demon attacks on the Mayor", () => {
