@@ -2,6 +2,7 @@ import { BarberNightAction } from "@/features/nightOrder/BarberNightAction";
 import { PhilosopherNightAction } from "./PhilosopherNightAction";
 import { DreamerNightAction } from "./DreamerNightAction";
 import { CerenovusResult } from "./CerenovusResult";
+import { PitHagResult } from "./PitHagResult";
 import { EvilTwinNightAction } from "./EvilTwinNightAction";
 import { Fragment, useRef, useState, type ReactNode, type RefObject } from "react";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
@@ -206,6 +207,10 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
       // SV-4a: the Cerenovus's choice is tapped on the board; the card shows what was chosen and the Wake row with the two reveal tokens.
       if (current.effectiveRoleId === "cerenovus" && !current.gainedFrom && engine.ability?.kind === "guided" && (engine.eligible || done)) {
         rows.push(<CerenovusResult key={`cerenovus:${current.stepKey}`} game={game} registry={registry} query={engine.query} step={current} done={done} choice={engine.cerenovusChoice} />);
+      }
+      // PH-a/PH-b: the Pit-Hag's choice is tapped on the board; the card shows what changed and the Wake row (YOU ARE, the new character, alignment).
+      if (current.effectiveRoleId === "pithag" && !current.gainedFrom && engine.ability?.kind === "guided") {
+        rows.push(<PitHagResult key={`pithag:${current.stepKey}`} game={game} registry={registry} query={engine.query} step={current} done={done} choice={engine.pitHagChoice} />);
       }
       // T30: the Godfather's first night shows the Outsiders in play on ONE screen, like the Demon's bluffs.
       if (current.effectiveRoleId === "godfather" && game.day === 1 && !current.isDeceived && !engine.settled.has(current.stepKey)) {

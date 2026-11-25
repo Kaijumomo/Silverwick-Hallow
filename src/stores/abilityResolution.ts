@@ -449,6 +449,16 @@ function guidedDeathContext(intents: readonly AbilityLifeIntent[], options: Comp
   return { ...(context ?? {}), provenance: { ...(context?.provenance ?? {}), sourcePlayer: action.actor.playerId, sourceCharacter: action.roleId } };
 }
 
+/** PH-b: the Mutation Context of a guided resolution's Role operation. Like a guided death's, the Role change records the acting player and the
+ * character whose ability caused it on its History record (no new field), so a Night card can find the player a character changed tonight
+ * (the Pit-Hag's YOU ARE row). A manual or simulated resolution records none. */
+function guidedRoleContext(options: ComposeOptions): MutationContext | undefined {
+  const { automaticAction: action, context } = options;
+  if (!action || options.simulated || options.manualWorkflow) return context;
+  if (context?.provenance?.sourcePlayer !== undefined || context?.provenance?.sourceCharacter !== undefined) return context;
+  return { ...(context ?? {}), provenance: { ...(context?.provenance ?? {}), sourcePlayer: action.actor.playerId, sourceCharacter: action.roleId } };
+}
+
 /** Plans an ordered outcome against one evolving working snapshot. Pure. */
 export function composeAbilityOutcome(
   game: StorytellerLobbyRecord,
@@ -536,7 +546,8 @@ export function composeAbilityOutcome(
         break;
       }
       case "role": {
-        const result = planRoleTransaction(working, { intents: [...operation.intents], resolutionId, ...(context ? { context } : {}) },
+        const roleContext = guidedRoleContext(options);
+        const result = planRoleTransaction(working, { intents: [...operation.intents], resolutionId, ...(roleContext ? { context: roleContext } : {}) },
           { script: environment.script, ids: ids.role ?? defaultRoleIds });
         if (!result.ok) return domainRefusal("role", result);
         if (result.changed) working = applyRolePlan(working, result.plan);
