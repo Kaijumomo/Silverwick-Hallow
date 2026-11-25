@@ -29,7 +29,12 @@ export function executionAdvice(game: StorytellerLobbyRecord, playerId: PlayerId
   const credited = lifeRuleOf(player.actualRole)?.alsoCreditedTo ?? [];
   const outcome = query.deathOutcome({ playerId, participantId: player.participantId }, "execution");
   if (!outcome.known || outcome.value.kind !== "survives") return null;
-  const rivals = credited.filter(id => Object.values(game.players).some(p => !p.isEmpty && p.alive && p.actualRole === id));
+  // A rival whose ability is known not to work (a drunk or poisoned Pacifist) saves nobody, so it is no rival: the Fool's own ability did it.
+  const rivals = credited.filter(id => Object.values(game.players).some(p => {
+    if (p.isEmpty || !p.alive || p.actualRole !== id || !p.participantId) return false;
+    const works = query.abilityFunctions({ playerId: p.id, participantId: p.participantId });
+    return !works.known || works.value;
+  }));
   const name = query.roleOf(player.actualRole)?.name ?? player.actualRole;
   if (outcome.value.spends && rivals.length) {
     const rival = query.roleOf(rivals[0]!)?.name ?? rivals[0];

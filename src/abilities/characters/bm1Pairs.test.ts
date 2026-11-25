@@ -94,6 +94,7 @@ describe("More Sailor pairs", () => {
     const result = plan(g, request(g, "p2", demon, { target: pick(g, "p0"), targets: pick(g, "p0", "p4") }));
     expect(result).toMatchObject({ ok: true });
     if (result.ok && result.changed) expect(result.plan.game.players.p0!.alive).toBe(true);
+    if (demon === "shabaloth") expect(result).toMatchObject({ ok: true, changed: true });
   });
 });
 
@@ -134,7 +135,7 @@ describe("Exorcist pairs", () => {
     const next = exorcistPick(g, "p1");
     expect(plan(next, request(next, "p1", "monk", { target: pick(next, "p3") }))).toMatchObject({ ok: true, changed: true });
   });
-  it("T16 the Exorcist's CHOSEN does not touch a Demon's other powers: a Vigormortis the Exorcist chose still keeps the poison it made, only its wake is gone", () => {
+  it("T16 the Exorcist's CHOSEN does not touch a Demon's other powers: an exorcised Vigormortis loses only its ordinary wake and stays alive", () => {
     const g = proofGame(["exorcist", "chef", "vigormortis", "poisoner", "monk"]);
     const next = exorcistPick(g, "p2");
     expect(exorcisedDemonReason(query(next), bind(next, "p2"))).not.toBeNull();
@@ -145,10 +146,15 @@ describe("Exorcist pairs", () => {
     const first = exorcistPick(g, "p1");
     const next = { ...patchPlayer(first, "p0", { alive: false }), day: 3 };
     expect(next.players.p1!.effects.some((e) => e.type === "exorcistChosen")).toBe(true);
+    // A new Exorcist (a Pit-Hag's) is a different participant: last night's pick was another Exorcist's, so it is not refused for them.
+    const alive = { ...first, day: 3 };
+    expect(plan(alive, request(alive, "p0", "exorcist", { target: pick(alive, "p1") }))).toMatchObject({ ok: false, code: "illegal" });
   });
-  it("T18 the Exorcist chooses a dead Demon or the Zombuul's registered 'dead': CHOSEN is placed on a dead player and nothing else changes", () => {
+  it("T18 the Exorcist chooses a dead former Demon: the Storyteller rules whether they are woken (nothing pre-selected); No leaves only CHOSEN", () => {
     const g = patchPlayer(proofGame(["exorcist", "chef", "imp", "monk", "saint"]), "p2", { alive: false });
-    expect(exorcistPick(g, "p2").players.p2!.effects.some((e) => e.type === "exorcistChosen")).toBe(true);
+    expect(plan(g, request(g, "p0", "exorcist", { target: pick(g, "p2") }))).toMatchObject({ ok: false, code: "needsInput" });
+    expect(told(exorcistPick(g, "p2", "p0", false), "p2")).toBe(false);
+    expect(told(exorcistPick(g, "p2", "p0", true), "p2")).toBe(true);
   });
   it("T19 a Snake Charmer swap tonight: the Exorcist reads the CURRENT actual characters, so the new Demon can be exorcised and the old one is not", () => {
     const g = proofGame(["exorcist", "snakecharmer", "imp", "monk", "chef"]);
@@ -196,6 +202,10 @@ describe("Pacifist pairs", () => {
   it("T30 a Spy executed with a Pacifist alive: the Spy might register as good, so the question is asked and the Storyteller decides", () => {
     const answer = executionChoiceFor(day(["imp", "spy", "pacifist", "chef", "saint"]), "p1", env);
     expect(answer).toEqual(["Pacifist"]);
+  });
+  it("T31 a Fool executed while the only Pacifist is drunk: the Pacifist saves nobody, so the Fool's own ability did it and is spent at once (no second survival)", () => {
+    const g = impair(day(["fool", "chef", "pacifist", "imp", "saint"]), "p2", "drunk");
+    expect(executionAdvice(g, "p0", env)).toMatchObject({ kind: "survives", spends: true });
   });
   it("T27 two Pacifists (a Pit-Hag made one): either one can save, and the prompt names the Pacifist once", () => {
     expect(executionChoiceFor(day(["imp", "chef", "pacifist", "pacifist", "saint"]), "p1", env)).toEqual(["Pacifist"]);

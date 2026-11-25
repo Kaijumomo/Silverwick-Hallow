@@ -114,7 +114,7 @@ export async function runExecute(ctx: V6Ctx, player: STPlayerRecord): Promise<vo
     const survivalKnown = executionSurvivalKnown(game, current.id, environment);
     const choices = survivalKnown ? [] : executionChoiceFor(game, current.id, environment);
     let died = true;
-    if (survivalKnown) died = false;
+    if (survivalKnown) { if (!(await confirmNotWorking())) return; died = false; }
     else if (advice || choices.length || !executionDeathKnown(game, current.id, environment)) {
       const body = [notWorking ? `${MUTANT_NOT_WORKING} ${notWorkingBody}` : null, ...choices.map((who) => `${who} may apply: you decide whether an executed good player survives.`), advice?.note ?? null].filter(Boolean).join(" ");
       const answer = choices.length ? await chooseAsk(`Does ${name} die?`, body, "Dies", "Survives") : await chooseAsk(`Did ${name} die?`, body, "Yes · died", "No · survived");
@@ -146,6 +146,7 @@ export async function runExecute(ctx: V6Ctx, player: STPlayerRecord): Promise<vo
     // The Storyteller is asked unless the rules positively establish that the execution kills or (BM-1) certainly does not kill
     // (unknown or generic protection is theirs to judge).
     if (survivalKnown) {
+      if (!(await confirmNotWorking())) return;
       outcome = "survived";
     } else if (advice || choices.length || !executionDeathKnown(game, current.id, environment)) {
       const body = [notWorking ? `${MUTANT_NOT_WORKING} ${notWorkingBody}` : null, ...choices.map((who) => `${who} may apply: you decide whether an executed good player survives.`), advice?.note ?? null].filter(Boolean).join(" ");
