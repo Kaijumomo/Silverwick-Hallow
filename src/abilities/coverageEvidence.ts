@@ -298,7 +298,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   sailor: ["src/abilities/characters/sailor.test.ts", "src/abilities/characters/lifeRulesTable.test.ts"],
   exorcist: ["src/abilities/characters/exorcist.test.ts"],
   pacifist: ["src/abilities/characters/bm1Pacifist.test.ts", "src/abilities/characters/lifeRulesTable.test.ts"],
-  zombuul: ["src/stores/zombuulLife.test.ts", "src/abilities/characters/lifeRulesGateLs2.test.ts"],
+  zombuul: ["src/abilities/characters/zombuul.test.ts", "src/stores/zombuulLife.test.ts", "src/abilities/characters/lifeRulesGateLs2.test.ts"],
   mutant: ["src/abilities/characters/informationCharacterReview.test.ts", "src/features/grimoire-v6/day/madnessExecution.test.tsx", "src/stores/sectsAndVioletsWholeGames.test.ts"],
   nodashii: ["src/abilities/characters/nodashii.test.ts", "src/rules/night/canonicalNightOrder.test.ts", "src/stores/sectsAndVioletsWholeGames.test.ts", "src/abilities/characters/sectsAndVioletsSv6GapPairs.test.ts"],
   oracle: ["src/abilities/characters/townCrierOraclePro.test.ts", "src/rules/night/canonicalNightOrder.test.ts", "src/stores/sectsAndVioletsWholeGames.test.ts", "src/abilities/characters/sectsAndVioletsSv6GapPairs.test.ts"],

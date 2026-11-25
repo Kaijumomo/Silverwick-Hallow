@@ -245,7 +245,7 @@ describe("BM-2a architecture: the truth readers are a pinned list", () => {
     "abilities/characters/exorcist.ts", "abilities/characters/fanggu.ts", "abilities/characters/godfather.ts", "abilities/characters/imp.ts",
     "abilities/characters/nodashii.ts", "abilities/characters/passiveRules.ts", "abilities/characters/scarletWoman.ts",
     "abilities/characters/shabaloth.ts", "abilities/characters/shared.ts", "abilities/characters/slayer.ts",
-    "abilities/characters/vigormortis.ts", "abilities/characters/vortox.ts",
+    "abilities/characters/vigormortis.ts", "abilities/characters/vortox.ts", "abilities/characters/zombuul.ts",
     "rules/night/nightOrder.ts",
     "stores/deathResolution.ts", "stores/effectRegistry.ts" /* its name and OWN_PATH_ONLY only */, "stores/endGameEligibility.ts", "stores/gameRuleFactRegistry.ts", "stores/lifeResolution.ts",
     "stores/lifeState.ts", "stores/mastermindFinalDay.ts", "stores/rulesQuery.ts", "stores/victoryEvidence.ts",

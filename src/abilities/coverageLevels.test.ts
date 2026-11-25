@@ -59,7 +59,8 @@ describe("coverage level and evidence (Stage 5A-1)", () => {
     // BM-1c moved the Exorcist from generic to guided (a wake: the pick, the Storyteller's ruling, one source-free CHOSEN fact).
     // BM-1b moved the Sailor from partial to guided (a wake: the choice, the Storyteller's ruling, one sourced DRUNK Effect).
     // BM-2a moved the Zombuul from partial to reviewed (a life-rules row: the hidden extra life; on the ending list).
-    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 43, reviewed: 23, partial: 56, generic: 59 });
+    // BM-2b moved the Zombuul from reviewed to guided (a wake: no wake after a Day death, the Demon kill).
+    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 44, reviewed: 22, partial: 56, generic: 59 });
   });
 
   it("level follows the facts the gates read", () => {
